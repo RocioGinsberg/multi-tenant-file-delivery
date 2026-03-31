@@ -1,0 +1,134 @@
+{
+"team_aliases": {
+        "酷爱": "爱施德",
+        "新燕海华": "新燕海佳"
+},
+
+"task_classification": {
+    "超时拣货考核": {"category": "1. 考核", "task": "超时拣货考核"},
+    "垫底门店考核": {"category": "1. 考核", "task": "垫底门店考核"},
+    "商责取消考核": {"category": "1. 考核", "task": "商责取消考核"},
+    "中台平台数据差异": {"category": "1. 考核", "task": "中台平台数据差异"},
+    "蜂鸟账单": {"category": "2. 订单", "task": "蜂鸟账单"},
+    "抖音账单": {"category": "2. 订单", "task": "抖音账单"},
+    "抖音评价": {"category": "2. 订单", "task": "抖音评价"},
+    "抖音订单": {"category": "2. 订单", "task": "抖音订单"},
+    "抖音次日达账单": {"category": "2. 订单", "task": "抖音次日达账单"},
+    "抖音次日达订单": {"category": "2. 订单", "task": "抖音次日达订单"},
+    "抖音次日达评价": {"category": "2. 订单", "task": "抖音次日达评价"},
+    "抖音POP订单":{"category": "2. 订单", "task": "抖音POP订单"},
+    "抖音UV": {"category": "2. 订单", "task": "抖音UV"},
+    "抖音次日达UV": {"category": "2. 订单", "task": "抖音次日达UV"},
+    "抖音商品评论": {"category": "2. 订单", "task": "抖音商品评论"},
+    "异常中台订单": {"category": "2. 订单", "task": "异常中台订单"},
+    "天猫账单": {"category": "2. 订单", "task": "天猫账单"},
+    "天猫积分发票": {"category": "2. 订单", "task": "天猫积分发票"},
+    "天猫订单": {"category": "2. 订单", "task": "天猫订单"},
+    "天猫国补订单":{"category": "2. 订单", "task": "天猫国补订单"},
+    "天猫赔付开票": {"category": "2. 订单", "task": "天猫赔付开票"},
+    "铺货比例不为100%": {"category": "3. 库存", "task": "铺货比例不为100%"},
+    "安全库存": {"category": "3. 库存", "task": "安全库存"},
+    "铺货策略": {"category": "3. 库存", "task": "铺货策略"},
+    "库存阈值": {"category": "3. 库存", "task": "库存阈值"},
+    "京东自营返利": {"category": "4. 京东自营2C后返"},
+    "淘金砂仓库退货": {"category": "5. 淘金砂仓库退货"},
+    "NPI经销商任务": {"category": "6. FY26 NPI"}
+  },
+
+  "description_mapping": {
+    "中台平台差异订单": "中台平台数据差异",
+    "抖音美团配送费账单": "抖音账单",
+    "天猫年赔付开票汇总": "天猫账单",
+    "天猫账单明细": "天猫账单",
+    "天猫贷款年月": "天猫账单",
+    "天猫美团配送费账单": "天猫账单",
+    "淘金币未回票":"天猫账单",
+    "天猫订单明细": "天猫订单",
+    "天猫百补订单明细&打款金额":"天猫订单",
+    "抖音国补": "抖音次日达账单",
+    "抖音免息账单": "抖音账单",
+    "天猫蜂鸟账单": "蜂鸟账单",
+    "天猫赔付发票": "天猫赔付开票",
+    "天猫赔付发票&运费险发票": "天猫赔付开票",
+    "抖音次日达国补": "抖音次日达账单",
+    "京东自营MDF返利账单":"京东自营返利",
+    "MDF Summary":"京东自营返利",
+    "FY26 预售POS List": "NPI经销商任务",
+    "蜂鸟配送费明细": "蜂鸟账单"
+  },
+
+  "mapping_config": {
+    "enable_fuzzy_match": true,
+    "fuzzy_threshold": 65,
+    "description_mapping_fuzzy_threshold": 70,
+    "priority_order": ["suffix_priority", "exact_description_mapping", "fuzzy_description_mapping", "task_fuzzy_match", "suffix_fallback"],
+    "description": "映射配置说明",
+    "options": {
+      "enable_fuzzy_match": "是否对映射后任务名进行模糊匹配",
+      "fuzzy_threshold": "任务分类模糊匹配阈值",
+      "description_mapping_fuzzy_threshold": "描述映射模糊匹配阈值，用于在description_mapping中查找相似项",
+      "priority_order": "匹配优先级顺序"
+    }
+  },
+
+  "suffix_priority": {
+    ".zip": "垫底门店考核"
+  },
+
+  "suffix_fallback": {
+    ".xlsx": "Excel 文件",
+    ".xls": "Excel 文件",
+    ".csv": "CSV 文件",
+    ".pdf": "PDF 文件",
+    ".txt": "文本文件",
+    ".json": "JSON 文件",
+    ".xml": "XML 文件"
+  },
+
+  "ignored_filenames": [
+    ".DS_Store",
+    "Thumbs.db",
+    "README.md",
+    "desktop.ini",
+    ".gitignore"
+  ],
+
+  "config_info": {
+    "description": "文件分类配置文件",
+    "version": "2.1",
+    "last_updated": "2025-08-04",
+    "new_features": [
+      "增强的团队别名支持",
+      "描述映射模糊匹配功能",
+      "改进的错误报告和建议",
+      "调试信息输出功能"
+    ],
+    "instructions": {
+      "team_aliases": "团队别名映射表，支持多个别名映射到同一个标准团队名",
+      "task_classification": "定义任务名称到文件夹的映射关系",
+      "description_mapping": "文件描述到任务名称的映射表，现在支持模糊匹配",
+      "mapping_config": "映射配置选项，包括各种阈值设置",
+      "suffix_priority": "特定文件后缀的优先分类规则",
+      "suffix_fallback": "默认文件后缀的分类规则",
+      "ignored_filenames": "处理时忽略的文件名列表"
+    },
+    
+    "matching_priority": [
+      "1. 文件后缀优先级匹配 (suffix_priority)",
+      "2. 精确描述映射匹配 (description_mapping 精确匹配)",
+      "3. 模糊描述映射匹配 (description_mapping 模糊匹配) - 新功能",
+      "4. 任务分类模糊匹配 (task_classification)",
+      "5. 映射后任务名模糊匹配 (如果启用)",
+      "6. 文件后缀默认分类 (suffix_fallback)"
+    ],
+    
+    "example_usage": {
+      "description": "使用示例",
+      "fuzzy_description_mapping": {
+        "input": "抖音国补账单",
+        "process": "模糊匹配到 '抖音国补' -> 映射到 '抖音次日达账单' -> 分类到 '2. 订单'",
+        "output": "2. 订单"
+      }
+    }
+  }
+}

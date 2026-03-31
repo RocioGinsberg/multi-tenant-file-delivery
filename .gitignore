@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets / local config
+.env
+*.key
+
+# Runtime logs
+*.log
+upload_log.txt
+
+# Temporary data and generated outputs
+workspace/
+preproduce/
+*.zip
+分类结果.csv
+current_teamlist.json
+

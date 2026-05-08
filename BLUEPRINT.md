@@ -6,21 +6,37 @@
 
 ## 一、项目定位
 
-**真实场景**：总部 HQ 给数十家子公司分发业务文件（合规报送、政策模板、价格表、供应链文档……），每家子公司只能看到属于自己的那份；同一份文件常被同时分发给 N 家子公司。
+### 起源故事
 
-**产品形态**：HQ → 子公司**文件分发与观测平台**，三块拼装：
+工作中需要把总部文件批量分发给数十家子公司。公司原方案是腾讯企业网盘（SMH），订阅成本高、自动化能力弱。我抓包逆向了它的 RESTful API，写了一个自动化批量上传 CLI（即 `_legacy/smh_uploader/`）替代手工操作，期间踩过：
+- 三段 hash 协商上传（content-addressed dedup 协议）
+- 大文件 multipart 分块
+- 嵌套并发（团队级 × 文件级）+ 目录创建去重缓存
+- 断点续传与失败重试
+
+离职后回看这套模式——**"流式上传 + 内容寻址 dedup + 异构 sink 适配"**——并不是 SMH 独有的，任何"总部 → 多子公司分发"场景都需要。于是把它做成一个**通用对象存储为后端的多租户文件分发平台**。SMH 在这个项目里降级为"灵感来源 + 未来可扩展的一种 sink"，首版直接对接 S3/MinIO。
+
+### 真实场景
+
+**总部 HQ 给数十家子公司分发业务文件**（合规报送、政策模板、价格表、供应链文档……），每家子公司只能看到属于自己的那份；同一份文件常被同时分发给 N 家子公司。
+
+### 产品形态
+
+HQ → 子公司**文件分发与观测平台**，三块拼装：
 
 | 路径 | 谁用 | 做什么 | 工程关键词 |
 |---|---|---|---|
-| **写路径（数据面）** | HQ uploader | 上传 → 规则分类 → 异构并发投递（COS/S3/OSS/SFTP/webhook） | 流式上传 / multipart / 断点续传 / AIMD 反压 / 平台层 dedup |
+| **写路径（数据面）** | HQ uploader | 上传 → 规则分类 → 异构并发投递（首版 S3/MinIO，后续 OSS/SFTP/webhook） | 流式上传 / multipart / 断点续传 / AIMD 反压 / 平台层 dedup |
 | **平台层（控制面）** | 系统编排 | Workspace 抽象作为权威真相；跨 sink 屏蔽差异；承担鉴权/审计/配额/dedup | 不对称多租户 / 内容寻址 / ref-count GC |
 | **读路径（控制面）** | Subsidiary viewer | 受限视角下浏览/下载属于自己 workspace 的文件；绝不暴露 sink 凭证 | JWT-scoped authz / presigned URL / 异步审计 |
 
-**核心设计哲学**：**Workspace 是平台层的权威真相，sink 是它的实现方式**。SMH 内置的 team space / 权限 / 配额 我们都不依赖，全部由我们这层判定——这样跨 sink 语义一致，未来切 S3/OSS 不动权限模型。
+### 核心设计哲学
 
-**演进轨迹**：原 `smh_uploader` 单人 CLI（HQ 一个人手动跑） → 多租户分布式平台（HQ 团队批量分发 + N 家子公司在线观测）。
+**Workspace 是平台层的权威真相，sink 只是它的实现方式**。即便对端有自己的权限/配额/dedup 系统（SMH 有 team space + 内置秒传，S3 有 IAM + 没有内置 dedup，OSS 又是另一套），**全部由我们这层判定/补齐**——这样跨 sink 语义一致，未来切换/新增后端不动权限和上层语义。
 
-**学习/简历目标**：贯穿后端核心栈（FastAPI / Go / Kafka / Redis / PostgreSQL / MinIO / OpenTelemetry），通过"问题驱动选型"形成完整面试叙事。
+### 学习/简历目标
+
+贯穿后端核心栈（FastAPI / Go / Kafka / Redis / PostgreSQL / MinIO / OpenTelemetry），通过"**抓包逆向 → 提炼通用模式 → 工程化产品**"的故事线，把每个组件都讲成"问题驱动选型"。
 
 ---
 
@@ -31,7 +47,7 @@
 **写路径（HQ 视角）**：
 - HQ 用户上传一组文件（zip / 多文件 / 远端 URL）
 - 平台按 HQ 配置的分类规则识别每个文件归属的子公司 + 任务类别
-- 并行投递到 sink（首版 COS，后续 S3 / 阿里云 OSS / HTTP webhook / SFTP）
+- 并行投递到 sink（首版 S3/MinIO，后续 阿里云 OSS / HTTP webhook / SFTP / 闭源企业网盘等）
 - 实时进度推送、完整审计
 
 **读路径（子公司视角）**：
@@ -99,7 +115,7 @@ HQ Uploader ──┐                                       ┌── Subsidiary
           ▼                               ▼         ▼
      ┌─────────────────────────────────────────────────┐
      │  Heterogeneous Sinks                            │
-     │  COS │ S3/MinIO │ Aliyun OSS │ Webhook │ SFTP│
+     │  S3/MinIO │ Aliyun OSS │ Webhook │ SFTP │ ...    │
      └─────────────────────────────────────────────────┘
 
   暂存 / 缓冲：MinIO（zip 暂存 + multipart 分块缓冲）
@@ -111,8 +127,8 @@ HQ Uploader ──┐                                       ┌── Subsidiary
 1. HQ 用户提交 zip / 多文件 → Write API
 2. Workspace Service：鉴权 → 配额检查 → 解析分类规则 → 推任务到 Kafka `delivery.tasks.v1`
 3. Go worker 消费任务：
-   - **Stage 1** 查 `physical_object` 表做平台层 dedup
-   - **Stage 2** 进 sink adapter（SMH 走三段协商秒传 / S3 看 multipart 阈值）
+   - **Stage 1** 查 `physical_object` 表做平台层 dedup（命中则零字节出口）
+   - **Stage 2** 进 sink adapter（S3/OSS 看 multipart 阈值；闭源 sink 如 SMH 走自己的协商秒传协议）
    - **Stage 3** 实际传输（流式或并发分块）
 4. 成功后回写 `physical_object`（ref_count++）+ `workspace_object` 元数据
 5. 进度通过 Redis Pub/Sub 实时推 SSE 给前端
@@ -123,7 +139,7 @@ HQ Uploader ──┐                                       ┌── Subsidiary
 1. Subsidiary 用户登录 → 拿到带 `tenant_id` 的 JWT
 2. `GET /my/workspaces`：Workspace Service 查 `target_tenant_id == me.tenant_id` 的所有 workspace
 3. `GET /workspaces/{id}/objects`：查 DB `workspace_object` 元数据（**不打对端**），返回列表
-4. `GET /objects/{id}/download`：鉴权后翻译成 sink 临时凭证（S3 presign / SMH access_token + path），**返回 302 让浏览器直连 sink**——大文件不经过控制面，节省带宽
+4. `GET /objects/{id}/download`：鉴权后翻译成 sink 临时凭证（S3/OSS presigned URL；其他 sink 各自的临时访问凭据），**返回 302 让浏览器直连 sink**——大文件不经过控制面，节省带宽
 5. **新文件通知**：Worker 写完 `workspace_object` 后发 Redis Pub/Sub 事件，控制面订阅后通过 SSE 推子公司前端
 6. 所有读操作异步写 `audit_log`
 
@@ -163,9 +179,9 @@ tenant ── owner_tenant_id ──┐
 ```
 
 **关键不变量**：
-1. **Workspace 是平台层的权威真相**——SMH 即使内置了 team space，授权也由我们这层判定，不依赖 SMH 自己的权限系统。这样跨 sink 语义一致。
+1. **Workspace 是平台层的权威真相**——即便对端有自己的权限/配额/dedup 系统（如 SMH 的 team space + 内置秒传），授权与计费由我们这层判定，不依赖对端语义。这样跨 sink 一致，未来切换/新增后端不动权限和上层语义。
 2. **每个 workspace 服务一个子公司**（一对一）。HQ 为每个子公司创建一个 workspace；子公司用户访问时按 `target_tenant_id` 自动匹配到自己的 workspace 列表。
-3. **Workspace 的物理位置由 binding 决定**：可以背靠 SMH 的 team space，可以背靠 S3 的 (bucket, prefix)，可以背靠 OSS 的同等结构。**对子公司用户无感**。
+3. **Workspace 的物理位置由 binding 决定**：可以背靠 S3 的 (bucket, prefix)，可以背靠 OSS 的同等结构，也可以未来背靠 SMH 的 team space。**对子公司用户无感**。
 4. **元数据存我们 DB**（`workspace_object` 表）——子公司 list 文件不打对端，速度快、避免对端配额浪费、保证一致性。
 
 ### 4.1 Sink 接口
@@ -173,7 +189,7 @@ tenant ── owner_tenant_id ──┐
 ```go
 type Sink interface {
     // 标识
-    Name() string                 // "smh", "s3", "oss", "webhook", ...
+    Name() string                 // "s3", "oss", "webhook", "sftp", ...
     Capability() Capability       // 声明能力，调度器据此优化
 
     // 核心动作（所有 sink 都只暴露这一个）
@@ -218,7 +234,7 @@ type Source interface {
 }
 ```
 
-⚠️ **为什么不是 `io.Reader`**：SMH 三段协商需要预读 first-64K hash 和 full-file hash，单向 Reader 读完即空。`Source.Open()` 可重复打开、`Checksum()` 由 source 自己决定缓存策略——既支持本地文件多次读盘，也支持 S3 暂存对象按需 GET。
+⚠️ **为什么不是 `io.Reader`**：内容寻址 dedup（无论平台层还是某些 sink 的内置秒传）都需要预读 first-64K hash 和 full-file hash，单向 Reader 读完即空。`Source.Open()` 可重复打开、`Checksum()` 由 source 自己决定缓存策略——既支持本地文件多次读盘，也支持 S3 暂存对象按需 GET。
 
 ⚠️ **为什么需要 `OpenRange`**：S3 / OSS multipart 上传要求按 part offset 顺序或并发读；断点续传也需要从指定字节位置恢复。`OpenRange` 让 Source 实现自己决定怎么高效切片（本地用 `io.SectionReader`，远端用 HTTP Range）。
 
@@ -264,10 +280,12 @@ draft → classifying → classified → confirmed → queued
 
 ## 六、关键技术亮点（每条都能在面试深讲 5-10 分钟）
 
-### 6.1 SMH 三段协商上传 + 秒传
-- 内部状态机 `noHash → beginningHash → fullHash`
-- 重复文件出口流量 ≈ 0，可做 benchmark 对比
-- 深讲：为什么不抽象成通用接口（YAGNI + 漏抽象）
+### 6.1 项目起源 —— 抓包逆向 SMH 三段协商上传协议
+- **背景**：在职期间用腾讯企业网盘做总部 → 子公司分发，订阅成本高、自动化能力弱；抓包逆向其 RESTful API 写了 CLI 替代手工
+- **学到的协议模式**：内容寻址 dedup 的"分段 hash 协商"——先试无 hash → 失败再补 first-64K hash → 还失败再补 full hash；任意阶段命中后端 dedup 即触发"秒传"，零字节出口
+- **从单点到通用的提炼**：这套模式不是 SMH 独有的，**任何对象存储后端（即便不内置）都可以在平台层补一份**——所以 § 6.10 才把"内容寻址 dedup"提到平台层做
+- **设计取舍**：要不要把"分段协商"提到 Sink 通用接口？答：**不**。S3 的 multipart 是空间分片（不同语义）、SMH 的三段是协商（探测 dedup）、未来 GCS resumable 又是 session——抽象会变成漏抽象。每种协议自己在 adapter 内部状态机里实现
+- 深讲：从抓包到提炼通用模式的过程；YAGNI 与漏抽象的边界；首版 sink 选 S3/MinIO 而非 SMH 的理由（开源、本地易起、社区资源最丰富，详见 ADR 0010）
 
 ### 6.2 `io.Pipe` 流式传输
 - 一端是本地文件 reader，一端是对端 PUT writer，中间挂 `TeeReader` 算 hash
@@ -306,11 +324,11 @@ draft → classifying → classified → confirmed → queued
 - 关键：**绝不把 sink 凭证暴露给子公司**；每次下载临时签发，带最小权限和有限 TTL
 - 深讲：信任边界、最小权限原则、审计可追溯链
 
-### 6.10 三级智能上传链路（平台 dedup → sink dedup → 实际传输）
-- **Stage 1 — 平台层 dedup**：先算 sha256，查 `physical_object` 表；命中则零字节出口，多个 workspace_object 共用一份物理字节（HQ 一份政策文件分发给 N 家子公司，节省 N 倍带宽）
-- **Stage 2 — Sink 内置秒传**：未命中平台 dedup 时，进入 SMH 三段协商；命中对端 dedup 仍零字节出口
+### 6.10 智能上传链路（平台 dedup → 可选 sink dedup → 实际传输）
+- **Stage 1 — 平台层 dedup（首版默认开启）**：先算 sha256，查 `physical_object` 表；命中则零字节出口，多个 workspace_object 共用一份物理字节（HQ 一份政策文件分发给 N 家子公司，节省 N 倍带宽）。**这是首版能讲出最大数字的地方**，因为 S3/MinIO 不内置 dedup
+- **Stage 2 — Sink 内置秒传（可选，仅部分 sink 支持）**：未命中平台 dedup 时，若 sink 自身有 dedup 协议（如未来扩展的 SMH 三段协商），由 sink adapter 内部状态机处理；S3/OSS 这一阶段直接跳过
 - **Stage 3 — 实际传输**：单段流式 PUT 或 multipart 并发上传
-- 深讲：三级 cache 思维 + 命中率可量化 + 跨 sink 一致性（即便对端没有 dedup，平台层也能补上）
+- 深讲：cache-like 三层思维 + 跨 sink 一致性（**对端有没有 dedup 我们都能保证语义统一**——这是 § 6.8 的具体落地）+ Capability 矩阵驱动调度（小文件优先选有秒传的 sink）
 
 ### 6.11 大文件分块上传 + 断点续传
 - size ≥ threshold（~50MB）时，sink adapter 内部走 multipart：part size 8MB、并发 4-8 part、ETag 落 `multipart_session` 表 + Redis 缓存
@@ -352,11 +370,11 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 │   ├── internal/
 │   │   ├── sink/                 # 核心抽象
 │   │   │   ├── sink.go           # interface + Capability + Source
-│   │   │   ├──               # SMH adapter (三段协商)
-│   │   │   ├── s3/               # S3 / MinIO adapter (multipart)
-│   │   │   ├── oss/              # 阿里云 OSS adapter
-│   │   │   ├── webhook/          # HTTP webhook
-│   │   │   └── mock/             # 压测用
+│   │   │   ├── s3/               # S3 / MinIO adapter (multipart)  ← 首版
+│   │   │   ├── oss/              # 阿里云 OSS adapter（Phase 7）
+│   │   │   ├── webhook/          # HTTP webhook（Phase 7）
+│   │   │   └── mock/             # 压测用（Phase 2）
+│   │   │   # 未来扩展：sftp/、smh/（闭源企业网盘，三段协商）等
 │   │   ├── source/               # File / S3 / Memory / RemoteURL source 实现
 │   │   ├── pipeline/             # io.Pipe 编排
 │   │   ├── ratelimit/            # Redis 令牌桶
@@ -465,13 +483,14 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 
 ### Phase 1：Python 单体 MVP（4-6 天）
 - FastAPI + SQLite + asyncio 进程内 worker
-- 移植原 smh_uploader 的分类器与 SMH 客户端（aiohttp 流式）
+- 移植 `_legacy/` 分类器与 aiohttp 流式上传逻辑（v0 是 SMH 协议，Phase 1 改为对接 S3/MinIO，保留流式 + 嵌套并发的核心模式）
 - SSE 进度推送（进程内 pub/sub）
 - 前端跑通端到端
-- **完成定义**：本地起一个进程，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → SMH（或 mock）成功
+- 本地用 docker 起 MinIO 作为对端
+- **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
 
 ### Phase 2：拆 Go 数据面（5-7 天）
-- 实现 Go worker 骨架：Sink interface + Source + 一个 mock sink + 一个 SMH sink
+- 实现 Go worker 骨架：Sink interface + Source + 一个 mock sink + 一个 S3 sink（aws-sdk-go-v2 + MinIO endpoint）
 - Kafka 把控制面和数据面串起来
 - Python 端发任务到 Kafka，Go 端消费
 - **完成定义**：相同的端到端流程，但上传环节由 Go worker 完成
@@ -512,8 +531,9 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 - **完成定义**：HQ 用户上传一批文件，子公司用户登录后能看到属于自己的文件并下载；管理后台能查到完整审计链。
 
 ### Phase 7：扩 Sink + 压测（5-7 天）
-- 加 S3/MinIO sink 和阿里云 OSS sink
+- S3 已在 Phase 1/2 实现；这里加阿里云 OSS sink 和 webhook sink
 - 加 mock sink 模拟各种异常（429、超时、随机失败）
+- 可选 stretch：把 `_legacy/smh_uploader/api_client.py` 抓包逆向出来的三段协商上传协议封装成 SMH adapter，作为"已知有内置秒传的 sink"压测样本，验证 § 6.10 Stage 2 路径能跑通
 - k6 / wrk 压测，记录数字
 - **完成定义**：BENCHMARKS.md 写好；至少 3 张性能对比图
 
@@ -529,8 +549,8 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 
 | 实验 | 目的 | 期望产出 |
 |---|---|---|
-| 重复文件秒传命中率 | 验证 SMH 三段协商价值 | 出口流量节省 X%，延迟 P50 从 N → M |
-| **平台层 dedup 价值** | HQ 一份 100MB 文件分发 30 家子公司 | 朴素 3GB 出口流量 → dedup 后 100MB；总耗时从 X → Y |
+| **平台层 dedup 命中率** | HQ 一份 100MB 文件分发 30 家子公司（首版重头戏） | 朴素 3GB 出口流量 → dedup 后 100MB；总耗时从 X → Y |
+| 平台 dedup vs sink 内置 dedup | 如果 Phase 7 stretch 接入 SMH，两种 dedup 命中率 + 出口流量对比 | 验证"S3 没有内置 dedup 也能达到接近 SMH 的节省率"——即 § 6.8 跨 sink 一致性的有效性 |
 | 流式 vs 整文件入内存 | Go pipeline vs Python BytesIO | 1GB 文件，内存峰值 30MB vs 1GB |
 | **multipart vs 单段** | 单文件吞吐 + 断点续传可靠性 | 1GB 单段 X MB/s，8MB 分块 4 并发 Y MB/s（提升 Z%）；模拟中断恢复成功率 100% |
 | AIMD vs 固定限流 | 反压机制有效性 | 同样对端 QPS 限制下，AIMD 吞吐高 X%、错误率低 Y% |
@@ -579,7 +599,7 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 
 ---
 
-*v1.3 — 由 Claude 协助起草 — 待审计与迭代。*
+*v1.4 — 由 Claude 协助起草 — 待审计与迭代。*
 
 **v1.1 改动（基于"总部 → 子公司分发"真实场景澄清）**：
 - § 一/二：定位从"通用 SaaS"具化为"HQ → 子公司文件分发与观测平台"；明确不对称租户关系
@@ -598,6 +618,19 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 **v1.3 改动（定位与架构图重写）**：
 - § 一：定位重写——从"通用 SaaS"叙事转向"HQ 写路径 + 平台权威层 + 子公司读路径"三块拼装；明确"Workspace 是权威真相，sink 是实现方式"的核心设计哲学
 - § 三：架构图重画——HQ uploader 与 Subsidiary viewer 作为两类用户分别从两侧入口；Workspace Service 显式画为控制面的中央权威模块；新增 3.2/3.3 写路径与读路径的步骤化描述；3.4 关键架构决策（302 直连 / 元数据 DB 真相 / Redis Pub/Sub）
+
+**v1.4 改动（SMH 降级为灵感来源，首版后端 = S3/MinIO）**：
+- § 一：加"起源故事"段落——抓包逆向 SMH → 提炼通用模式 → 工程化产品；首版 sink 改为 S3/MinIO；学习目标改为"抓包逆向 → 提炼通用模式 → 工程化产品"叙事线
+- § 二：写路径 sink 列表中 COS/SMH 不再首发，改为 S3/MinIO 首发
+- § 三：架构图 Heterogeneous Sinks 列表更新；§ 3.2 Stage 2 措辞改为"S3/OSS 看 multipart 阈值；闭源 sink 走自己的协商秒传协议"；§ 3.3 下载凭证示例去掉 SMH access_token
+- § 四：4.0 不变量改写为通用版"即便对端有自己的权限/配额/dedup 系统..."；4.1 Sink Name 注释更新；4.3 OpenRange 注释改写
+- § 六：6.1 改为"项目起源 — 抓包逆向 SMH 三段协商上传协议"，强调起源故事 + 提炼过程；6.10 改为两阶段强制 + 一阶段可选（Stage 2 sink 内置秒传标为"未来 SMH 等 sink 的可选适配"）
+- § 七：data-plane/internal/sink/ 树更新——s3 排首位、smh 移除（空目录已删）；闭源 sink 作为未来扩展注释
+- § 十：Phase 1 完成定义改为"MinIO 上传成功"；Phase 2 改为 S3 sink；Phase 7 加 SMH 作为 stretch goal
+- § 十一：压测删掉"SMH 三段协商命中率"，改为"平台层 dedup 命中率"为首版重头戏；新增"平台 dedup vs sink 内置 dedup"对比作为 Phase 7 stretch
+- 新增 ADR 0010：项目起源叙事 & 首版后端选 S3/MinIO
+- docs/SINK_PROTOCOL.md 重写：S3/MinIO 提到首节详写 multipart 协议；SMH 移到"未来扩展"
+- 顶层 README 加"起源"段落
 
 后续每一次重大决策请在 `docs/ADR/` 下记录。
 

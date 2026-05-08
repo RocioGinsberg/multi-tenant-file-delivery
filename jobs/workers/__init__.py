@@ -1,1 +1,0 @@
-"""Standalone CosDrive worker entrypoints."""

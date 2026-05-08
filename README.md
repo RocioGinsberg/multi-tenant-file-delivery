@@ -1,54 +1,36 @@
-# CosDrive Local Service
+# 多租户文件分发与观测平台
 
-这个目录把原项目里的 `cosdrive` 相关后端、执行侧 worker、前端页面和 SQL 片段集中成一个本地微服务骨架，方便继续独立化，而不是继续混在 `portal-api` / `portal-web` / `jobs` 里。
+总部 HQ 给数十家子公司分发业务文件、子公司在自己权限内观测/下载属于自己数据的平台。
 
-## 目录
+> **完整设计**：[BLUEPRINT.md](./BLUEPRINT.md) — 项目北极星，所有重大决策的来源
+> **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+> **架构决策记录**：[docs/ADR/](./docs/ADR/)
+> **Sink 协议规范**：[docs/SINK_PROTOCOL.md](./docs/SINK_PROTOCOL.md)
+> **性能基准**：[docs/BENCHMARKS.md](./docs/BENCHMARKS.md)
 
-- `app/`：FastAPI 服务入口、路由、repo、service、schema
-- `jobs/`：分类器、SMH 客户端、task service、独立 worker
-- `web/`：从 Portal 抽出的 CosDrive 页面和静态资源
-- `sql/`：CosDrive 相关表结构片段
-- `env/`：本地运行环境变量样例
+## Monorepo 布局
 
-## 已抽出的内容
-
-- Portal API 路由：`/api/upload/cosdrive/*`
-- 注册表管理逻辑：draft / validate / publish / rollback
-- Task 流程：zip 上传、分类、确认、上传、重试、详情、进度
-- Worker 逻辑：逐文件投递、retry、断路器、attempt/event 写库
-- Web 页面：当前 `cosdrive.html` 相关样式和脚本
-
-## 仍然保留的仓库级依赖
-
-- `libs/runner-shared`：worker 仍通过其中的 `portal_state` 写 `cosdrive_*` 状态表
-- `libs/runtime-observability` / `libs/platform-core`：部分共用库仍从主仓库复用
-- `portal_db`：当前仍复用原项目的 `cosdrive_*` 表，不是新数据库
-
-## 启动方式
-
-1. 载入环境变量，参考 `env/cosdrive.env.example`
-2. 从本目录启动：
-
-```bash
-cd services/cosdrive-local-service
-export PYTHONPATH="$(pwd):/home/rocio/projects/smartOps:/home/rocio/projects/smartOps/libs/runner-shared/src:/home/rocio/projects/smartOps/libs/runtime-observability/src:/home/rocio/projects/smartOps/libs/platform-core/src"
-uvicorn app.main:app --reload --port 8310
+```
+.
+├── control-plane/         Python FastAPI 控制面（业务逻辑、规则引擎、读路径）
+├── data-plane/            Go 数据面（高并发流式投递、sink 适配）
+├── web/                   前端（HQ 上传台 + 子公司观测窗口）
+├── deploy/                docker-compose、Grafana、Prometheus、OTel 配置
+├── proto/                 跨语言消息/接口定义（备用，主用 Kafka JSON）
+├── docs/                  架构文档与 ADR
+└── BLUEPRINT.md           项目蓝图
 ```
 
-3. 打开：
+## 当前阶段
 
-```text
-http://localhost:8310/
-```
+**Phase 0（完成）**：清理半成品脚手架，建立 monorepo 骨架。
 
-## 当前约束
+**下一步：Phase 1** —— Python 单体 MVP，FastAPI + SQLite + 进程内 worker，把 HQ 写路径 + SMH 上传跑通。
 
-- 默认 `COSDRIVE_DISPATCH_MODE=local-process`，上传任务由本目录下的 worker 直接以子进程方式触发，不依赖 Prefect。
-- 前端页面是 Portal 页面快照，功能已经能对接本服务，但视觉和导航仍保留原 Portal 风格。
-- SQL 只抽了 `cosdrive` 相关表段；如果单独建库，还需要补公共函数，例如 `trigger_set_updated_at()`。
+详细阶段计划见 [BLUEPRINT § 十](./BLUEPRINT.md#十实施阶段每阶段都有完成定义)。
 
-## 后续建议
+## 历史代码
 
-- 把 `runner_shared.worker_state.portal_state` 里的 CosDrive 写库逻辑继续下沉到本目录，去掉对主仓库共享库的依赖。
-- 单独定义 `pyproject.toml` 和容器镜像。
-- 把 `web/` 从 Portal 公共组件中再裁一轮，去掉无关导航和运行态组件。
+`control-plane/_legacy/`：v0 单人 CLI 脚本与 cosdrive 半成品的 SMH 协议客户端，供 Phase 1 移植参考。Phase 1 完成后会删。
+
+回到 Phase 0 之前的状态：`git checkout pre-phase-0`。

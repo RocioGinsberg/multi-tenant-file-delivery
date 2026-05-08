@@ -12,7 +12,7 @@
 
 | 路径 | 谁用 | 做什么 | 工程关键词 |
 |---|---|---|---|
-| **写路径（数据面）** | HQ uploader | 上传 → 规则分类 → 异构并发投递（SMH/COS/S3/OSS/SFTP/webhook） | 流式上传 / multipart / 断点续传 / AIMD 反压 / 平台层 dedup |
+| **写路径（数据面）** | HQ uploader | 上传 → 规则分类 → 异构并发投递（COS/S3/OSS/SFTP/webhook） | 流式上传 / multipart / 断点续传 / AIMD 反压 / 平台层 dedup |
 | **平台层（控制面）** | 系统编排 | Workspace 抽象作为权威真相；跨 sink 屏蔽差异；承担鉴权/审计/配额/dedup | 不对称多租户 / 内容寻址 / ref-count GC |
 | **读路径（控制面）** | Subsidiary viewer | 受限视角下浏览/下载属于自己 workspace 的文件；绝不暴露 sink 凭证 | JWT-scoped authz / presigned URL / 异步审计 |
 
@@ -31,7 +31,7 @@
 **写路径（HQ 视角）**：
 - HQ 用户上传一组文件（zip / 多文件 / 远端 URL）
 - 平台按 HQ 配置的分类规则识别每个文件归属的子公司 + 任务类别
-- 并行投递到 sink（首版 SMH/COS，后续 S3 / 阿里云 OSS / HTTP webhook / SFTP）
+- 并行投递到 sink（首版 COS，后续 S3 / 阿里云 OSS / HTTP webhook / SFTP）
 - 实时进度推送、完整审计
 
 **读路径（子公司视角）**：
@@ -99,7 +99,7 @@ HQ Uploader ──┐                                       ┌── Subsidiary
           ▼                               ▼         ▼
      ┌─────────────────────────────────────────────────┐
      │  Heterogeneous Sinks                            │
-     │  SMH/COS │ S3/MinIO │ Aliyun OSS │ Webhook │ SFTP│
+     │  COS │ S3/MinIO │ Aliyun OSS │ Webhook │ SFTP│
      └─────────────────────────────────────────────────┘
 
   暂存 / 缓冲：MinIO（zip 暂存 + multipart 分块缓冲）
@@ -147,7 +147,7 @@ HQ Uploader ──┐                                       ┌── Subsidiary
 
 ⚠️ **三层抽象，自上而下**：
 - **Workspace 层**（控制面，平台权威）：逻辑容器；定义"谁能访问、配额多少、审计什么"；与具体存储后端无关。
-- **Sink 层**（数据面，存储协议适配）：把字节搬到对端；屏蔽 SMH/S3/OSS/webhook 协议差异。
+- **Sink 层**（数据面，存储协议适配）：把字节搬到对端；屏蔽 S3/OSS/webhook 协议差异。
 - **Source 层**（数据面，被传输物的封装）：让文件可寻址、可重读、可校验。
 
 ### 4.0 Workspace 层（最重要）
@@ -352,7 +352,7 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 │   ├── internal/
 │   │   ├── sink/                 # 核心抽象
 │   │   │   ├── sink.go           # interface + Capability + Source
-│   │   │   ├── smh/              # SMH adapter (三段协商)
+│   │   │   ├──               # SMH adapter (三段协商)
 │   │   │   ├── s3/               # S3 / MinIO adapter (multipart)
 │   │   │   ├── oss/              # 阿里云 OSS adapter
 │   │   │   ├── webhook/          # HTTP webhook

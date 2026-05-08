@@ -1,35 +1,40 @@
-# macOS
-.DS_Store
-
-# Python cache/build
+# --- Python ---
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
 *.egg-info/
+.venv/
+venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.venv/
-venv/
-env/
 
-# IDE
-.vscode/
+# --- Go ---
+*.exe
+*.test
+*.out
+/data-plane/bin/
+
+# --- Node / 前端 ---
+node_modules/
+dist/
+.parcel-cache/
+
+# --- IDE / OS ---
 .idea/
+.vscode/
+.DS_Store
+Thumbs.db
 
-# Secrets / local config
-.env
-*.key
-
-# Runtime logs
+# --- 运行产物 ---
 *.log
 upload_log.txt
-
-# Temporary data and generated outputs
-workspace/
-preproduce/
-*.zip
 分类结果.csv
 current_teamlist.json
+.env
+.env.local
+*.pem
+*.key
 
+# --- 项目历史遗留 ---
+task_classifications.json

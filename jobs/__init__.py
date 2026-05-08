@@ -1,0 +1,1 @@
+"""Standalone CosDrive jobs package."""

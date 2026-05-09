@@ -52,6 +52,10 @@
    │  ├─ mcp__deepseek__* ─ DeepSeek-V3/R1   │
    │  └─ ...                                 │
    │                                         │
+   │  Bash 派工（主对话调 CLI）：            │
+   │  └─ aider + DeepSeek/GLM 后端           │
+   │     L1 批量任务的省钱选项                │
+   │                                         │
    │  外部独立工具（不经主对话）：           │
    │  ├─ IDE Codex Plugin  ─ 你 IDE 内打字   │
    │  └─ aider / continue  ─ 终端 REPL       │
@@ -284,7 +288,7 @@
 | **响应速度** | 等结果的体感 | 影响开发节奏 |
 | **工具调用能力** | 能否多步调用 Bash/Read/Edit | 决定能否独立完成任务 |
 
-### 7.4 不进主对话的外部独立工具
+### 7.4 外部独立工具（IDE/终端）
 
 不通过主对话、你直接在 IDE / 终端用的工具：
 
@@ -293,11 +297,97 @@
 - **适合**：L1 打字加速——补全、改名、scaffold 几行
 - **风险**：会"创造性发挥"，commit 前必须 review
 
-#### aider / continue（终端 REPL）
+#### aider / continue（终端 REPL，独立使用）
 - **用法**：终端里和单个文件对话式编辑
 - **适合**：L1/L2 单文件局部修改
-- **风险**：会绕过 git 直接写文件，注意工作区干净
+- **风险**：会绕过主对话 review 直接写文件 + 默认 auto-commit；注意工作区干净
 - **不要**：让它跨多文件做大规模改动——这种该派给主对话编排
+
+### 7.4.1 主对话通过 Bash 派工给 aider（推荐组合）
+
+**这是性价比最高的"非 Anthropic 模型"集成方式**——保留 Opus 主对话的架构能力，把执行 + git 管理外包给 aider，底层模型用 DeepSeek（或 GLM）控制成本。
+
+#### 为什么是 Bash 而不是 MCP plugin
+
+社区有 `sengokudaikon/aider-mcp-server` 之类把 aider 包装成 MCP tool 的项目，但目前都是早期状态（star 数低、commit 少）。Bash 路径有三个优势：
+1. 零依赖、零配置——`pip install aider-chat` 完事
+2. 主对话直接看到 stdout/stderr 和 git diff，反馈结构化
+3. 想拔掉时 `unset` 环境变量即可，不污染项目
+
+未来 MCP plugin 成熟（200+ star、活跃维护）再迁移。
+
+#### 一次性环境配置
+
+```bash
+# 装 aider
+pip install aider-chat
+
+# 配 DeepSeek 凭证（写到 ~/.bashrc 或 ~/.zshrc）
+export DEEPSEEK_API_KEY="sk-..."
+
+# 验证
+aider --model deepseek/deepseek-chat --no-stream --version
+```
+
+DeepSeek 当前定价 ~¥1/M input、¥2/M output（远低于 Anthropic 1-2 个数量级），适合 L1 批量。
+
+#### 主对话调用 aider 的标准模板
+
+主对话派 aider 任务时，Bash 命令必须满足以下结构：
+
+```bash
+aider \
+  --model deepseek/deepseek-chat \
+  --no-auto-commits \
+  --yes \
+  --no-stream \
+  --message "<本次任务的具体指令，遵循 § 五 模板>" \
+  <可改文件路径 1> \
+  <可改文件路径 2> \
+  ...
+```
+
+**关键参数说明**：
+
+| 参数 | 作用 | 为什么必须 |
+|---|---|---|
+| `--model deepseek/deepseek-chat` | 指定后端模型 | 如不指定 aider 默认用 Anthropic，违背成本初衷 |
+| `--no-auto-commits` | 禁止 aider 自己 git commit | **commit 权必须留给主对话**（参见失败模式 I） |
+| `--yes` | 不进交互确认 | 主对话不能回答交互式提示 |
+| `--no-stream` | 不流式输出 | 让 stdout 一次性给主对话读 |
+| `--message "..."` | 任务指令 | 沿用 § 五 6 段模板，写清约束和验收 |
+| `<文件路径>` 显式列出 | 圈定可改范围 | 防止 aider 自由发挥改其他文件 |
+
+#### 典型适用任务
+
+| 任务 | 命令草稿 |
+|---|---|
+| 写 pytest 单测覆盖某个函数 | `aider ... --message "为 classifier.classify_files 写 5 个 table-driven test，覆盖 zip slip / 中文 / 空文件 / ignored / 不匹配团队" control-plane/app/services/classifier.py control-plane/tests/test_classifier.py` |
+| 给一个 service 加中文 docstring | `aider ... --message "给所有 public 方法加中文 docstring，说明参数和返回值" control-plane/app/services/foo.py` |
+| 批量补 type hint | `aider ... --message "补全本文件所有 def/return 的 type hint，使用 from __future__ import annotations" <files>` |
+| scaffold 5 个相似 endpoint | `aider ... --message "按 list_workspaces 的模式新增 list_objects, list_tasks, list_users, list_audit, list_notifications" <files>` |
+
+#### 主对话派 aider 的工作流
+
+按 § 六 标准启动程序的修改版：
+
+1. 主对话拆任务到 L1 级别 + 列可改文件白名单
+2. 主对话写完整 `aider` Bash 命令（含 `--message` 完整指令）
+3. **执行前先把命令展示给你确认**——比派 subagent 多一步，因为 aider 直接写文件无 diff preview
+4. 执行 → 读 stdout + 跑 `git diff` → 跑测试
+5. 通过则主对话起草 commit message → 你批准 → `git commit`
+6. 不通过则 `git restore` 回滚，决定是 aider 重派、换 Sonnet subagent，还是主对话自己接手
+
+#### 不适合派 aider 的任务
+
+- L3（架构、ADR、安全相关）——按 § 三 分级原则
+- 跨 5+ 文件的修改——超出 aider 单次 context 能力
+- 需要先读懂大量上下文再写少量代码——aider 不擅长"大读小写"，主对话 + Sonnet subagent 更合适
+- 需要 review 别人代码并指出问题——这是模型推理任务，aider 是编辑工具不擅长
+
+#### 成本预估
+
+按 DeepSeek 当前定价，跑一个"为 classifier 写 5 个单测"任务大约消耗 ~10K input + ~3K output token，**总成本 < ¥0.02**。同样任务派 Sonnet subagent 大约 ¥1+。L1 批量场景 50-100x 价差。
 
 ### 7.5 不要做的集成
 
@@ -327,10 +417,10 @@
 | 写 Python 仓储层 + 单测 | Sonnet | DeepSeek | SQLAlchemy 2.0 风格 Sonnet 训练充分 |
 | 写 FastAPI 路由 + Pydantic schema | Sonnet | Haiku | L2 中等复杂度 |
 | 写 Alembic migration | Sonnet | — | 涉及 schema 安全，慎换模型 |
-| 写 table-driven 单元测试 | Haiku | GLM | L1 高频，价格敏感优先 |
-| scaffold 重复模式 | Haiku | GLM | L1，批量场景 GLM 更便宜 |
-| 改 docstring / 字段名 | Haiku | IDE Codex Plugin | L1，IDE 内最快 |
-| 写中文注释 / 翻译文档 | GLM | Sonnet | GLM 中文场景训练充分，价格低 |
+| 写 table-driven 单元测试 | aider+DeepSeek (Bash) | Haiku | DeepSeek 价格低 50-100×；aider 自带 git 集成省事 |
+| scaffold 重复模式 | aider+DeepSeek (Bash) | Haiku | 同上；批量场景成本敏感 |
+| 改 docstring / 字段名 | aider+DeepSeek (Bash) | IDE Codex Plugin | 单文件局部修改 aider 强项 |
+| 写中文注释 / 翻译文档 | aider+DeepSeek (Bash) | GLM / Sonnet | DeepSeek 中文好且便宜 |
 | 跑测试 / 看日志 / 改 BUG | Opus 主对话 | — | debug 需要项目上下文，不委托 |
 | 写 README / 子目录文档 | Sonnet | Haiku | L2，需指明边界（不能写承重墙） |
 | 调研某技术（"S3 multipart 协议细节"） | Sonnet（+ WebSearch） | Codex | 调研 + 总结 Sonnet 平衡 |
@@ -348,8 +438,8 @@
 | `control-plane/app/services/` | Sonnet | Python 业务逻辑 |
 | `control-plane/app/repos/` | Sonnet | SQLAlchemy ORM |
 | `control-plane/app/api/` | Sonnet | FastAPI 路由 |
-| `control-plane/tests/` | Haiku | L1 批量 |
-| `data-plane/internal/*/test*.go` | Haiku | L1 批量 |
+| `control-plane/tests/` | aider+DeepSeek (Bash) | Haiku | L1 批量，DeepSeek 极省成本 |
+| `data-plane/internal/*/test*.go` | aider+DeepSeek (Bash) | Haiku | 同上 |
 
 特殊情况偏离时（如 Sonnet 失败换 Codex），在 commit message 里写明。
 
@@ -410,10 +500,23 @@
 - 给 plugin 派任务时不带凭证、不带客户数据
 - 仓库根目录 `.env` / `*.pem` 已在 `.gitignore`，但要警惕 plugin 直接读文件系统
 
+### 失败模式 I：aider 自动 commit 绕过主对话
+**症状**：aider 默认 `--auto-commits=true`，每次成功编辑就直接 `git add + git commit`。结果：
+- commit message 由 aider 自己写（不符合项目规范）
+- 主对话 review 流程被跳过
+- 一个任务可能产生 3-5 个零碎 commit 而不是一个有意义的 commit
+- 你失去对 git 历史的控制
+
+**对策**：
+- 主对话调 aider 时**永远带 `--no-auto-commits`**（已写入 § 7.4.1 标准模板）
+- 主对话执行 aider 后，自己跑 `git diff` review，再起草 commit message → 等你批准 → 一次性 commit
+- 偶尔 aider 不听话仍 commit 了，先 `git reset --soft HEAD~N` 把改动退回工作区，重新走流程
+
 ---
 
 ## 十一、版本
 
 - **v1.0**（2026-05-08）：初版，配套 BLUEPRINT v1.4 的 Phase 1 启动。
 - **v1.1**（2026-05-09）：扩展执行池治理。§ 二 角色图加"执行池"；§ 七 重构为"执行池：模型选择与外部 plugin 集成"，加 plugin 评估清单 + 命名约定 + 6 维选模型判断；§ 八 速查表升级为"首选 + 备选"双列，新增"同一模块固定主力模型"小节；§ 十 新增失败模式 F (风格碎裂)、G (plugin 工具协议不兼容)、H (plugin 隐性数据上传)。
+- **v1.2**（2026-05-09）：集成 aider + DeepSeek via Bash 作为 L1 批量任务的省钱选项。§ 二 角色图加"Bash 派工"分类；新增 § 7.4.1 主对话通过 Bash 派工给 aider，含环境配置 / 标准命令模板 / 关键参数说明 / 典型适用任务 / 不适合任务；§ 八 速查表 4 类 L1 任务首选改为 aider+DeepSeek，模块主力模型表 tests/ 目录改为 aider+DeepSeek；§ 十 新增失败模式 I (aider 自动 commit 绕过主对话)。
 - 每次发现新失败模式，更新 § 十；每次工作流改动，更新 § 六；每次执行池新成员，更新 § 七 与 § 八。

@@ -1,0 +1,37 @@
+[project]
+name = "control-plane"
+version = "0.1.0"
+description = "Auto Upload — Control Plane API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "aiosqlite",
+    "alembic",
+    "pydantic-settings",
+    "aioboto3",
+    "python-multipart",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# _legacy/ is historical code — not linted until a dedicated clean-up task
+exclude = ["_legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# classifier.py uses fuzzywuzzy / thefuzz (1.5 task); exclude until then
+exclude = ["app/services/classifier.py"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

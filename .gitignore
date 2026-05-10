@@ -42,5 +42,11 @@ current_teamlist.json
 *.pem
 *.key
 
+# SQLite local databases (alembic / dev / tests may create these)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
 # --- 项目历史遗留 ---
 task_classifications.json

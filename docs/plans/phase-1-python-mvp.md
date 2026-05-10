@@ -6,6 +6,8 @@
 > **关联 BLUEPRINT 章节**：§ 十 Phase 1
 > **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)
 
+> **执行方命名说明**：本文档最早按 Claude/Opus 语境起草。实际执行时按 [AGENTS.md](../../AGENTS.md) 的宿主无关规则解释：`主对话` / `Opus` 等价于当前主编排 Agent；`Sonnet subagent` 等价于 L2 worker；Codex 可作为主编排 Agent，也可把 L1/L2 任务派给 `spawn_agent`、MCP worker 或 aider。
+
 ---
 
 ## 一、4 个先决决策（已确认）
@@ -31,7 +33,7 @@
 ### 1.1 项目骨架
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：无
 - **范围**：
   - `control-plane/pyproject.toml`（uv 或 poetry，含 fastapi、uvicorn、sqlalchemy 2.0、aiosqlite、alembic、pydantic-settings、aioboto3、pytest、pytest-asyncio、httpx、ruff）
@@ -45,7 +47,7 @@
 ### 1.2 settings 配置
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/core/settings.py`：Pydantic Settings 读 .env
@@ -57,7 +59,7 @@
 ### 1.3 DB + 三张表 + alembic
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：1.1, 1.2
 - **范围**：
   - `control-plane/app/core/db.py`：SQLAlchemy 2.0 async + aiosqlite engine + sessionmaker
@@ -71,10 +73,10 @@
 - **commit message 草案**：`phase1(1.3): SQLite + SQLAlchemy 2.0 async + alembic migration`
 
 ### 1.4 Repos ✅ TDD
-- **状态**：`[ ]`
+- **状态**：`[~]`
 - **L 等级**：L2
 - **TDD?**：✅（承重墙：repo 接口未来被所有 services 依赖）
-- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话
+- **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent
 - **依赖**：1.3
 - **范围**：
   - `control-plane/app/repos/task_repo.py`：create / get / update_status / list / get_by_idempotency_key
@@ -82,10 +84,34 @@
   - `control-plane/app/repos/event_repo.py`：append / list_by_task
   - 仓储层方法都用 async + 显式 session
 - **TDD 流程**：
-  - 1.4-spec：主对话起草测试 spec → 用户 review
-  - 1.4-test：Sonnet 写 `tests/test_task_repo.py` / `test_item_repo.py` / `test_event_repo.py`，全 fail（red commit）
-  - 1.4-impl：Sonnet 写实现，测试全过（green commit）
+  - 1.4-spec：主编排 Agent 起草测试 spec → 用户 review
+  - 1.4-test：L2 worker 写 `tests/test_task_repo.py` / `test_item_repo.py` / `test_event_repo.py`，全 fail（red commit）
+  - 1.4-impl：L2 worker 写实现，测试全过（green commit）
 - **验收**：所有测试通过；至少 8 个 test case；`git diff <test commit>..HEAD -- tests/` 为空（实现阶段未改测试）
+- **Repo 契约（1.4-spec，2026-05-10）**：
+  - 通用约束：所有方法接收显式 `AsyncSession`；repo 不调用 `commit()`，写操作只 `flush()`，事务边界由 service / API 层控制；查询使用 SQLAlchemy 2.0 `select()` / `update()` 风格，不使用 legacy Query API。
+  - `TaskRepo.create(session, *, idempotency_key, submission_label="", temp_dir="", summary_json=None, created_by="local-user", status="draft") -> Task`：创建 task，默认 `summary_json={}`；返回已 flush、带 `id` 的 ORM 对象。
+  - `TaskRepo.get(session, task_id) -> Task | None`：按主键读取，不存在返回 `None`。
+  - `TaskRepo.get_by_idempotency_key(session, idempotency_key) -> Task | None`：按唯一幂等键读取，不存在返回 `None`。
+  - `TaskRepo.update_status(session, task_id, status, *, confirmed_at=None, finished_at=None) -> Task | None`：只更新状态和显式传入的时间字段；不存在返回 `None`。
+  - `TaskRepo.list(session, *, limit=50, offset=0) -> list[Task]`：按 `created_at desc, id desc` 返回分页列表。
+  - `ItemRepo.bulk_insert(session, task_id, items) -> list[TaskItem]`：接收 dict 列表或可迭代映射，统一注入 `task_id`，批量创建并返回已 flush 对象；不吞掉唯一约束错误。
+  - `ItemRepo.list_by_task(session, task_id) -> list[TaskItem]`：按 `src_path asc` 返回任务下所有 item。
+  - `ItemRepo.update_upload_status(session, item_id, upload_status, *, upload_error="", uploaded_at=None) -> TaskItem | None`：按 item id 更新上传状态、错误信息和上传时间；不存在返回 `None`。
+  - `ItemRepo.count_by_status(session, task_id) -> dict[str, int]`：按 `upload_status` 分组计数；没有 item 时返回 `{}`。
+  - `ItemRepo.batch_reset_failed(session, task_id) -> int`：将该 task 下 `upload_status="failed"` 的 item 重置为 `pending`，清空 `upload_error` 和 `uploaded_at`，返回重置数量。
+  - `EventRepo.append(session, task_id, event_type, payload_json=None) -> TaskEvent`：追加事件，默认 `payload_json={}`，返回已 flush 对象。
+  - `EventRepo.list_by_task(session, task_id) -> list[TaskEvent]`：按 `created_at asc, id asc` 返回事件列表。
+- **测试 spec（red 阶段必须覆盖）**：
+  - `test_task_repo_create_and_get_returns_persisted_task`
+  - `test_task_repo_get_by_idempotency_key_returns_existing_task`
+  - `test_task_repo_update_status_updates_only_explicit_timestamp_fields`
+  - `test_task_repo_list_orders_newest_first_and_applies_pagination`
+  - `test_item_repo_bulk_insert_and_list_by_task_orders_by_src_path`
+  - `test_item_repo_update_upload_status_returns_none_for_missing_item`
+  - `test_item_repo_count_by_status_groups_task_items_only`
+  - `test_item_repo_batch_reset_failed_only_resets_failed_items_for_task`
+  - `test_event_repo_append_and_list_by_task_orders_events`
 - **commit message 草案**：
   - red：`phase1(1.4): test spec for task/item/event repos (red)`
   - green：`phase1(1.4): impl repos with async session (green)`
@@ -94,7 +120,7 @@
 - **状态**：`[ ]`
 - **L 等级**：L2
 - **TDD?**：✅（最值得 TDD 的任务——逻辑复杂、case 边界明确、未来跨 phase 引用）
-- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话（基于 `_legacy/` 推断 case）
+- **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent（基于 `_legacy/` 推断 case）
 - **依赖**：1.4，参考 `_legacy/smh_uploader/classifier.py`
 - **范围**：
   - `control-plane/app/services/classifier.py`：从 `_legacy/smh_uploader/classifier.py` 提炼核心逻辑
@@ -103,9 +129,9 @@
   - 输出：`list[ClassifiedItem]` + `summary` 写到 task_item 表
   - 保留 `_decode_zip_entry_name` 的 GBK 解码逻辑
 - **TDD 流程**：
-  - 1.5-spec：主对话起草测试 spec（5 个 case 已在原 1.11 列出，扩充边界后写入 spec） → 用户 review
-  - 1.5-test：Sonnet 写测试，全 fail（red commit）
-  - 1.5-impl：Sonnet 写实现（参考 `_legacy/`），测试全过（green commit）
+  - 1.5-spec：主编排 Agent 起草测试 spec（5 个 case 已在原 1.11 列出，扩充边界后写入 spec） → 用户 review
+  - 1.5-test：L2 worker 写测试，全 fail（red commit）
+  - 1.5-impl：L2 worker 写实现（参考 `_legacy/`），测试全过（green commit）
   - **此任务完成后原 1.11 即被吸收**
 - **验收**：测试全过；含 5 个核心 case + 边界（空 zip / 仅忽略文件 / 全部错误等）
 - **commit message 草案**：
@@ -115,7 +141,7 @@
 ### 1.6 S3 流式上传（核心）
 - **状态**：`[ ]`
 - **L 等级**：**L3**
-- **执行方**：**Opus 主对话亲自写**
+- **执行方**：**主编排 Agent 亲自写**
 - **依赖**：1.2，参考 `_legacy/smh_uploader/api_client.py` + `uploader.py`
 - **范围**：
   - `control-plane/app/services/s3_uploader.py`
@@ -132,16 +158,16 @@
 - **状态**：`[ ]`
 - **L 等级**：L2
 - **TDD?**：✅（并发组件，行为契约必须先定）
-- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话
+- **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/services/progress_bus.py`：`{task_id: list[asyncio.Queue]}` 注册表 + `publish()` + `subscribe()`
   - 进程内 fanout：一个 task 多个订阅者
   - SSE endpoint 在 1.9 实现，本任务只做 bus 实现 + 单测
 - **TDD 流程**：
-  - 1.7-spec：主对话起草并发场景 spec（单订阅者 / 多订阅者 fanout / 订阅者中途取消 / 慢消费者背压 / publisher 在没有订阅者时不阻塞）→ 用户 review
-  - 1.7-test：Sonnet 写测试，全 fail（red commit）
-  - 1.7-impl：Sonnet 写实现，测试全过（green commit）
+  - 1.7-spec：主编排 Agent 起草并发场景 spec（单订阅者 / 多订阅者 fanout / 订阅者中途取消 / 慢消费者背压 / publisher 在没有订阅者时不阻塞）→ 用户 review
+  - 1.7-test：L2 worker 写测试，全 fail（red commit）
+  - 1.7-impl：L2 worker 写实现，测试全过（green commit）
 - **验收**：测试全过；并发 case 用 `pytest-asyncio` + `asyncio.gather` 模拟
 - **commit message 草案**：
   - red：`phase1(1.7): test spec for progress bus (red)`
@@ -150,7 +176,7 @@
 ### 1.8 Task Runner（编排核心）
 - **状态**：`[ ]`
 - **L 等级**：**L3**
-- **执行方**：**Opus 主对话亲自写**
+- **执行方**：**主编排 Agent 亲自写**
 - **依赖**：1.5, 1.6, 1.7
 - **范围**：
   - `control-plane/app/services/task_runner.py`
@@ -168,7 +194,7 @@
 ### 1.9 API 路由
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：1.4-1.8
 - **范围**：
   - `control-plane/app/api/tasks.py`：
@@ -209,7 +235,7 @@
 ### 1.13 S3 Uploader 单测
 - **状态**：`[ ]`
 - **L 等级**：L1
-- **TDD?**：— （非 TDD：1.6 已由主对话亲自写，单测后置补充覆盖率即可）
+- **TDD?**：— （非 TDD：1.6 已由主编排 Agent 亲自写，单测后置补充覆盖率即可）
 - **执行方**：**aider+DeepSeek**
 - **依赖**：1.6
 - **范围**：
@@ -220,7 +246,7 @@
 ### 1.14 端到端集成测试
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：1.9 全部完成 + MinIO 容器（1.16）
 - **范围**：
   - `control-plane/tests/test_e2e.py`
@@ -232,7 +258,7 @@
 ### 1.15 前端改造
 - **状态**：`[ ]`
 - **L 等级**：**L3**
-- **执行方**：**Opus 主对话亲自写**（结构判断）+ aider 收尾文案
+- **执行方**：**主编排 Agent 亲自写**（结构判断）+ aider 收尾文案
 - **依赖**：1.9
 - **范围**：
   - 砍掉 `web/public/index.html` 中"分类规则配置台"段（约 100 行）
@@ -245,7 +271,7 @@
 ### 1.16 docker-compose for MinIO
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
 - **依赖**：无（与 1.1-1.9 并行可做）
 - **范围**：
   - `deploy/docker-compose.yml`：minio + minio-init（自动建 bucket）
@@ -257,7 +283,7 @@
 ### 1.17 收尾文档
 - **状态**：`[ ]`
 - **L 等级**：**L3**
-- **执行方**：**Opus 主对话亲自写**
+- **执行方**：**主编排 Agent 亲自写**
 - **依赖**：所有任务完成
 - **范围**：
   - `control-plane/README.md` 改成完整启动指南（pyproject 装依赖 / .env 配置 / alembic / uvicorn / docker compose）
@@ -270,13 +296,13 @@
 
 | 执行方 | 任务数 | 任务编号 | 主要职责 |
 |---|---|---|---|
-| **Opus 主对话** | 4 | 1.6 / 1.8 / 1.15 / 1.17 | S3 流式上传内核、worker 编排、前端架构判断、收尾文档 |
-| **Sonnet subagent** | 8 | 1.1 / 1.2 / 1.3 / **1.4 (TDD red+green)** / **1.5 (TDD red+green)** / **1.7 (TDD red+green)** / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos+测试、classifier+测试、SSE bus+测试、API、E2E、docker |
+| **主编排 Agent** | 4 | 1.6 / 1.8 / 1.15 / 1.17 | S3 流式上传内核、worker 编排、前端架构判断、收尾文档 |
+| **L2 worker（默认 Sonnet；Codex worker 可替代）** | 8 | 1.1 / 1.2 / 1.3 / **1.4 (TDD red+green)** / **1.5 (TDD red+green)** / **1.7 (TDD red+green)** / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos+测试、classifier+测试、SSE bus+测试、API、E2E、docker |
 | **aider+DeepSeek** | 2 | 1.10 / 1.13 | Pydantic schema、S3 uploader 单测 |
 | **Codex** | 0 | — | Phase 2 起才用（数据面 Go） |
 
 **TDD 任务额外开销**：
-- 1.4 / 1.5 / 1.7 各多一次 commit（red + green），主对话多 1-2 次 review
+- 1.4 / 1.5 / 1.7 各多一次 commit（red + green），主编排 Agent 多 1-2 次 review
 - 用户深度参与点：3 个 spec review + 3 个测试代码 review，合计约 1-2 小时
 - 收益：3 个承重墙模块的契约钉死，未来 Phase 2/6.5 修改时有保护
 
@@ -331,13 +357,13 @@
 
 | 阶段 | 动作 | 执行方 | 产物 | commit |
 |---|---|---|---|---|
-| **spec** | 主对话起草测试 spec → 用户 review | Opus + 用户 | 写入本文档对应任务节，含 case 列表/边界/scope-out | 不 commit |
-| **red** | 派 Sonnet 写测试代码（应全 fail） | Sonnet subagent | `tests/test_X.py` 全 fail | `phase1(X.Y): test spec for X (red)` |
-| **green** | 派 Sonnet 写实现（测试不许改） | Sonnet subagent | 实现代码 + 全部测试通过 | `phase1(X.Y): impl X (green)` |
+| **spec** | 主编排 Agent 起草测试 spec → 用户 review | 主编排 Agent + 用户 | 写入本文档对应任务节，含 case 列表/边界/scope-out | 不 commit |
+| **red** | 派 L2 worker 写测试代码（应全 fail） | L2 worker | `tests/test_X.py` 全 fail | `phase1(X.Y): test spec for X (red)` |
+| **green** | 派 L2 worker 写实现（测试不许改） | L2 worker | 实现代码 + 全部测试通过 | `phase1(X.Y): impl X (green)` |
 
-**主对话强制纪律**（已写入 [.claude/CLAUDE.md](../../.claude/CLAUDE.md)）：
+**主编排 Agent 强制纪律**（以 [AGENTS.md](../../AGENTS.md) 为准；历史 Claude 配置仅作补充）：
 - ❌ 测试与实现混 commit
-- ❌ TDD 任务派 aider 写测试（aider 适合 L1 量产单测如 1.13，但承重墙级契约必须 Sonnet）
+- ❌ TDD 任务派 aider 写测试（aider 适合 L1 量产单测如 1.13，但承重墙级契约必须 L2 worker）
 - ❌ 跳过用户 review spec
 - ❌ 实现阶段改测试
 

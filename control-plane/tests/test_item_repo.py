@@ -42,7 +42,16 @@ async def test_item_repo_bulk_insert_and_list_by_task_orders_by_src_path(
         task.id,
         [
             {"src_path": "b/report.xlsx", "filename": "report-b.xlsx"},
-            {"src_path": "a/report.xlsx", "filename": "report-a.xlsx"},
+            {
+                "src_path": "a/report.xlsx",
+                "filename": "report-a.xlsx",
+                "target_name_raw": "A Corp",
+                "target_name_matched": "a-corp",
+                "document_type": "monthly_report",
+                "category_name": "finance",
+                "dst_dir": "finance/monthly_report",
+                "dst_path": "finance/monthly_report/report-a.xlsx",
+            },
         ],
     )
 
@@ -51,6 +60,10 @@ async def test_item_repo_bulk_insert_and_list_by_task_orders_by_src_path(
     assert [item.src_path for item in items] == ["a/report.xlsx", "b/report.xlsx"]
     assert all(item.task_id == task.id for item in items)
     assert all(item.upload_status == "pending" for item in items)
+    assert items[0].target_name_raw == "A Corp"
+    assert items[0].target_name_matched == "a-corp"
+    assert items[0].document_type == "monthly_report"
+    assert items[0].dst_path == "finance/monthly_report/report-a.xlsx"
 
 
 @pytest.mark.asyncio

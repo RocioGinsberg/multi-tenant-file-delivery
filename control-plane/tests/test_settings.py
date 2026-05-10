@@ -31,10 +31,11 @@ class TestDefaultValues:
             "S3_REGION",
             "S3_ACCESS_KEY_ID",
             "S3_SECRET_ACCESS_KEY",
-            "WORKER_MAX_TEAM_CONCURRENT",
+            "WORKER_MAX_TARGET_CONCURRENT",
             "WORKER_MAX_FILE_CONCURRENT",
             "WORKER_AUTO_ADJUST_CONCURRENT",
             "TASK_DIR_BASE",
+            "CLASSIFICATION_PROFILE_PATH",
             "MAX_ZIP_BYTES",
             "MAX_UNZIPPED_BYTES",
             "MAX_FILE_COUNT",
@@ -51,10 +52,11 @@ class TestDefaultValues:
         assert s.s3_region == "us-east-1"
         assert s.s3_access_key_id == "minioadmin"
         assert s.s3_secret_access_key == "minioadmin"
-        assert s.worker_max_team_concurrent == 3
+        assert s.worker_max_target_concurrent == 3
         assert s.worker_max_file_concurrent == 5
         assert s.worker_auto_adjust_concurrent is True
         assert s.task_dir_base == "/tmp/auto_upload_tasks"
+        assert s.classification_profile_path == "../profiles/hq_subsidiary_reports_v1/profile.json"
         assert s.max_zip_bytes == 524_288_000
         assert s.max_unzipped_bytes == 1_073_741_824
         assert s.max_file_count == 5000
@@ -66,14 +68,21 @@ class TestDotEnvOverride:
 
     def test_dotenv_values_are_loaded(self, monkeypatch, tmp_path):
         # Remove any ambient env vars so only the .env file speaks
-        for var in ("ENV", "S3_BUCKET_NAME", "WORKER_MAX_TEAM_CONCURRENT", "CORS_ORIGINS"):
+        for var in (
+            "ENV",
+            "S3_BUCKET_NAME",
+            "WORKER_MAX_TARGET_CONCURRENT",
+            "CLASSIFICATION_PROFILE_PATH",
+            "CORS_ORIGINS",
+        ):
             monkeypatch.delenv(var, raising=False)
 
         env_file = tmp_path / ".env"
         env_file.write_text(
             "ENV=staging\n"
             "S3_BUCKET_NAME=my-staging-bucket\n"
-            "WORKER_MAX_TEAM_CONCURRENT=10\n"
+            "WORKER_MAX_TARGET_CONCURRENT=10\n"
+            "CLASSIFICATION_PROFILE_PATH=../profiles/custom/profile.json\n"
             "CORS_ORIGINS=http://example.com,http://app.example.com\n"
         )
         monkeypatch.chdir(tmp_path)
@@ -82,7 +91,8 @@ class TestDotEnvOverride:
 
         assert s.env == "staging"
         assert s.s3_bucket_name == "my-staging-bucket"
-        assert s.worker_max_team_concurrent == 10
+        assert s.worker_max_target_concurrent == 10
+        assert s.classification_profile_path == "../profiles/custom/profile.json"
         assert s.cors_origins == "http://example.com,http://app.example.com"
 
 

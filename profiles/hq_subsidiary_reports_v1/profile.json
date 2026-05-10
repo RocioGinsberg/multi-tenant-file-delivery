@@ -1,0 +1,78 @@
+{
+  "id": "hq_subsidiary_reports_v1",
+  "schema_version": 1,
+  "description": "Default profile for HQ-to-subsidiary report distribution. This is a business adapter, not classifier core logic.",
+  "entry_filters": [
+    {
+      "id": "ignore_system_files",
+      "type": "filename_in",
+      "filenames": [".DS_Store", "Thumbs.db", "README.md", "desktop.ini", ".gitignore"],
+      "action": "ignore"
+    }
+  ],
+  "extractors": [
+    {
+      "id": "description_target_from_filename",
+      "type": "split_filename_stem",
+      "delimiter_pattern": "\\s*[-\u2014\u2013]\\s*",
+      "description_part": "before_last",
+      "target_part": "last"
+    }
+  ],
+  "targets": {
+    "aishide": {
+      "label": "爱施德",
+      "aliases": ["酷爱"],
+      "strip_number_prefix": true
+    },
+    "xinyanhaijia": {
+      "label": "新燕海佳",
+      "aliases": ["新燕海华"],
+      "strip_number_prefix": true
+    }
+  },
+  "document_types": {
+    "feniao_bill": {
+      "label": "蜂鸟账单",
+      "category": "订单"
+    },
+    "timeout_picking_assessment": {
+      "label": "超时拣货考核",
+      "category": "考核"
+    }
+  },
+  "description_mapping": {
+    "蜂鸟配送费明细": "feniao_bill",
+    "抖音美团配送费账单": "feniao_bill"
+  },
+  "suffix_priority": {
+    ".zip": "timeout_picking_assessment"
+  },
+  "suffix_fallback": {
+    ".xlsx": "UNKNOWN_SPREADSHEET",
+    ".xls": "UNKNOWN_SPREADSHEET",
+    ".csv": "UNKNOWN_CSV",
+    ".pdf": "UNKNOWN_PDF"
+  },
+  "matching": {
+    "target_match_order": ["alias", "exact", "strip_number_prefix", "fuzzy"],
+    "document_match_order": [
+      "suffix_priority",
+      "description_exact",
+      "description_fuzzy",
+      "document_type_exact",
+      "document_type_fuzzy",
+      "suffix_fallback"
+    ],
+    "enable_fuzzy_match": true,
+    "target_fuzzy_threshold": 70,
+    "document_fuzzy_threshold": 65,
+    "description_mapping_fuzzy_threshold": 70
+  },
+  "path_template": "{category}/{document_type}/{filename}",
+  "errors": {
+    "missing_target": "error",
+    "missing_document_type": "error",
+    "unsafe_path": "error"
+  }
+}

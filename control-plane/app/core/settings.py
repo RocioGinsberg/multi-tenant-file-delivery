@@ -28,12 +28,15 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = "minioadmin"
 
     # ── Worker concurrency (used by 1.8 task_runner) ──
-    worker_max_team_concurrent: int = 3
+    worker_max_target_concurrent: int = 3
     worker_max_file_concurrent: int = 5
     worker_auto_adjust_concurrent: bool = True
 
     # ── Task working directory (zip extraction; used by 1.5 / 1.8) ──
     task_dir_base: str = "/tmp/auto_upload_tasks"
+
+    # ── Classification profile (used by 1.5 classifier) ──
+    classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"
 
     # ── Zip receive limits (used by 1.5 / 1.9) ──
     max_zip_bytes: int = 524_288_000  # 500 MB

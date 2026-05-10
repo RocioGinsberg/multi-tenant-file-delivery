@@ -4,21 +4,22 @@
 > **预计工时**：4-6 天
 > **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
 > **关联 BLUEPRINT 章节**：§ 十 Phase 1
-> **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)
+> **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)、[0011 Classifier Core 与业务 Profile 分层](../ADR/0011-classification-profile-engine.md)
 
 > **执行方命名说明**：本文档最早按 Claude/Opus 语境起草。实际执行时按 [AGENTS.md](../../AGENTS.md) 的宿主无关规则解释：`主对话` / `Opus` 等价于当前主编排 Agent；`Sonnet subagent` 等价于 L2 worker；Codex 可作为主编排 Agent，也可把 L1/L2 任务派给 `spawn_agent`、MCP worker 或 aider。
 
 ---
 
-## 一、4 个先决决策（已确认）
+## 一、6 个先决决策（已确认）
 
 | # | 决策 | 选择 | 理由 |
 |---|---|---|---|
 | **D1** | Phase 1 是否包含 Workspace 抽象？ | ❌ **不做** | Phase 1 先跑通 Python+SQLite+SSE+流式上传，Workspace 留 Phase 6.5。表结构只 task / task_item / task_event 三张 |
-| **D2** | 分类器是否支持注册表 draft/publish？ | ❌ **不做** | 单一硬编码配置：直接读 `task_classifications.json`（runtime 改了重启即可）。draft/publish 留 Phase 6.5+ |
+| **D2** | 分类器是否支持注册表 draft/publish？ | ❌ **不做** | 单一静态 profile：直接读 `profiles/hq_subsidiary_reports_v1/profile.json`（runtime 改了重启即可）。draft/publish 留 Phase 6.5+ |
 | **D3** | 前端改造范围 | ✂️ **砍掉注册表配置段**，保留上传/预览/进度三段 | 配合 D2；前端配置入口 Phase 6.5 配合 workspace 一起重做 |
 | **D4** | 凭证配置入口 | 📁 **`.env` 文件** | Dev 期最简；UI 配置入库留 Phase 6.5 多租户时再做 |
 | **D5** | 哪些任务走 TDD？ | ✅ **1.4 / 1.5 / 1.7 走 TDD**；其余按"实现 → 测试"顺序 | 这 3 个是承重墙级契约（repo 接口 / 分类器逻辑 / progress bus 并发模型），未来多模块依赖。其他 L1 量产单测仍派 aider+DeepSeek。详见 [tdd-flow skill](../../.claude/skills/tdd-flow/SKILL.md) 8 步流程。 |
+| **D6** | 分类器是否直接编码业务语义？ | ❌ **不写死**，采用 Classifier Core + 静态 Classification Profile | 旧 SMH classifier 只作为参考。Core 只理解 file facts / target / document_type / dst_path / severity；文件归属规则、描述映射、优先级、路径模板放入 versioned profile。Phase 1 只加载本地静态 profile，不做 registry draft/publish 或动态 Python plugin。 |
 
 ⚠️ 任意一项如果 Phase 1 中途想推翻，请在本文档加一条"决策变更"，并评估对未来 Phase 的影响。
 
@@ -51,7 +52,7 @@
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/core/settings.py`：Pydantic Settings 读 .env
-  - 字段：`s3_endpoint_url`, `s3_bucket`, `s3_access_key`, `s3_secret_key`, `s3_region`, `db_url`, `worker_max_team_concurrent`, `worker_max_file_concurrent`, `task_dir_base`, `max_zip_bytes`, `max_unzipped_bytes`, `max_file_count`, `cors_origins`, `app_env`
+  - 字段：`s3_endpoint_url`, `s3_bucket`, `s3_access_key`, `s3_secret_key`, `s3_region`, `db_url`, `worker_max_target_concurrent`, `worker_max_file_concurrent`, `task_dir_base`, `classification_profile_path`, `max_zip_bytes`, `max_unzipped_bytes`, `max_file_count`, `cors_origins`, `app_env`
   - `from functools import lru_cache; @lru_cache def get_settings()` 模式
 - **验收**：`pytest tests/test_settings.py` 验证默认值 + .env 覆盖
 - **commit message 草案**：`phase1(1.2): pydantic settings with .env support`
@@ -67,13 +68,13 @@
   - `control-plane/alembic.ini` + `control-plane/alembic/env.py` + 第一份 migration
 - **完整字段表**（已定）：
   - `task`：`id, status, idempotency_key, source_archive_name, temp_dir, summary_json, created_by, created_at, confirmed_at, finished_at`
-  - `task_item`：`id, task_id, src_path, filename, ext, file_size, team_name_raw, team_name_matched, task_name, category_name, drive_dir, drive_path, severity, error_code, error_message, warning_message, upload_status, upload_error, uploaded_at`
+  - `task_item`：`id, task_id, src_path, filename, ext, file_size, target_name_raw, target_name_matched, document_type, category_name, dst_dir, dst_path, severity, error_code, error_message, warning_message, upload_status, upload_error, uploaded_at`
   - `task_event`：`id, task_id, event_type, payload_json, created_at`
 - **验收**：`alembic upgrade head` 在 SQLite 里建表成功；`pytest tests/test_db.py` 检查连通性
 - **commit message 草案**：`phase1(1.3): SQLite + SQLAlchemy 2.0 async + alembic migration`
 
 ### 1.4 Repos ✅ TDD
-- **状态**：`[~]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **TDD?**：✅（承重墙：repo 接口未来被所有 services 依赖）
 - **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent
@@ -116,27 +117,37 @@
   - red：`phase1(1.4): test spec for task/item/event repos (red)`
   - green：`phase1(1.4): impl repos with async session (green)`
 
-### 1.5 Classifier 移植 ✅ TDD
+### 1.5 Classifier Core + Profile ✅ TDD
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **TDD?**：✅（最值得 TDD 的任务——逻辑复杂、case 边界明确、未来跨 phase 引用）
-- **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent（基于 `_legacy/` 推断 case）
-- **依赖**：1.4，参考 `_legacy/smh_uploader/classifier.py`
+- **TDD?**：✅（承重墙：分类结果会被 API preview、task_runner、workspace registry 复用）
+- **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent（基于 ADR 0011 + `_legacy/` 推断 case）
+- **依赖**：1.4，参考 `_legacy/smh_uploader/classifier.py`，遵循 ADR 0011
 - **范围**：
-  - `control-plane/app/services/classifier.py`：从 `_legacy/smh_uploader/classifier.py` 提炼核心逻辑
-  - 移除依赖：去掉 pandas / fuzzywuzzy（用 rapidfuzz 替换）/ CSV 输出
-  - 输入：`zip_bytes` + `config_dict`（无 team_list 概念，Phase 1 不联团队 API）
-  - 输出：`list[ClassifiedItem]` + `summary` 写到 task_item 表
+  - `control-plane/app/services/classifier.py`：实现 Classifier Engine；旧 classifier 只作为算法参考，不移植业务语义
+  - `control-plane/app/services/classification_profile.py`（或同文件内独立类型）：定义静态 profile schema / loader / validation
+  - 移除依赖：去掉 pandas / fuzzywuzzy（用 rapidfuzz 替换或先用标准库 exact/alias，模糊匹配封装在 adapter 内）/ CSV 输出
+  - 输入：`zip_bytes` + `profile_dict`（Phase 1 不联 workspace/tenant API；target 字典来自 profile）
+  - 输出：`list[ClassifiedItem]` + `summary`；service 层写入 task_item
   - 保留 `_decode_zip_entry_name` 的 GBK 解码逻辑
+  - Core 只使用通用语义：`target_name_raw`, `target_name_matched`, `document_type`, `category_name`, `dst_dir`, `dst_path`, `severity`
+  - Profile 承载业务适配：entry filters、facts extractors、target resolution、classification resolution、match priority、path template、error policy
 - **TDD 流程**：
-  - 1.5-spec：主编排 Agent 起草测试 spec（5 个 case 已在原 1.11 列出，扩充边界后写入 spec） → 用户 review
+  - 1.5-spec：主编排 Agent 起草 profile engine 测试 spec（覆盖安全、归属规则、优先级、路径渲染、summary） → 用户 review
   - 1.5-test：L2 worker 写测试，全 fail（red commit）
-  - 1.5-impl：L2 worker 写实现（参考 `_legacy/`），测试全过（green commit）
+  - 1.5-impl：L2 worker 写实现（参考 `_legacy/` 的解码/匹配经验，不复刻业务语义），测试全过（green commit）
   - **此任务完成后原 1.11 即被吸收**
-- **验收**：测试全过；含 5 个核心 case + 边界（空 zip / 仅忽略文件 / 全部错误等）
+- **测试 spec（red 阶段必须覆盖）**：
+  - zip entry 解码与安全：UTF-8/GBK 文件名可读；`../evil.xlsx` / 绝对路径被拒绝；目录 entry 跳过
+  - entry filter：`.DS_Store` / `Thumbs.db` / `README.md` 等进入 ignored 或不产出可上传 item，summary 正确
+  - target resolution：alias / exact / strip-prefix / missing target；未知 target 不丢弃，产出 `severity="error"`
+  - classification resolution：suffix priority / description exact / description fuzzy（如启用）/ document type exact / suffix fallback 的优先级固定
+  - path rendering：默认 `{category}/{document_type}/{filename}`；禁止绝对路径、`..`、空路径段
+  - summary：`total / ok / warning / error / ignored / has_blocking_errors` 可解释
+- **验收**：测试全过；至少两个小 profile fixture，证明换 profile 不改 engine；含空 zip / 仅忽略文件 / 全部错误等边界
 - **commit message 草案**：
-  - red：`phase1(1.5): test spec for classifier (red)`
-  - green：`phase1(1.5): impl classifier ported from legacy CLI (green)`
+  - red：`phase1(1.5): test spec for classifier profile engine (red)`
+  - green：`phase1(1.5): impl classifier profile engine (green)`
 
 ### 1.6 S3 流式上传（核心）
 - **状态**：`[ ]`
@@ -148,7 +159,7 @@
   - 用 `aioboto3` 或 `aiobotocore`（先调研选定）
   - 实现 `upload_file(local_path, bucket, key)`：流式 `put_object` + 边读边算 sha256
   - 大文件（> 50MB）走 `create_multipart_upload` + `errgroup` 风格并发 part 上传
-  - 嵌套并发：team 级 + file 级双层 semaphore（参考 `uploader.py:_upload_team`）
+  - 嵌套并发：target 级 + file 级双层 semaphore（参考 `uploader.py:_upload_team` 的模式，不继承旧 team 语义）
   - 进度回调（每完成一个 file/part 通过 callback 推 progress_bus）
   - **关键约束**：禁止 `read_bytes()` 整文件入内存
 - **验收**：`pytest tests/test_s3_uploader.py` 用 moto 模拟（见 1.13）；手工跑一次大文件上传到 MinIO 看内存峰值
@@ -182,7 +193,7 @@
   - `control-plane/app/services/task_runner.py`
   - `async def run_task(task_id)`：编排状态机
     1. 从 DB 拿 task + items（status=confirmed, severity in (ok, warning)）
-    2. 按 team_name_matched 分组
+    2. 按 target_name_matched 分组
     3. 嵌套并发 upload，进度推 progress_bus
     4. 失败的 item 标记 upload_status=failed
     5. 任务结束更新 task.status (uploaded / partial_failed)
@@ -382,10 +393,11 @@
 | 风险 | 缓解 |
 |---|---|
 | `aioboto3` vs `aiobotocore` 选错（前者已停维护，后者更新） | 1.6 开工前先查最新状态 + 写 ADR 0011 记录选型 |
-| classifier 移植丢失 GBK 解码 | 1.5 派 Sonnet 时明确"必须保留 `_decode_zip_entry_name`" |
+| classifier engine 重写丢失 GBK 解码 | 1.5 派 worker 时明确"必须保留 `_decode_zip_entry_name`" |
+| profile engine 被旧业务语义污染 | spec 中至少放两个小 profile fixture；测试证明换 profile 不改 engine |
 | 前端改造引入大量未知 bug | 1.15 砍掉的组件先确认没有跨页引用，删一个测一次 |
 | SSE 在生产场景的 keep-alive | Phase 1 不解决，先做能跑的版本，Phase 4 引入 Redis pub/sub 时一起优化 |
-| Phase 1 完成定义里没提"按团队分组上传"——`uploader.py` 嵌套并发的核心 | 1.6/1.8 里仍要做（保留 `_legacy/` 灵魂），但 Phase 1 单租户单团队也能跑通端到端 |
+| Phase 1 完成定义里没提"按 target 分组上传"——`uploader.py` 嵌套并发的核心 | 1.6/1.8 里仍要做（保留 `_legacy/` 的并发模式，不继承 team 业务语义），但 Phase 1 单 profile / 单 target 也能跑通端到端 |
 | TDD 任务步骤被偷懒合并（实现阶段悄悄改测试） | tdd-flow skill 强制 8 步；CLAUDE.md 列硬底线；commit message 强制 (red)/(green) 标识便于 git log 审计；后续若仍出问题，加 pre-commit hook |
 
 ---

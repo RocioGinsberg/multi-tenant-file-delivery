@@ -30,8 +30,6 @@ exclude = ["_legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-# classifier.py uses fuzzywuzzy / thefuzz (1.5 task); exclude until then
-exclude = ["app/services/classifier.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

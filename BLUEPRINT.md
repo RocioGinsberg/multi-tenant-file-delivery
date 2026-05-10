@@ -34,6 +34,8 @@ HQ → 子公司**文件分发与观测平台**，三块拼装：
 
 **Workspace 是平台层的权威真相，sink 只是它的实现方式**。即便对端有自己的权限/配额/dedup 系统（SMH 有 team space + 内置秒传，S3 有 IAM + 没有内置 dedup，OSS 又是另一套），**全部由我们这层判定/补齐**——这样跨 sink 语义一致，未来切换/新增后端不动权限和上层语义。
 
+**分类器也遵循同一原则：Classifier Core 是平台能力，Classification Profile 是业务适配包**。Core 只理解文件 facts、target、document_type、dst_path、错误等级和安全约束；“文件名最后一段是团队”“描述映射到某个业务任务”“路径按 category/task 展开”等都属于 profile，不写死进平台核心。
+
 ### 学习/简历目标
 
 贯穿后端核心栈（FastAPI / Go / Kafka / Redis / PostgreSQL / MinIO / OpenTelemetry），通过"**抓包逆向 → 提炼通用模式 → 工程化产品**"的故事线，把每个组件都讲成"问题驱动选型"。
@@ -46,7 +48,7 @@ HQ → 子公司**文件分发与观测平台**，三块拼装：
 
 **写路径（HQ 视角）**：
 - HQ 用户上传一组文件（zip / 多文件 / 远端 URL）
-- 平台按 HQ 配置的分类规则识别每个文件归属的子公司 + 任务类别
+- 平台运行 HQ 配置的 classification profile，识别每个文件的投递目标 target + 文档类型 document_type
 - 并行投递到 sink（首版 S3/MinIO，后续 阿里云 OSS / HTTP webhook / SFTP / 闭源企业网盘等）
 - 实时进度推送、完整审计
 
@@ -125,7 +127,7 @@ HQ Uploader ──┐                                       ┌── Subsidiary
 ### 3.2 写路径（HQ uploader）
 
 1. HQ 用户提交 zip / 多文件 → Write API
-2. Workspace Service：鉴权 → 配额检查 → 解析分类规则 → 推任务到 Kafka `delivery.tasks.v1`
+2. Workspace Service：鉴权 → 配额检查 → Classifier Engine 运行 classification profile → 推任务到 Kafka `delivery.tasks.v1`
 3. Go worker 消费任务：
    - **Stage 1** 查 `physical_object` 表做平台层 dedup（命中则零字节出口）
    - **Stage 2** 进 sink adapter（S3/OSS 看 multipart 阈值；闭源 sink 如 SMH 走自己的协商秒传协议）
@@ -165,6 +167,8 @@ HQ Uploader ──┐                                       ┌── Subsidiary
 - **Workspace 层**（控制面，平台权威）：逻辑容器；定义"谁能访问、配额多少、审计什么"；与具体存储后端无关。
 - **Sink 层**（数据面，存储协议适配）：把字节搬到对端；屏蔽 S3/OSS/webhook 协议差异。
 - **Source 层**（数据面，被传输物的封装）：让文件可寻址、可重读、可校验。
+
+分类规则不是第四个存储层，而是控制面里的 **Classification Profile**：一个版本化业务适配包，描述如何从文件 facts 解析 target/document_type、规则优先级如何执行、目标路径如何渲染。Classifier Core 不包含具体业务词汇；profile 的发布、回滚、UI 编辑留到 Phase 6.5+ 的 registry 能力。
 
 ### 4.0 Workspace 层（最重要）
 
@@ -599,7 +603,7 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 
 ---
 
-*v1.4 — 由 Claude 协助起草 — 待审计与迭代。*
+*v1.5 — 由主编排 Agent 协助迭代 — 待审计与迭代。*
 
 **v1.1 改动（基于"总部 → 子公司分发"真实场景澄清）**：
 - § 一/二：定位从"通用 SaaS"具化为"HQ → 子公司文件分发与观测平台"；明确不对称租户关系
@@ -632,5 +636,10 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 - docs/SINK_PROTOCOL.md 重写：S3/MinIO 提到首节详写 multipart 协议；SMH 移到"未来扩展"
 - 顶层 README 加"起源"段落
 
-后续每一次重大决策请在 `docs/ADR/` 下记录。
+**v1.5 改动（Classifier Core / Classification Profile 分层）**：
+- § 一：核心设计哲学补充分类器分层原则——Classifier Core 是平台能力，Classification Profile 是业务适配包
+- § 二/三：写路径从“解析分类规则”改为“运行 classification profile”，输出 target + document_type
+- § 四：明确 Classification Profile 属于控制面业务适配，不是存储层；profile 发布/回滚/UI 留 Phase 6.5+
+- 新增 ADR 0011：Classifier Core 与业务 Profile 分层
 
+后续每一次重大决策请在 `docs/ADR/` 下记录。

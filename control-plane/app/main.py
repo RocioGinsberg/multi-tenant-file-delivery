@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.core.settings import get_settings
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):  # noqa: ARG001
-    # startup — nothing to initialise yet (DB / settings wired in 1.2/1.3)
+    # startup — nothing to initialise yet (DB wired in 1.3)
     yield
     # shutdown
 
@@ -22,5 +23,5 @@ async def healthz() -> dict:
     return {
         "ok": True,
         "service": "control-plane",
-        "env": os.getenv("ENV", "development"),
+        "env": get_settings().env,
     }

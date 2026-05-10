@@ -17,6 +17,7 @@
 
 > **完整设计**：[BLUEPRINT.md](./BLUEPRINT.md) — 项目北极星，所有重大决策的来源
 > **协作规范**：[AGENTS.md](./AGENTS.md) — 多模型协作执行规范（主对话 / subagent / 外部模型的责任划分）
+> **派工计划**：[docs/plans/](./docs/plans/) — 每个 Phase 的子任务清单与执行方分配
 > **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 > **架构决策记录**：[docs/ADR/](./docs/ADR/)
 > **Sink 协议规范**：[docs/SINK_PROTOCOL.md](./docs/SINK_PROTOCOL.md)

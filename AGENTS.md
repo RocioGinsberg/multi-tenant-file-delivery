@@ -403,6 +403,8 @@ aider \
 
 每类任务给出**首选**和**备选**两个选项。备选用于：① 首选模型当时不可用 ② 想做"双人 review"对照 ③ 首选连续失败时换一个试试。
 
+Codex 任务带"档位"——参考下面 § 八.5 升降档信号。
+
 最后一列写**判断要点**——为什么这类任务首选这个模型。
 
 | 任务类型 | 首选 | 备选 | 判断要点 |
@@ -411,9 +413,14 @@ aider \
 | 改 BLUEPRINT | Opus 主对话 | — | L3，承重墙级文档 |
 | 改 Sink 接口 | Opus 主对话 | — | L3，签名变动传染所有 adapter |
 | 安全/鉴权/加密代码 | Opus 主对话 | DeepSeek 二次 review | 安全代码不委托；DeepSeek 推理强，适合"第二只眼" |
-| **写 Go sink adapter（S3/OSS）** | Codex (GPT-5) | Sonnet | Go/系统编程倾向，io.Pipe 与 errgroup 模式更熟 |
-| **写 Go pipeline / ratelimit / kafka** | Codex (GPT-5) | Sonnet | 同上，Go 数据面整体优先 Codex |
-| 写 Python sink adapter（Phase 1） | Sonnet | Codex | Python 生态 Sonnet 更稳 |
+| **写 Go sink adapter（S3/OSS）** | Codex `gpt-5-medium` | Sonnet | Go/系统编程倾向，io.Pipe 与 errgroup 模式更熟 |
+| **写 Go pipeline 编排** | Codex `gpt-5-medium` | Sonnet | io.Pipe + TeeReader 模板化 |
+| **写 Go kafka consumer** | Codex `gpt-5-medium` | Sonnet | 标准消费循环 |
+| **写 Go ratelimit (Lua + AIMD)** | Codex `gpt-5-high` | — | Lua 脚本 + 反压算法需要推理 |
+| **写 Go resume / 状态机** | Codex `gpt-5-high` | — | 一致性边界要细想 |
+| **调试 Go race / 死锁** | Codex `gpt-5-xhigh` | Opus 主对话 | L3 复杂推理 |
+| 写 Go table-driven 测试 | Codex `gpt-5-low` 或 aider+DeepSeek | Haiku | L1 模式化，价格敏感 |
+| 写 Python sink adapter（Phase 1） | Sonnet | Codex `gpt-5-medium` | Python 生态 Sonnet 更稳 |
 | 写 Python 仓储层 + 单测 | Sonnet | DeepSeek | SQLAlchemy 2.0 风格 Sonnet 训练充分 |
 | 写 FastAPI 路由 + Pydantic schema | Sonnet | Haiku | L2 中等复杂度 |
 | 写 Alembic migration | Sonnet | — | 涉及 schema 安全，慎换模型 |
@@ -423,25 +430,59 @@ aider \
 | 写中文注释 / 翻译文档 | aider+DeepSeek (Bash) | GLM / Sonnet | DeepSeek 中文好且便宜 |
 | 跑测试 / 看日志 / 改 BUG | Opus 主对话 | — | debug 需要项目上下文，不委托 |
 | 写 README / 子目录文档 | Sonnet | Haiku | L2，需指明边界（不能写承重墙） |
-| 调研某技术（"S3 multipart 协议细节"） | Sonnet（+ WebSearch） | Codex | 调研 + 总结 Sonnet 平衡 |
-| 复杂逻辑调试（race condition / 死锁） | Opus 主对话 | DeepSeek（让它分析输出） | L3，但 DeepSeek 推理强可作辅助 |
+| 调研某技术（"S3 multipart 协议细节"） | Sonnet（+ WebSearch） | Codex `gpt-5-medium` | 调研 + 总结 Sonnet 平衡 |
+| 复杂逻辑调试（race condition / 死锁） | Opus 主对话 | Codex `gpt-5-xhigh` / DeepSeek-R1 | L3，需要深推理 |
 
 ### 同一模块固定主力模型
 
-为避免风格漂移（见 § 十 失败模式 F），**同一目录下的代码长期由同一个主力模型实现**。建议：
+为避免风格漂移（见 § 十 失败模式 F），**同一目录下的代码长期由同一个主力模型实现**。
 
-| 模块 | 主力模型 | 理由 |
-|---|---|---|
-| `data-plane/internal/sink/` | Codex (GPT-5) | Go 系统编程主场 |
-| `data-plane/internal/pipeline/` | Codex (GPT-5) | 同上 |
-| `data-plane/internal/kafka/` | Codex (GPT-5) | 同上 |
-| `control-plane/app/services/` | Sonnet | Python 业务逻辑 |
-| `control-plane/app/repos/` | Sonnet | SQLAlchemy ORM |
-| `control-plane/app/api/` | Sonnet | FastAPI 路由 |
-| `control-plane/tests/` | aider+DeepSeek (Bash) | Haiku | L1 批量，DeepSeek 极省成本 |
-| `data-plane/internal/*/test*.go` | aider+DeepSeek (Bash) | Haiku | 同上 |
+| 模块 | 主力模型 | 默认档位 | 理由 |
+|---|---|---|---|
+| `data-plane/internal/sink/` | Codex (GPT-5) | medium | Go sink adapter 模板化 |
+| `data-plane/internal/pipeline/` | Codex (GPT-5) | medium | io.Pipe 编排标准模式 |
+| `data-plane/internal/kafka/` | Codex (GPT-5) | medium | Kafka consumer 模板化 |
+| `data-plane/internal/ratelimit/` | Codex (GPT-5) | **high** | Lua 脚本 + AIMD 算法需要推理 |
+| `data-plane/internal/resume/` | Codex (GPT-5) | **high** | 状态机 + 一致性边界 |
+| `data-plane/internal/progress/` | Codex (GPT-5) | medium | Redis pub/sub 标准模式 |
+| `data-plane/internal/observability/` | Codex (GPT-5) | medium | OTel SDK 接入 |
+| `data-plane/internal/source/` | Codex (GPT-5) | medium | Source 实现 |
+| `control-plane/app/services/` | Sonnet | — | Python 业务逻辑 |
+| `control-plane/app/repos/` | Sonnet | — | SQLAlchemy ORM |
+| `control-plane/app/api/` | Sonnet | — | FastAPI 路由 |
+| `control-plane/app/core/` | Sonnet | — | 配置/启动/中间件 |
+| `control-plane/tests/` | aider+DeepSeek | — | L1 批量，价格敏感 |
+| `data-plane/internal/*/test*.go` | aider+DeepSeek | — | 同上 |
 
-特殊情况偏离时（如 Sonnet 失败换 Codex），在 commit message 里写明。
+特殊情况偏离时（如 Sonnet 失败换 Codex，或某次 medium 不够升 high），在 commit message 里写明。
+
+### 八.5 Codex 档位的升档/降档信号（方案 B 派工默认）
+
+主对话**按"模块默认档位"自动派 Codex**，不每次问你。但下列信号触发时会**停下来跟你确认**：
+
+#### 升档触发（从默认升一档）
+
+| 信号 | 例子 |
+|---|---|
+| 任务关键词带强推理诉求 | 并发 / race / 死锁 / 断点续传 / 状态机 / 一致性 / 边界条件 / 性能优化 / 低延迟保证 |
+| 接口变更面广 | 改一个 Go interface 牵动 3+ adapter 文件 |
+| 跨进程/跨语言协议 | Kafka 消息格式、跨语言 trace context、序列化兼容 |
+| 首次实现某种算法 | AIMD、Lua 令牌桶、ref-count GC 模型 |
+| 已经派一档失败过 | medium 失败 → 升 high；high 失败 → 升 xhigh |
+
+#### 降档触发（从默认降一档）
+
+| 信号 | 例子 |
+|---|---|
+| 明确的模板复制 | "参照 X 模式实现 Y、Z、W" |
+| 批量补样板 | 写测试、补 docstring、scaffold 多个 endpoint |
+| 改名/重构纯机械操作 | 字段重命名、import 路径调整 |
+
+#### 派工默认行为（方案 B）
+
+- **常规任务**：主对话按模块默认档位直接派 Codex，**事后告诉你用了哪档**
+- **升降档信号触发**：派之前停下来跟你**确认档位**
+- **你随时可以覆盖**：明确说"这个用 xhigh 跑"或"用 low 就够"，主对话立即照做
 
 ---
 
@@ -519,4 +560,5 @@ aider \
 - **v1.0**（2026-05-08）：初版，配套 BLUEPRINT v1.4 的 Phase 1 启动。
 - **v1.1**（2026-05-09）：扩展执行池治理。§ 二 角色图加"执行池"；§ 七 重构为"执行池：模型选择与外部 plugin 集成"，加 plugin 评估清单 + 命名约定 + 6 维选模型判断；§ 八 速查表升级为"首选 + 备选"双列，新增"同一模块固定主力模型"小节；§ 十 新增失败模式 F (风格碎裂)、G (plugin 工具协议不兼容)、H (plugin 隐性数据上传)。
 - **v1.2**（2026-05-09）：集成 aider + DeepSeek via Bash 作为 L1 批量任务的省钱选项。§ 二 角色图加"Bash 派工"分类；新增 § 7.4.1 主对话通过 Bash 派工给 aider，含环境配置 / 标准命令模板 / 关键参数说明 / 典型适用任务 / 不适合任务；§ 八 速查表 4 类 L1 任务首选改为 aider+DeepSeek，模块主力模型表 tests/ 目录改为 aider+DeepSeek；§ 十 新增失败模式 I (aider 自动 commit 绕过主对话)。
+- **v1.3**（2026-05-10）：Codex 档位制度落地。§ 八 速查表 Go 任务列加档位（low/medium/high/xhigh），模块主力模型表加"默认档位"列，新增 § 八.5 升档/降档触发信号，确立方案 B 派工默认（按默认档自动派 + 触发信号才确认 + 用户随时覆盖）。
 - 每次发现新失败模式，更新 § 十；每次工作流改动，更新 § 六；每次执行池新成员，更新 § 七 与 § 八。

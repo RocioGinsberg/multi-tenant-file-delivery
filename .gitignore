@@ -25,6 +25,12 @@ dist/
 .vscode/
 .DS_Store
 Thumbs.db
+.aider.*
+
+# --- Claude Code 本地状态（不入库） ---
+.claude/settings.local.json
+.claude/cache/
+.claude/.session/
 
 # --- 运行产物 ---
 *.log

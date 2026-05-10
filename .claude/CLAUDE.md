@@ -84,6 +84,34 @@
 
 ---
 
+## TDD + contract-first 派工纪律
+
+某些任务标记为 **TDD 任务**（参见 `docs/plans/phase-N-*.md` 每个子任务的"TDD?"列）。
+对 TDD 任务，**严格遵守 8 步流程**，不允许任何步骤合并：
+
+1. **主对话起草测试 spec**——写到 `docs/plans/` 对应 phase 文档的子任务下，包含：一句话验收标准 / 主要 case 列表 / 边界条件 / 不验证什么
+2. **用户 review spec**——把 spec 给用户看，等用户明确"通过"或提出调整。**不可跳过**
+3. **派工写测试代码**——首选 Sonnet subagent（**承重墙级 TDD 任务不能派 aider 写测试**——测试质量比代码还关键）；输入 spec + 必读上下文
+4. **review 测试代码**——主对话读完整测试代码 + 跑一次（应**全部失败**，因为实现还没写）；用户 review 是否漏 case / 误测
+5. **测试单独 commit**——commit message 写明"phaseN(X.Y): test spec for ...（red）"。**测试与实现绝不能在同一 commit 里**
+6. **派工写实现**——传入"测试在 `tests/test_X.py`，必须让它过；禁止修改测试文件"
+7. **review 实现**——跑测试应全部通过；主对话读 diff；如果有失败，回到 6（重派或主对话接手），**不允许通过修改测试让它过**（AGENTS.md § 十 失败模式 A）
+8. **实现 commit**——commit message 写明"phaseN(X.Y): impl ...（green）"
+
+### TDD 派工纪律的硬底线
+
+- ❌ **测试与实现混 commit**——必须独立 commit，便于 git diff 看出测试是否被实现阶段偷改
+- ❌ **派 aider 写承重墙级 TDD 任务的测试**——aider+DeepSeek 适合 L1 量产测试（如端到端补样板），但 TDD 任务的契约级测试派 Sonnet
+- ❌ **跳过用户 review spec**——TDD 的核心价值是用户深度参与契约定义；跳过等于退化成"先写后写"，价值归零
+- ❌ **实现阶段改测试**——除非用户明确批准并给出充分理由（如 spec 本身错了）；批准后应单独 commit "test spec adjustment"
+
+### 调用 tdd-flow skill
+
+任何 TDD 任务的启动应通过 **tdd-flow** skill（关键词触发：TDD / 先写测试 / contract-first）。
+skill 会自动展开 8 步流程的各步派工模板，主对话不必手抄。
+
+---
+
 ## 不在这里讨论的事
 
 - 完整 6 段任务模板 → AGENTS.md § 五

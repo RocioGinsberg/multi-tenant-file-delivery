@@ -9,7 +9,7 @@
 离职后我意识到这套**"流式上传 + 内容寻址 dedup + 异构 sink 适配"**的模式不是 SMH 独有的——任何"总部 → 多子公司分发"场景都需要。于是把它做成一个通用对象存储为后端的多租户文件分发平台：
 
 - **首版**：S3/MinIO，本地一行 docker 即可起
-- **未来**：OSS / SFTP / Webhook / SMH 等都是 Sink interface 的一种实现
+- **未来**：OSS / SFTP / Webhook / COS 等都是 Sink interface 的一种实现
 
 详细决策见 [ADR 0010](./docs/ADR/0010-pivot-to-generic-object-storage.md)。
 

@@ -16,6 +16,7 @@
 | **D2** | 分类器是否支持注册表 draft/publish？ | ❌ **不做** | 单一硬编码配置：直接读 `task_classifications.json`（runtime 改了重启即可）。draft/publish 留 Phase 6.5+ |
 | **D3** | 前端改造范围 | ✂️ **砍掉注册表配置段**，保留上传/预览/进度三段 | 配合 D2；前端配置入口 Phase 6.5 配合 workspace 一起重做 |
 | **D4** | 凭证配置入口 | 📁 **`.env` 文件** | Dev 期最简；UI 配置入库留 Phase 6.5 多租户时再做 |
+| **D5** | 哪些任务走 TDD？ | ✅ **1.4 / 1.5 / 1.7 走 TDD**；其余按"实现 → 测试"顺序 | 这 3 个是承重墙级契约（repo 接口 / 分类器逻辑 / progress bus 并发模型），未来多模块依赖。其他 L1 量产单测仍派 aider+DeepSeek。详见 [tdd-flow skill](../../.claude/skills/tdd-flow/SKILL.md) 8 步流程。 |
 
 ⚠️ 任意一项如果 Phase 1 中途想推翻，请在本文档加一条"决策变更"，并评估对未来 Phase 的影响。
 
@@ -24,6 +25,8 @@
 ## 二、子任务清单
 
 状态标记：`[ ]` 未开始 / `[~]` 进行中 / `[x]` 已完成 / `[!]` 阻塞
+
+**TDD 任务标记**：✅ = 走 8 步 TDD 流程（先 spec → 用户 review → 写测试 → 测试 commit (red) → 写实现 → 实现 commit (green)）；— = 普通"实现 → 测试"顺序
 
 ### 1.1 项目骨架
 - **状态**：`[ ]`
@@ -67,23 +70,31 @@
 - **验收**：`alembic upgrade head` 在 SQLite 里建表成功；`pytest tests/test_db.py` 检查连通性
 - **commit message 草案**：`phase1(1.3): SQLite + SQLAlchemy 2.0 async + alembic migration`
 
-### 1.4 Repos
+### 1.4 Repos ✅ TDD
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **TDD?**：✅（承重墙：repo 接口未来被所有 services 依赖）
+- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话
 - **依赖**：1.3
 - **范围**：
   - `control-plane/app/repos/task_repo.py`：create / get / update_status / list / get_by_idempotency_key
   - `control-plane/app/repos/item_repo.py`：bulk_insert / list_by_task / update_upload_status / count_by_status / batch_reset_failed
   - `control-plane/app/repos/event_repo.py`：append / list_by_task
   - 仓储层方法都用 async + 显式 session
-- **验收**：`pytest tests/test_task_repo.py tests/test_item_repo.py tests/test_event_repo.py` 全过；至少 8 个 test case
-- **commit message 草案**：`phase1(1.4): task/item/event repositories with async session`
+- **TDD 流程**：
+  - 1.4-spec：主对话起草测试 spec → 用户 review
+  - 1.4-test：Sonnet 写 `tests/test_task_repo.py` / `test_item_repo.py` / `test_event_repo.py`，全 fail（red commit）
+  - 1.4-impl：Sonnet 写实现，测试全过（green commit）
+- **验收**：所有测试通过；至少 8 个 test case；`git diff <test commit>..HEAD -- tests/` 为空（实现阶段未改测试）
+- **commit message 草案**：
+  - red：`phase1(1.4): test spec for task/item/event repos (red)`
+  - green：`phase1(1.4): impl repos with async session (green)`
 
-### 1.5 Classifier 移植
+### 1.5 Classifier 移植 ✅ TDD
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **TDD?**：✅（最值得 TDD 的任务——逻辑复杂、case 边界明确、未来跨 phase 引用）
+- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话（基于 `_legacy/` 推断 case）
 - **依赖**：1.4，参考 `_legacy/smh_uploader/classifier.py`
 - **范围**：
   - `control-plane/app/services/classifier.py`：从 `_legacy/smh_uploader/classifier.py` 提炼核心逻辑
@@ -91,8 +102,15 @@
   - 输入：`zip_bytes` + `config_dict`（无 team_list 概念，Phase 1 不联团队 API）
   - 输出：`list[ClassifiedItem]` + `summary` 写到 task_item 表
   - 保留 `_decode_zip_entry_name` 的 GBK 解码逻辑
-- **验收**：`pytest tests/test_classifier.py` 5 个 case（见 1.11）全过
-- **commit message 草案**：`phase1(1.5): port classifier from legacy CLI, output to SQLite`
+- **TDD 流程**：
+  - 1.5-spec：主对话起草测试 spec（5 个 case 已在原 1.11 列出，扩充边界后写入 spec） → 用户 review
+  - 1.5-test：Sonnet 写测试，全 fail（red commit）
+  - 1.5-impl：Sonnet 写实现（参考 `_legacy/`），测试全过（green commit）
+  - **此任务完成后原 1.11 即被吸收**
+- **验收**：测试全过；含 5 个核心 case + 边界（空 zip / 仅忽略文件 / 全部错误等）
+- **commit message 草案**：
+  - red：`phase1(1.5): test spec for classifier (red)`
+  - green：`phase1(1.5): impl classifier ported from legacy CLI (green)`
 
 ### 1.6 S3 流式上传（核心）
 - **状态**：`[ ]`
@@ -110,17 +128,24 @@
 - **验收**：`pytest tests/test_s3_uploader.py` 用 moto 模拟（见 1.13）；手工跑一次大文件上传到 MinIO 看内存峰值
 - **commit message 草案**：`phase1(1.6): streaming S3 uploader with multipart and nested concurrency`
 
-### 1.7 Progress Bus + SSE
+### 1.7 Progress Bus + SSE ✅ TDD
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：Sonnet subagent
+- **TDD?**：✅（并发组件，行为契约必须先定）
+- **执行方**：测试 — Sonnet subagent；实现 — Sonnet subagent；spec — 主对话
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/services/progress_bus.py`：`{task_id: list[asyncio.Queue]}` 注册表 + `publish()` + `subscribe()`
   - 进程内 fanout：一个 task 多个订阅者
   - SSE endpoint 在 1.9 实现，本任务只做 bus 实现 + 单测
-- **验收**：`pytest tests/test_progress_bus.py`：模拟 publish + 多订阅者 + 取消订阅
-- **commit message 草案**：`phase1(1.7): in-process progress bus for SSE fanout`
+- **TDD 流程**：
+  - 1.7-spec：主对话起草并发场景 spec（单订阅者 / 多订阅者 fanout / 订阅者中途取消 / 慢消费者背压 / publisher 在没有订阅者时不阻塞）→ 用户 review
+  - 1.7-test：Sonnet 写测试，全 fail（red commit）
+  - 1.7-impl：Sonnet 写实现，测试全过（green commit）
+- **验收**：测试全过；并发 case 用 `pytest-asyncio` + `asyncio.gather` 模拟
+- **commit message 草案**：
+  - red：`phase1(1.7): test spec for progress bus (red)`
+  - green：`phase1(1.7): impl in-process progress bus (green)`
 
 ### 1.8 Task Runner（编排核心）
 - **状态**：`[ ]`
@@ -173,35 +198,18 @@
 - **验收**：`pytest tests/test_schemas.py` 跑 schema 序列化 round-trip
 - **派 aider 命令**：见执行时构造
 
-### 1.11 Classifier 单测
-- **状态**：`[ ]`
-- **L 等级**：L1
-- **执行方**：**aider+DeepSeek**
-- **依赖**：1.5
-- **范围**：
-  - `control-plane/tests/test_classifier.py`
-  - 5 个 table-driven case：
-    1. 正常分类 happy path
-    2. zip slip 攻击文件名（被拒）
-    3. 中文文件名 GBK 解码（正确还原）
-    4. ignored_filenames 过滤（被忽略不上传）
-    5. 团队名未匹配返回 error severity
-- **验收**：`pytest tests/test_classifier.py -v`
-- **派 aider 命令**：见执行时构造
+### 1.11 ~~Classifier 单测~~（已并入 1.5 TDD 流程）
+- **状态**：`[—]` 已移除
+- 原 5 个 case 在 1.5-spec 阶段直接定义，由 1.5 的 TDD 流程产出测试代码
 
-### 1.12 Repos 单测
-- **状态**：`[ ]`
-- **L 等级**：L1
-- **执行方**：**aider+DeepSeek**
-- **依赖**：1.4
-- **范围**：
-  - `control-plane/tests/test_task_repo.py`、`test_item_repo.py`、`test_event_repo.py`
-  - 每个 repo 至少 4 个 case（CRUD + 特殊场景）
-  - 用 in-memory SQLite + 事务回滚 fixture
+### 1.12 ~~Repos 单测~~（已并入 1.4 TDD 流程）
+- **状态**：`[—]` 已移除
+- 原 case 在 1.4-spec 阶段定义，由 1.4 的 TDD 流程产出
 
 ### 1.13 S3 Uploader 单测
 - **状态**：`[ ]`
 - **L 等级**：L1
+- **TDD?**：— （非 TDD：1.6 已由主对话亲自写，单测后置补充覆盖率即可）
 - **执行方**：**aider+DeepSeek**
 - **依赖**：1.6
 - **范围**：
@@ -263,26 +271,29 @@
 | 执行方 | 任务数 | 任务编号 | 主要职责 |
 |---|---|---|---|
 | **Opus 主对话** | 4 | 1.6 / 1.8 / 1.15 / 1.17 | S3 流式上传内核、worker 编排、前端架构判断、收尾文档 |
-| **Sonnet subagent** | 8 | 1.1-1.5 / 1.7 / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos、classifier、SSE bus、API、E2E、docker |
-| **aider+DeepSeek** | 4 | 1.10-1.13 | Pydantic schema、3 类单测 |
+| **Sonnet subagent** | 8 | 1.1 / 1.2 / 1.3 / **1.4 (TDD red+green)** / **1.5 (TDD red+green)** / **1.7 (TDD red+green)** / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos+测试、classifier+测试、SSE bus+测试、API、E2E、docker |
+| **aider+DeepSeek** | 2 | 1.10 / 1.13 | Pydantic schema、S3 uploader 单测 |
 | **Codex** | 0 | — | Phase 2 起才用（数据面 Go） |
+
+**TDD 任务额外开销**：
+- 1.4 / 1.5 / 1.7 各多一次 commit（red + green），主对话多 1-2 次 review
+- 用户深度参与点：3 个 spec review + 3 个测试代码 review，合计约 1-2 小时
+- 收益：3 个承重墙模块的契约钉死，未来 Phase 2/6.5 修改时有保护
 
 ---
 
 ## 四、推荐执行顺序
 
-依赖图（→ 表示依赖）：
+依赖图（→ 表示依赖；TDD 任务用 [TDD] 标记，每个 TDD 任务内部含 spec/test/impl 三步）：
 
 ```
-1.1 ──┬──> 1.2 ──> 1.3 ──> 1.4 ──┬──> 1.5 ──> 1.11
-      │                          │           
-      │                          ├──> 1.12
-      │                          │
-      ├──> 1.7                   └──┐
-      │                             │
-      └──> 1.6 ──> 1.13             │
-              │                     │
-              ├──> 1.8 <────────────┘
+1.1 ──┬──> 1.2 ──> 1.3 ──> [TDD 1.4] ──> [TDD 1.5]
+      │                          │              │
+      ├──> [TDD 1.7]             │              │
+      │                          │              │
+      └──> 1.6 ──> 1.13          │              │
+              │                  │              │
+              ├──> 1.8 <─────────┴──────────────┘
               │     │
               │     └──> 1.9 ──> 1.10
               │                    │
@@ -298,13 +309,39 @@
 **推荐顺序**（按里程碑分组）：
 
 **M1 — 骨架与持久化（最小可启动）**
-1.1 → 1.2 → 1.3 → 1.4 → 1.12（repos 单测，验证 1.4）
+1.1 → 1.2 → 1.3 → **[TDD 1.4]**（spec → test commit (red) → impl commit (green)）
 
 **M2 — 业务核心**
-1.5 → 1.11（classifier 单测）→ 1.6 → 1.13（s3 单测）→ 1.7
+**[TDD 1.5]**（spec → red → green）→ 1.6 → 1.13（s3 单测）→ **[TDD 1.7]**（spec → red → green）
 
 **M3 — 编排与 API**
 1.8 → 1.9 → 1.10（schemas）
+
+**M4 — 端到端**
+1.16（docker minio）并行可做 → 1.14 → 1.15
+
+**M5 — 收尾**
+1.17
+
+---
+
+## 四.5 TDD 任务的派工链（适用于 1.4 / 1.5 / 1.7）
+
+每个 TDD 任务展开为 3 个执行阶段，**绝不合并**：
+
+| 阶段 | 动作 | 执行方 | 产物 | commit |
+|---|---|---|---|---|
+| **spec** | 主对话起草测试 spec → 用户 review | Opus + 用户 | 写入本文档对应任务节，含 case 列表/边界/scope-out | 不 commit |
+| **red** | 派 Sonnet 写测试代码（应全 fail） | Sonnet subagent | `tests/test_X.py` 全 fail | `phase1(X.Y): test spec for X (red)` |
+| **green** | 派 Sonnet 写实现（测试不许改） | Sonnet subagent | 实现代码 + 全部测试通过 | `phase1(X.Y): impl X (green)` |
+
+**主对话强制纪律**（已写入 [.claude/CLAUDE.md](../../.claude/CLAUDE.md)）：
+- ❌ 测试与实现混 commit
+- ❌ TDD 任务派 aider 写测试（aider 适合 L1 量产单测如 1.13，但承重墙级契约必须 Sonnet）
+- ❌ 跳过用户 review spec
+- ❌ 实现阶段改测试
+
+调用 [tdd-flow skill](../../.claude/skills/tdd-flow/SKILL.md) 自动展开 8 步流程。
 
 **M4 — 端到端**
 1.16（docker minio）并行可做 → 1.14 → 1.15
@@ -323,6 +360,7 @@
 | 前端改造引入大量未知 bug | 1.15 砍掉的组件先确认没有跨页引用，删一个测一次 |
 | SSE 在生产场景的 keep-alive | Phase 1 不解决，先做能跑的版本，Phase 4 引入 Redis pub/sub 时一起优化 |
 | Phase 1 完成定义里没提"按团队分组上传"——`uploader.py` 嵌套并发的核心 | 1.6/1.8 里仍要做（保留 `_legacy/` 灵魂），但 Phase 1 单租户单团队也能跑通端到端 |
+| TDD 任务步骤被偷懒合并（实现阶段悄悄改测试） | tdd-flow skill 强制 8 步；CLAUDE.md 列硬底线；commit message 强制 (red)/(green) 标识便于 git log 审计；后续若仍出问题，加 pre-commit hook |
 
 ---
 

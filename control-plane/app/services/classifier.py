@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
+from app.services.classification_profile import ProfileConfig
+
 Severity = Literal["ok", "warning", "error", "ignored"]
 
 
@@ -25,7 +27,7 @@ class ClassifiedItem:
     ext: str = ""
     file_size: int = 0
     target_name_raw: str = ""
-    target_name_matched: str = ""
+    target_name_matched: str | None = None
     document_type: str = ""
     category_name: str = ""
     dst_dir: str = ""
@@ -73,7 +75,7 @@ class ClassifySummary:
 
 def classify_zip(
     zip_bytes: bytes,
-    profile: dict[str, Any],
+    profile: ProfileConfig,
 ) -> tuple[list[ClassifiedItem], ClassifySummary]:
     """Classify an uploaded zip using a static Classification Profile.
 

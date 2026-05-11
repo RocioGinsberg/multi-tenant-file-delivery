@@ -133,23 +133,159 @@
   - 输出：`list[ClassifiedItem]` + `summary`；service 层写入 task_item
   - 保留 `_decode_zip_entry_name` 的 GBK 解码逻辑
   - Core 只使用通用语义：`target_name_raw`, `target_name_matched`, `document_type`, `category_name`, `dst_dir`, `dst_path`, `severity`
-  - Profile 承载业务适配：entry filters、facts extractors、target resolution、classification resolution、match priority、path template、error policy
+  - Profile 承载业务适配：entry filters、**target extraction strategy**、target resolution、classification resolution、match priority、path template、error policy
+  - **Target extraction strategy（Profile 配置，2026-05-11 设计决策）**：
+    - **`"directory"`（主策略，推荐默认）**：zip 顶层目录名 = target key。HQ 按接收方建文件夹，文件名不承担路由职责。`acme/月报.xlsx` → target_name_raw="acme"
+    - **`"filename_segment"`（兜底）**：zip 根目录下无文件夹的文件，回退到文件名解析（最后分隔段为 target）。扁平 zip 的兼容路径，不是首选
+    - **`"broadcast"`**：整包发给同一个 target，profile 里写死 `broadcast_target` key；适合单接收方场景
+    - Phase 1 实现 `"directory_or_filename"`（先取顶层目录，根目录文件回退 filename_segment）和 `"broadcast"`；`"filename_segment"` 单独保留供 legacy 兼容
+    - 目录深度超过 1 层时只取第 1 层作为 target（`acme/2026/月报.xlsx` → target="acme"）
 - **TDD 流程**：
-  - 1.5-spec：主编排 Agent 起草 profile engine 测试 spec（覆盖安全、归属规则、优先级、路径渲染、summary） → 用户 review
+  - 1.5-spec：主编排 Agent 起草 profile engine 测试 spec（覆盖安全、target extraction strategy、归属规则、优先级、路径渲染、summary） → 用户 review
   - 1.5-test：L2 worker 写测试，全 fail（red commit）
   - 1.5-impl：L2 worker 写实现（参考 `_legacy/` 的解码/匹配经验，不复刻业务语义），测试全过（green commit）
   - **此任务完成后原 1.11 即被吸收**
 - **测试 spec（red 阶段必须覆盖）**：
   - zip entry 解码与安全：UTF-8/GBK 文件名可读；`../evil.xlsx` / 绝对路径被拒绝；目录 entry 跳过
   - entry filter：`.DS_Store` / `Thumbs.db` / `README.md` 等进入 ignored 或不产出可上传 item，summary 正确
-  - target resolution：alias / exact / strip-prefix / missing target；未知 target 不丢弃，产出 `severity="error"`
-  - classification resolution：suffix priority / description exact / description fuzzy（如启用）/ document type exact / suffix fallback 的优先级固定
+  - **target extraction**：directory 策略（顶层目录 = target）；broadcast 策略（全部归一个 target）；directory_or_filename 的扁平兜底（根目录文件回退 filename_segment）；混合 zip（有文件夹 + 有根目录文件）
+  - target resolution：alias / exact / strip-number-prefix / missing target；未知 target 不丢弃，产出 `severity="error"`
+  - classification resolution：suffix priority / description exact / description fuzzy（如启用）/ suffix fallback 的优先级固定
   - path rendering：默认 `{category}/{document_type}/{filename}`；禁止绝对路径、`..`、空路径段
   - summary：`total / ok / warning / error / ignored / has_blocking_errors` 可解释
 - **验收**：测试全过；至少两个小 profile fixture，证明换 profile 不改 engine；含空 zip / 仅忽略文件 / 全部错误等边界
 - **commit message 草案**：
   - red：`phase1(1.5): test spec for classifier profile engine (red)`
   - green：`phase1(1.5): impl classifier profile engine (green)`
+
+#### TDD spec — 1.5 Classifier Profile Engine（2026-05-11，用户已 review 通过）
+
+**一句话验收标准**：`classify_zip(zip_bytes, profile)` 根据 profile 中声明的 target extraction strategy、matching 规则和路径模板，正确分类 zip 内所有文件；换 profile 不改 engine 代码。
+
+##### 接口契约
+
+```python
+# app/services/classification_profile.py
+@dataclass
+class TargetConfig:
+    key: str
+    aliases: list[str] = field(default_factory=list)
+    strip_number_prefix: bool = False  # "12. acme" 匹配 "acme"
+
+@dataclass
+class DocumentTypeConfig:
+    category: str  # 写入路径模板的上层分类
+
+@dataclass
+class MatchingConfig:
+    enable_fuzzy_match: bool = True
+    fuzzy_threshold: int = 70
+    description_fuzzy_threshold: int = 70
+
+@dataclass
+class EntryFilterConfig:
+    ignored_filenames: list[str] = field(default_factory=list)
+    ignored_prefixes: list[str] = field(default_factory=list)   # 如 "__MACOSX"
+
+@dataclass
+class TargetExtractionConfig:
+    strategy: str = "directory_or_filename"
+    # "directory_or_filename"：有顶层目录→目录名；根目录文件→filename_segment 兜底
+    # "broadcast"：全包归一个 target（broadcast_target 必填）
+    # "filename_segment"：legacy，全用文件名解析
+    delimiters: list[str] = field(default_factory=lambda: ["-", "—", "–", "’", "-"])
+    broadcast_target: str | None = None
+
+@dataclass
+class ProfileConfig:
+    version: str
+    targets: list[TargetConfig]
+    document_types: dict[str, DocumentTypeConfig]   # key → config
+    suffix_priority: dict[str, str]                 # ".xlsx" → document_type key
+    description_mapping: dict[str, str]             # "月报" → document_type key
+    suffix_fallback: dict[str, str]
+    entry_filters: EntryFilterConfig = field(default_factory=EntryFilterConfig)
+    path_template: str = "{category}/{document_type}/{filename}"
+    matching_config: MatchingConfig = field(default_factory=MatchingConfig)
+    target_extraction: TargetExtractionConfig = field(default_factory=TargetExtractionConfig)
+
+# app/services/classifier.py（更新签名）
+def classify_zip(zip_bytes: bytes, profile: ProfileConfig) -> tuple[list[ClassifiedItem], ClassifySummary]:
+    ...
+
+# ClassifiedItem 更新：target_name_matched 改为 str | None = None
+```
+
+##### 两个 Profile Fixture（测试内定义，不读文件）
+
+**Profile A（"simple"）**：
+- targets: `[{key:"acme", aliases:["ACME"]}, {key:"globex"}]`
+- document_types: `{monthly:{category:"reports"}, contract:{category:"legal"}}`
+- suffix_priority: `{".pdf": "contract"}`
+- description_mapping: `{"月报": "monthly", "合同": "contract"}`
+- suffix_fallback: `{".xlsx": "monthly"}`
+- path_template: `"{category}/{document_type}/{filename}"`
+- ignored_filenames: `[".DS_Store", "Thumbs.db"]`
+- target_extraction.strategy: `"directory_or_filename"`
+
+**Profile B（"minimal"）**：
+- targets: `[{key:"alpha"}]`
+- document_types: `{report:{category:"docs"}}`
+- suffix_priority: `{}`; suffix_fallback: `{".xlsx": "report"}`
+- path_template: `"uploads/{document_type}/{filename}"`
+- target_extraction.strategy: `"broadcast"`, broadcast_target: `"alpha"`
+
+##### 26 个测试 case
+
+**Cat 1 — ZIP 解码与安全（5）**
+1. `test_utf8_filename_decoded`：UTF-8 中文文件名 → `item.filename` 可读无乱码
+2. `test_gbk_filename_decoded`：GBK 编码（flag_bits=0，无 UTF-8 flag）→ 仍可读
+3. `test_path_traversal_rejected`：entry 路径 `../evil.xlsx` → severity="error", error_code="path_traversal"
+4. `test_absolute_path_rejected`：entry 路径 `/etc/evil.xlsx` → severity="error", error_code="path_traversal"
+5. `test_directory_entry_skipped`：纯目录 entry（`somedir/`）→ 不在 items，不计入 total，不计入 ignored
+
+**Cat 2 — Entry Filter（2）**
+6. `test_ignored_filename_not_in_items`：`.DS_Store` → items 为空，summary.ignored=1, total=1
+7. `test_mixed_ignored_and_ok_summary`：1 ignored + 1 ok → ignored=1, ok=1, total=2
+
+**Cat 3 — Target Extraction Strategy（6）**
+8. `test_directory_strategy_folder_is_target`：`acme/月报.xlsx`，strategy=directory_or_filename → target_name_raw="acme"
+9. `test_directory_nested_only_first_level`：`acme/2026/月报.xlsx` → target_name_raw="acme"（只取第 1 层）
+10. `test_broadcast_all_files_get_same_target`：Profile B（broadcast/alpha），两个文件 → 都 matched="alpha"
+11. `test_fallback_flat_file_uses_filename_segment`：strategy=directory_or_filename；根目录 `月报-acme.xlsx` → 回退 filename_segment，raw="acme"
+12. `test_mixed_zip_dir_and_flat_both_resolved`：`acme/月报.xlsx`（dir 路由）+ `季报-globex.xlsx`（filename 兜底）→ 两条分别 matched
+13. `test_flat_file_no_delimiter_produces_error`：根目录 `月报.xlsx`（无分隔符）→ filename_segment 解析不出 target → severity="error", error_code="unknown_target"
+
+**Cat 4 — Target Resolution（4）**
+14. `test_target_exact_match`：raw="acme"，targets 有 key="acme" → matched="acme", severity="ok"
+15. `test_target_alias_resolved`：raw="ACME"，alias ACME→acme → matched="acme"
+16. `test_target_strip_number_prefix`：raw="acme"，targets 有 key="12. acme"（strip_number_prefix=True）→ matched="12. acme"
+17. `test_unknown_target_error_item_kept`：raw="unknowncorp" 无匹配 → severity="error", target_name_matched=None，item 仍在 result items
+
+**Cat 5 — Classification Resolution（4）**
+18. `test_suffix_priority_beats_description`：`.pdf` 命中 suffix_priority → document_type 以 suffix_priority 为准，忽略描述
+19. `test_description_mapping_exact`：无 suffix_priority 命中；描述精确命中 description_mapping
+20. `test_suffix_fallback_when_no_match`：无任何命中 → document_type 从 suffix_fallback 取
+21. `test_fuzzy_description_enabled_vs_disabled`：近似描述（如"月份报"接近"月报"）：fuzzy 开 → 命中；fuzzy 关 → fallback
+
+**Cat 6 — 路径渲染（2）**
+22. `test_path_template_renders_correctly`：`{category}/{document_type}/{filename}` → "reports/monthly/月报-acme.xlsx"
+23. `test_path_template_dotdot_blocked`：渲染结果含 `..` → severity="error", error_code="path_render_error"
+
+**Cat 7 — Summary（2）**
+24. `test_empty_zip_summary_all_zeros`：空 zip → items=[], 全字段=0, has_blocking_errors=False
+25. `test_has_blocking_errors_reflects_error_count`：有 error item → has_blocking_errors=True；全 ok → False
+
+**Cat 8 — Profile 隔离（1）**
+26. `test_same_zip_different_profile_different_result`：同 zip_bytes 分别用 Profile A / Profile B → dst_path 不同
+
+##### 不验证的内容
+- DB 写入（1.8 task_runner 职责）
+- S3 上传（1.6）
+- API 序列化（1.9）
+- profile 磁盘 IO（`load_profile` 的读文件部分；只测 dict → ProfileConfig 逻辑）
+- manifest 路由方案（留 Phase 6.5）
+- **多级子目录路径保留**（`{rel_path}` 模板变量，如 `acme/2026/月报.xlsx` → dst 保留 `2026/月报.xlsx`）：当前 `{filename}` 只取 basename，子目录层级丢弃。后续补 `{rel_path}` 变量 + 对应回归测试。
 
 ### 1.6 S3 流式上传（核心）
 - **状态**：`[ ]`

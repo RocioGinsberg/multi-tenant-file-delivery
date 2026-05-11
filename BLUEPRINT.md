@@ -493,6 +493,26 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 - 本地用 docker 起 MinIO 作为对端
 - **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
 
+#### Phase 1 完成 Changelog（2026-05-11）
+
+| 模块 | 产出 |
+|---|---|
+| 项目骨架 | `control-plane/`，FastAPI + uv + ruff，`/healthz` |
+| 配置层 | `app/core/settings.py`，pydantic-settings，`.env` 支持 |
+| 数据库 | SQLAlchemy 2.0 async + aiosqlite，alembic migration，3 张表（task / task_item / task_event） |
+| Repos（TDD） | TaskRepo / ItemRepo / EventRepo，async session，flush-only 契约 |
+| Classifier（TDD） | `classify_zip(zip_bytes, profile)` + ProfileConfig dataclass；26 个 TDD case；strategy: directory_or_filename / broadcast |
+| S3 上传 | aioboto3 流式上传，>50MB multipart，嵌套 semaphore 并发，progress callback |
+| Progress Bus（TDD） | 进程内 asyncio fanout，subscribe context manager，sentinel close |
+| Task Runner | 状态机编排：confirmed → uploading → uploaded/partial_failed，BackgroundTask 驱动 |
+| API 路由 | 9 个端点，`/api/v1` 前缀，SSE progress 流 |
+| Pydantic Schemas | 9 个 response schema，extra=forbid |
+| S3 单测 | moto mock，4 个 case |
+| docker-compose | MinIO + minio-init（自动建 bucket） |
+| E2E 集成测试 | 4 个 case，内存 SQLite，mock S3 |
+| 前端改造 | 去掉注册表配置段，API 改 `/api/v1`，进度改 SSE |
+| 测试总数 | **100 个 test case，全部通过** |
+
 ### Phase 2：拆 Go 数据面（5-7 天）
 - 实现 Go worker 骨架：Sink interface + Source + 一个 mock sink + 一个 S3 sink（aws-sdk-go-v2 + MinIO endpoint）
 - Kafka 把控制面和数据面串起来

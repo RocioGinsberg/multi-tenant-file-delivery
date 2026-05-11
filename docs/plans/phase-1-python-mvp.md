@@ -1,6 +1,6 @@
 # Phase 1 — Python 单体 MVP
 
-> **状态**：📋 已规划 / 待启动
+> **状态**：✅ 已完成（2026-05-11）
 > **预计工时**：4-6 天
 > **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
 > **关联 BLUEPRINT 章节**：§ 十 Phase 1
@@ -34,12 +34,7 @@
 **TDD 任务标记**：✅ = 走 8 步 TDD 流程（先 spec → 用户 review → 写测试 → 测试 commit (red) → 写实现 → 实现 commit (green)）；— = 普通"实现 → 测试"顺序
 
 ### 1.1 项目骨架
-- **状态**：`[ ]`
-- **L 等级**：L2
-- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
-- **依赖**：无
-- **范围**：
-  - `control-plane/pyproject.toml`（uv 或 poetry，含 fastapi、uvicorn、sqlalchemy 2.0、aiosqlite、alembic、pydantic-settings、aioboto3、pytest、pytest-asyncio、httpx、ruff）
+- **状态**：`[x]`（uv 或 poetry，含 fastapi、uvicorn、sqlalchemy 2.0、aiosqlite、alembic、pydantic-settings、aioboto3、pytest、pytest-asyncio、httpx、ruff）
   - `control-plane/.env.example`（S3 endpoint、bucket、credential 占位）
   - `control-plane/app/main.py`（FastAPI 入口 + lifespan + healthz）
   - `control-plane/app/__init__.py`
@@ -48,7 +43,7 @@
 - **commit message 草案**：`phase1(1.1): scaffold control-plane Python project (FastAPI + healthz)`
 
 ### 1.2 settings 配置
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.1
@@ -60,7 +55,7 @@
 - **commit message 草案**：`phase1(1.2): pydantic settings with .env support`
 
 ### 1.3 DB + 三张表 + alembic
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.1, 1.2
@@ -120,7 +115,7 @@
   - green：`phase1(1.4): impl repos with async session (green)`
 
 ### 1.5 Classifier Core + Profile ✅ TDD
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **TDD?**：✅（承重墙：分类结果会被 API preview、task_runner、workspace registry 复用）
 - **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent（基于 ADR 0011 + `_legacy/` 推断 case）
@@ -288,7 +283,7 @@ def classify_zip(zip_bytes: bytes, profile: ProfileConfig) -> tuple[list[Classif
 - **多级子目录路径保留**（`{rel_path}` 模板变量，如 `acme/2026/月报.xlsx` → dst 保留 `2026/月报.xlsx`）：当前 `{filename}` 只取 basename，子目录层级丢弃。后续补 `{rel_path}` 变量 + 对应回归测试。
 
 ### 1.6 S3 流式上传（核心）
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：**L3**
 - **执行方**：**主编排 Agent 亲自写**
 - **依赖**：1.2，参考 `_legacy/smh_uploader/api_client.py` + `uploader.py`
@@ -304,7 +299,7 @@ def classify_zip(zip_bytes: bytes, profile: ProfileConfig) -> tuple[list[Classif
 - **commit message 草案**：`phase1(1.6): streaming S3 uploader with multipart and nested concurrency`
 
 ### 1.7 Progress Bus + SSE ✅ TDD
-- **状态**：`[~]` 进行中（spec 已通过，进入 TDD Step 3）
+- **状态**：`[x]`
 - **L 等级**：L2
 - **TDD?**：✅（并发组件，行为契约必须先定）
 - **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent
@@ -375,7 +370,7 @@ class ProgressBus:
 - 并发 case 用 `asyncio.gather` + `asyncio.wait_for`（超时防死锁）
 
 ### 1.8 Task Runner（编排核心）
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：**L3**
 - **执行方**：**主编排 Agent 亲自写**
 - **依赖**：1.5, 1.6, 1.7
@@ -393,7 +388,7 @@ class ProgressBus:
 - **commit message 草案**：`phase1(1.8): task runner with state machine and progress emit`
 
 ### 1.9 API 路由
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.4-1.8
@@ -414,7 +409,7 @@ class ProgressBus:
 - **commit message 草案**：`phase1(1.9): tasks API routes with SSE progress endpoint`
 
 ### 1.10 Pydantic Schema
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **执行方**：**aider+DeepSeek**
 - **依赖**：1.9 接口形状已定
@@ -434,7 +429,7 @@ class ProgressBus:
 - 原 case 在 1.4-spec 阶段定义，由 1.4 的 TDD 流程产出
 
 ### 1.13 S3 Uploader 单测
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **TDD?**：— （非 TDD：1.6 已由主编排 Agent 亲自写，单测后置补充覆盖率即可）
 - **执行方**：**aider+DeepSeek**
@@ -445,7 +440,7 @@ class ProgressBus:
   - case：单段上传 / multipart 上传 / 上传失败重试 / 流式校验内存峰值（用大文件 mock）
 
 ### 1.14 端到端集成测试
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.9 全部完成 + MinIO 容器（1.16）
@@ -457,7 +452,7 @@ class ProgressBus:
 - **验收**：`pytest tests/test_e2e.py -v` 全过
 
 ### 1.15 前端改造
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：**L3**
 - **执行方**：**主编排 Agent 亲自写**（结构判断）+ aider 收尾文案
 - **依赖**：1.9
@@ -470,7 +465,7 @@ class ProgressBus:
 - **验收**：浏览器能完成上传 zip → 预览 → 确认 → 看进度 SSE → 看结果
 
 ### 1.16 docker-compose for MinIO
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：无（与 1.1-1.9 并行可做）
@@ -482,7 +477,7 @@ class ProgressBus:
 - **验收**：`cd deploy && docker compose up -d minio` 能起；浏览器开 9001 console 能登录
 
 ### 1.17 收尾文档
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：**L3**
 - **执行方**：**主编排 Agent 亲自写**
 - **依赖**：所有任务完成
@@ -594,10 +589,23 @@ class ProgressBus:
 
 ## 六、Phase 1 完成总结
 
-待 1.17 时填充。
+**完成时间**：2026-05-11
 
-包括：
-- 实际工时 vs 预估
-- 偏离计划的地方（比如哪个任务派了备选模型、为什么）
-- 遗留 TODO（推到哪个 Phase）
-- 简历可写数字（如端到端延迟、内存峰值、测试覆盖率）
+### 实际工时 vs 预估
+预估 4-6 天，实际约 2 个会话完成（借助 L2 Sonnet subagent 并行执行多个任务）。
+
+### 关键数字
+- **测试数量**：100 个 test case，全部通过（含 26 个 TDD classifier case、11 个 progress bus case、9 个 repo case、15 个 API case、4 个 e2e case）
+- **代码行数**：control-plane ~1800 行 Python（不含 _legacy/）
+- **前端**：index.html 从 1094 行压缩到 ~280 行（去掉注册表配置段）
+
+### 偏离计划的地方
+- **L1 任务改派 Haiku**：aider+DeepSeek 多次把文件写到错误路径（把内部思考文字当文件名），改用 `Agent(model="haiku")` 作为 L1 首选
+- **1.13 S3 单测放弃 moto**：moto 与 aioboto3/aiobotocore 存在异步 body 兼容性问题，改用 `unittest.mock.AsyncMock` 直接 mock `aioboto3.Session`
+- **classify 字段过滤 bug（1.14 发现）**：`ClassifiedItem.to_dict()` 包含 ORM 不认识的字段（`target_match_method` 等），e2e 测试暴露后在 `classify_task` 路由加了字段白名单过滤
+
+### 遗留 TODO（推到后续 Phase）
+- `{rel_path}` 路径模板变量（当前 `{filename}` 只取 basename，子目录层级丢弃）→ Phase 2
+- SSE keep-alive（生产场景长连接）→ Phase 4（Redis pub/sub 时一起做）
+- profile 热重载（当前改 profile 需重启）→ Phase 6.5
+- 前端 `/api/v1` 跨域反向代理配置文档 → Phase 3（docker compose 统一起）

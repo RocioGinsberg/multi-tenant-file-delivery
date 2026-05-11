@@ -20,6 +20,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    "moto[s3]",
+    "boto3",
 ]
 
 [tool.ruff]

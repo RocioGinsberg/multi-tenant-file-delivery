@@ -304,7 +304,7 @@ def classify_zip(zip_bytes: bytes, profile: ProfileConfig) -> tuple[list[Classif
 - **commit message 草案**：`phase1(1.6): streaming S3 uploader with multipart and nested concurrency`
 
 ### 1.7 Progress Bus + SSE ✅ TDD
-- **状态**：`[ ]`
+- **状态**：`[~]` 进行中（spec 已通过，进入 TDD Step 3）
 - **L 等级**：L2
 - **TDD?**：✅（并发组件，行为契约必须先定）
 - **执行方**：测试 — L2 worker；实现 — L2 worker；spec — 主编排 Agent
@@ -321,6 +321,58 @@ def classify_zip(zip_bytes: bytes, profile: ProfileConfig) -> tuple[list[Classif
 - **commit message 草案**：
   - red：`phase1(1.7): test spec for progress bus (red)`
   - green：`phase1(1.7): impl in-process progress bus (green)`
+
+#### TDD spec — 1.7 Progress Bus（2026-05-11，用户已 review 通过）
+
+**一句话验收标准**：进程内异步 fanout bus，publish 的消息能被所有当前订阅者收到，订阅者取消不影响其他人，publisher 在无订阅者时不阻塞。
+
+**接口契约**：
+
+```python
+class ProgressBus:
+    async def publish(self, task_id: str, event: dict) -> None: ...
+    def subscribe(self, task_id: str) -> AsyncContextManager[asyncio.Queue[dict | None]]: ...
+    async def close_task(self, task_id: str) -> None: ...
+```
+
+- `subscribe()` 是 async context manager：进入时注册 Queue，退出时自动注销
+- `close_task()` 向所有订阅者 push sentinel `None`，表示流结束
+- queue 默认 `maxsize=0`（无限），不做背压控制（Phase 2 引入 Kafka 后替换）
+
+**11 个 case（Cat A–E）**：
+
+- **Cat A — 基础投递（3）**
+  1. `test_publish_to_single_subscriber`：1 订阅者 publish 1 条 → queue.get() 得到同一 dict
+  2. `test_publish_multiple_events_ordered`：1 订阅者 publish 3 条 → 按顺序收到 3 条
+  3. `test_no_subscriber_publish_does_not_block`：无订阅者时 publish → 不阻塞，不抛异常
+
+- **Cat B — Fanout（2）**
+  4. `test_fanout_to_multiple_subscribers`：2 订阅者同一 task_id，publish 1 条 → 两个 queue 各得 1 条
+  5. `test_different_task_ids_isolated`：订阅 task_A，publish 到 task_B → queue 不收到任何消息
+
+- **Cat C — 订阅者生命周期（3）**
+  6. `test_subscriber_exits_cleanly`：退出 context manager → 内部注册表移除该 queue，再 publish 不抛错
+  7. `test_subscriber_cancel_does_not_affect_others`：2 订阅者，1 个 cancel → 另 1 个仍收到后续 publish
+  8. `test_resubscribe_after_exit`：退出后重新订阅同一 task_id → 新 queue 正常工作
+
+- **Cat D — close_task（2）**
+  9. `test_close_task_sends_sentinel`：有订阅者时 close_task → queue 收到 `None`
+  10. `test_close_task_no_subscribers_does_not_raise`：无订阅者时 close_task → 不抛异常
+
+- **Cat E — 慢消费者（1）**
+  11. `test_slow_consumer_does_not_block_publisher`：publish 10 条不等消费者 → publish 立即返回，消费者事后读到全部 10 条
+
+**不验证什么**（scope-out）：
+- SSE 序列化（`text/event-stream` 格式）— 留 1.9
+- 满 queue drop/raise 行为 — Phase 1 maxsize=0 不会满，Phase 2 Kafka 替换后不再需要
+- 跨进程 / 跨 worker 广播 — Phase 2 Redis pub/sub
+- 持久化 / 消息回放
+- 消息 schema 校验 — event 是裸 dict，类型约束在 1.8 task_runner 层
+
+**测试基础设施**：
+- `pytest-asyncio`，`asyncio_mode = "auto"`
+- 纯 in-memory，无 mock，无外部依赖
+- 并发 case 用 `asyncio.gather` + `asyncio.wait_for`（超时防死锁）
 
 ### 1.8 Task Runner（编排核心）
 - **状态**：`[ ]`

@@ -35,3 +35,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end integration tests that use real SQLite and mocked S3",
+]

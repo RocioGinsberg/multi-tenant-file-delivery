@@ -240,10 +240,17 @@ async def classify_task(
 
     summary_dict = summary.to_dict()
 
-    item_dicts = [item.to_dict() for item in classified_items]
-    for d in item_dicts:
+    _TASK_ITEM_COLS = {
+        "src_path", "filename", "ext", "file_size", "target_name_raw",
+        "target_name_matched", "document_type", "category_name", "dst_dir",
+        "dst_path", "severity", "error_code", "error_message", "warning_message",
+    }
+    item_dicts = []
+    for item in classified_items:
+        d = {k: v for k, v in item.to_dict().items() if k in _TASK_ITEM_COLS}
         if d.get("target_name_matched") is None:
             d["target_name_matched"] = ""
+        item_dicts.append(d)
 
     await _item_repo.bulk_insert(session, task_id, item_dicts)
 

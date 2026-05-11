@@ -10,7 +10,7 @@ description: Use this skill when the main conversation needs to dispatch a codin
 ## 何时调用此 skill
 
 - 用户明示要派 aider（"派 aider 写 5 个测试"、"用 aider 跑批量改名"）
-- 主对话识别出 L1 任务，按 AGENTS.md § 八 速查表首选 aider+DeepSeek
+- 主对话识别出 L1 任务，按 DISPATCH.md § 八 速查表首选 aider+DeepSeek
 - 任务符合下列模式：写测试 / scaffold 重复样板 / 补 docstring / 改字段名 / 翻译注释
 
 **不要在这些情况调用**：
@@ -36,12 +36,12 @@ aider \
 
 **理由**：
 - `--model deepseek/deepseek-chat` — 强制走 DeepSeek，不要默认 Anthropic（违背成本初衷）
-- `--no-auto-commits` — **commit 权必须留给主对话**（参见 AGENTS.md 失败模式 I）
+- `--no-auto-commits` — **commit 权必须留给主对话**（参见 DISPATCH.md 失败模式 I）
 - `--yes` — 不进交互确认（主对话不能回答交互式提示）
 - `--no-stream` — stdout 一次性输出（主对话才能完整读到）
 - 显式文件路径 — 圈定可改范围，防 aider 自由发挥
 
-### 2. --message 内容遵循 AGENTS.md § 五 的 6 段模板
+### 2. --message 内容遵循 DISPATCH.md § 五 的 6 段模板
 
 写在 `--message` 字符串里时压缩成精炼的中文段落，但必须覆盖：
 - 任务目标（一句话）
@@ -56,7 +56,7 @@ aider \
 
 ## 调用流程
 
-按 AGENTS.md § 7.4.1 工作流：
+按 DISPATCH.md § 7.4.1 工作流：
 
 1. **写任务清单**：先在主对话里和用户确认要做什么、可改哪些文件
 2. **构造 Bash 命令**：按上面的强制规则拼好完整命令

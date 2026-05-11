@@ -16,7 +16,7 @@
 ## 项目导览
 
 > **完整设计**：[BLUEPRINT.md](./BLUEPRINT.md) — 项目北极星，所有重大决策的来源
-> **协作规范**：[AGENTS.md](./AGENTS.md) — 多 Agent 协作执行规范（主编排 Agent / 执行池 / 外部模型 / aider 的责任划分）
+> **协作规范**：[DISPATCH.md](./DISPATCH.md) — 多 Agent 协作执行规范（宿主共用）；[AGENTS.md](./AGENTS.md)（Codex 宿主）；[.claude/CLAUDE.md](./.claude/CLAUDE.md)（Claude Code 宿主）
 > **派工计划**：[docs/plans/](./docs/plans/) — 每个 Phase 的子任务清单与执行方分配
 > **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 > **架构决策记录**：[docs/ADR/](./docs/ADR/)

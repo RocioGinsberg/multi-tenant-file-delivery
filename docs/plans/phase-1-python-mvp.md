@@ -6,7 +6,9 @@
 > **关联 BLUEPRINT 章节**：§ 十 Phase 1
 > **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)、[0011 Classifier Core 与业务 Profile 分层](../ADR/0011-classification-profile-engine.md)
 
-> **执行方命名说明**：本文档最早按 Claude/Opus 语境起草。实际执行时按 [AGENTS.md](../../AGENTS.md) 的宿主无关规则解释：`主对话` / `Opus` 等价于当前主编排 Agent；`Sonnet subagent` 等价于 L2 worker；Codex 可作为主编排 Agent，也可把 L1/L2 任务派给 `spawn_agent`、MCP worker 或 aider。
+> **执行方命名说明**：实际执行时按 [DISPATCH.md](../../DISPATCH.md) 的宿主无关规则解释：`主对话` / `主编排 Agent` 等价当前宿主的编排层；L1 首选 `aider+DeepSeek`；L2 在 Claude Code 宿主用 `Agent(model="sonnet")`，在 Codex 宿主用 `spawn_agent + gpt-5.3-codex + medium`；L3 由主编排 Agent 亲自掌握。
+
+> **预算档位**：Phase 1 默认走低成本编排模式。主编排 Agent 主要负责 spec、派工 prompt、review diff、跑测试、失败诊断和 commit draft；只有 1.6 / 1.8 / 1.15 / 1.17 这类 L3/承重墙任务直接实现。安全、并发/race、状态机、接口签名、worker 连续失败或用户显式要求时，才确认升档到高档 Codex / 主编排 Agent 直接接手。
 
 ---
 
@@ -34,7 +36,7 @@
 ### 1.1 项目骨架
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：无
 - **范围**：
   - `control-plane/pyproject.toml`（uv 或 poetry，含 fastapi、uvicorn、sqlalchemy 2.0、aiosqlite、alembic、pydantic-settings、aioboto3、pytest、pytest-asyncio、httpx、ruff）
@@ -48,7 +50,7 @@
 ### 1.2 settings 配置
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/core/settings.py`：Pydantic Settings 读 .env
@@ -60,7 +62,7 @@
 ### 1.3 DB + 三张表 + alembic
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.1, 1.2
 - **范围**：
   - `control-plane/app/core/db.py`：SQLAlchemy 2.0 async + aiosqlite engine + sessionmaker
@@ -205,7 +207,7 @@
 ### 1.9 API 路由
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.4-1.8
 - **范围**：
   - `control-plane/app/api/tasks.py`：
@@ -257,7 +259,7 @@
 ### 1.14 端到端集成测试
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.9 全部完成 + MinIO 容器（1.16）
 - **范围**：
   - `control-plane/tests/test_e2e.py`
@@ -282,7 +284,7 @@
 ### 1.16 docker-compose for MinIO
 - **状态**：`[ ]`
 - **L 等级**：L2
-- **执行方**：L2 worker（默认 Sonnet；Codex worker 可替代）
+- **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：无（与 1.1-1.9 并行可做）
 - **范围**：
   - `deploy/docker-compose.yml`：minio + minio-init（自动建 bucket）
@@ -308,9 +310,9 @@
 | 执行方 | 任务数 | 任务编号 | 主要职责 |
 |---|---|---|---|
 | **主编排 Agent** | 4 | 1.6 / 1.8 / 1.15 / 1.17 | S3 流式上传内核、worker 编排、前端架构判断、收尾文档 |
-| **L2 worker（默认 Sonnet；Codex worker 可替代）** | 8 | 1.1 / 1.2 / 1.3 / **1.4 (TDD red+green)** / **1.5 (TDD red+green)** / **1.7 (TDD red+green)** / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos+测试、classifier+测试、SSE bus+测试、API、E2E、docker |
+| **L2 worker（Codex 宿主默认中档；Claude 宿主可用 Sonnet）** | 8 | 1.1 / 1.2 / 1.3 / **1.4 (TDD red+green)** / **1.5 (TDD red+green)** / **1.7 (TDD red+green)** / 1.9 / 1.14 / 1.16 | 项目骨架、settings、DB、repos+测试、classifier+测试、SSE bus+测试、API、E2E、docker |
 | **aider+DeepSeek** | 2 | 1.10 / 1.13 | Pydantic schema、S3 uploader 单测 |
-| **Codex** | 0 | — | Phase 2 起才用（数据面 Go） |
+| **高档 Codex / 主编排 Agent 直接实现** | 0（默认） | — | Phase 1 不默认升高档；仅在 L3、worker 连续失败、安全/并发/状态机风险出现时确认使用 |
 
 **TDD 任务额外开销**：
 - 1.4 / 1.5 / 1.7 各多一次 commit（red + green），主编排 Agent 多 1-2 次 review
@@ -372,7 +374,7 @@
 | **red** | 派 L2 worker 写测试代码（应全 fail） | L2 worker | `tests/test_X.py` 全 fail | `phase1(X.Y): test spec for X (red)` |
 | **green** | 派 L2 worker 写实现（测试不许改） | L2 worker | 实现代码 + 全部测试通过 | `phase1(X.Y): impl X (green)` |
 
-**主编排 Agent 强制纪律**（以 [AGENTS.md](../../AGENTS.md) 为准；历史 Claude 配置仅作补充）：
+**主编排 Agent 强制纪律**（以 [DISPATCH.md](../../DISPATCH.md) 为准；宿主特定规则见 `AGENTS.md`（Codex）或 `.claude/CLAUDE.md`（Claude Code））：
 - ❌ 测试与实现混 commit
 - ❌ TDD 任务派 aider 写测试（aider 适合 L1 量产单测如 1.13，但承重墙级契约必须 L2 worker）
 - ❌ 跳过用户 review spec

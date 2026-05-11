@@ -67,7 +67,7 @@ description: Use this skill when the user wants to drive a task using test-drive
 
 **首选 Sonnet subagent**（不是 aider！）—— 承重墙级测试质量比代码还关键，便宜模型不可控。
 
-派工 prompt 模板（按 AGENTS.md § 五 6 段）：
+派工 prompt 模板（按 DISPATCH.md § 五 6 段）：
 
 ```markdown
 ## 1. 任务目标
@@ -143,7 +143,7 @@ implementation. All tests intentionally failing.
 ## 2. 关键约束（不可违反）
 - ❌ **绝对禁止修改 tests/test_X.py 任何一行**——如发现测试有问题，停下来报告，不要自己改
 - ❌ 禁止用 mock 顶替真实实现
-- 实现风格遵循：BLUEPRINT 第 ? 节、AGENTS.md § 九 质量底线
+- 实现风格遵循：BLUEPRINT 第 ? 节、DISPATCH.md § 九 质量底线
 - 错误处理 / 流式 / 类型检查等参见 § 九
 
 ## 3. 上下文与参考
@@ -154,7 +154,7 @@ implementation. All tests intentionally failing.
 ## 4. 验收标准
 - pytest tests/test_X.py 全过
 - ruff check 无 error
-- 不引入未授权抽象（参见 AGENTS.md § 十 失败模式 C）
+- 不引入未授权抽象（参见 DISPATCH.md § 十 失败模式 C）
 
 ## 5. 输出格式约束
 - 不要 commit

@@ -20,14 +20,14 @@ func NewFileSpool(inboxDir, resultsDir string) *FileSpool {
 	return &FileSpool{InboxDir: inboxDir, ResultsDir: resultsDir}
 }
 
-func (s *FileSpool) Consume(ctx context.Context) ([]message.DeliveryTask, error) {
+func (s *FileSpool) Consume(ctx context.Context) ([]TaskMessage, error) {
 	_ = ctx
 	files, err := os.ReadDir(s.InboxDir)
 	if err != nil {
 		return nil, err
 	}
 
-	tasks := make([]message.DeliveryTask, 0, len(files))
+	tasks := make([]TaskMessage, 0, len(files))
 	for _, entry := range files {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -42,7 +42,7 @@ func (s *FileSpool) Consume(ctx context.Context) ([]message.DeliveryTask, error)
 		if err := json.Unmarshal(raw, &task); err != nil {
 			return nil, fmt.Errorf("decode %s: %w", path, err)
 		}
-		tasks = append(tasks, task)
+		tasks = append(tasks, NewTaskMessage(task))
 	}
 	return tasks, nil
 }

@@ -3,7 +3,7 @@
 高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
 
 ## 当前状态
-**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
+**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
 
 当前 worker 的本地闭环：
 1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
@@ -22,7 +22,7 @@ internal/
   message/            delivery task/result JSON schema
   sink/               Sink interface + mock / S3 sink
   source/             File source
-  transport/          Task/result transport interface + file spool
+  transport/          Task/result transport interface + file spool / Kafka
   pipeline/           文件处理编排
   worker/             inbox -> sink -> result 的 worker 主循环
 ```
@@ -56,6 +56,27 @@ go run ./cmd/worker \
   -s3-path-style=true
 ```
 
+Kafka transport（默认仍是 file-spool；需要本地 Kafka）：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -kafka-task-topic delivery.tasks.v1 \
+  -kafka-result-topic delivery.results.v1 \
+  -kafka-group-id data-plane-worker \
+  -sink mock
+```
+
+本地 Kafka / MinIO：
+```bash
+docker compose -f ../docker-compose.phase2.yml up -d
+```
+
+Kafka 真 broker 集成测试默认跳过；启动 Compose 后可手动开启：
+```bash
+RUN_DOCKER_TESTS=1 KAFKA_BROKERS=localhost:9092 go test ./internal/transport
+```
+
 ## 测试
 ```bash
 cd data-plane
@@ -73,6 +94,6 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 - `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
 
 ## 尚未实现
-- Kafka consumer / producer。
+- 控制面 Kafka producer / consumer。
 - S3 multipart、断点续传、平台层 dedup。
 - 并发调度和 backpressure。

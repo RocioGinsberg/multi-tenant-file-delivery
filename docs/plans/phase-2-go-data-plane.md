@@ -16,7 +16,9 @@
 - [x] 本地 bridge 覆盖：worker/CLI 读取 inbox JSON、执行 mock sink、写出 result JSON。
 - [x] 首个真实 sink adapter：S3 / MinIO 单段 `PutObject`。
 - [x] 抽象 task/result transport：当前实现 file-spool，Kafka 可替换此层。
-- [ ] Kafka transport 替换目录扫描。
+- [x] Go data-plane Kafka transport adapter + worker CLI 选择项。
+- [x] Docker Compose Kafka / MinIO scaffold 与 Go Kafka broker 集成测试（默认 skip）。
+- [ ] 控制面 Kafka producer / consumer。
 - [x] S3 / mock sink receipt 返回 SHA-256。
 - [x] `delivery.results.v1` 返回 item 级上传 receipt / error。
 - [x] 控制面本地 result consumer 可应用 `delivery.results.v1`，回写 task / item 状态。
@@ -33,7 +35,7 @@
 - `control-plane/app/api/tasks.py`：`DELIVERY_BACKEND=go-worker` 时发布任务消息并把 task 状态更新为 `queued`。
 - `data-plane/cmd/worker`：本地 worker CLI，默认读取 `/tmp/auto_upload_outbox/delivery.tasks.v1`。
 - `data-plane/internal/worker`：目录扫描、JSON decode、调用 pipeline、写 `delivery.results.v1` result；result item 明细带上传 receipt 或错误。
-- `data-plane/internal/transport`：定义 task/result transport 接口，当前 file-spool 实现负责目录扫描和 result JSON 写出。
+- `data-plane/internal/transport`：定义 task/result transport 接口，当前支持 file-spool 和 Kafka adapter；file-spool 仍是默认本地路径。
 - `data-plane/internal/pipeline`：只上传 pending 且 severity 为 ok/warning 的 item。
 - `data-plane/internal/source`：从控制面解压目录读取源文件。
 - `data-plane/internal/sink`：定义 `Sink` / `Source` 接口，当前实现 `MockSink` 和 S3 / MinIO 单段 PUT sink，receipt 返回 `key/size/sha256`。
@@ -41,6 +43,8 @@
 ## Verification
 - `GOCACHE=/tmp/smh_go_cache go test ./...`
 - `cd control-plane && uv run pytest tests/integration/test_phase2_bridge.py`
+- `docker compose -f docker-compose.phase2.yml up -d`
+- `cd data-plane && RUN_DOCKER_TESTS=1 KAFKA_BROKERS=localhost:9092 go test ./internal/transport`
 
 ## Assumptions
 - 分类实现继续参考 control plane 的 Phase 1 版本，不回退到 `_legacy` 业务耦合脚本。

@@ -83,3 +83,14 @@ func TestRunRejectsUnsupportedSink(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestRunRejectsKafkaTransportWithoutBrokers(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-transport", "kafka",
+		"-kafka-brokers", " , ",
+	}, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

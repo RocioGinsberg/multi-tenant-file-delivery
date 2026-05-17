@@ -46,8 +46,11 @@ func (w *Worker) Run(ctx context.Context) error {
 		return err
 	}
 
-	for _, task := range tasks {
-		if err := w.processTask(ctx, task); err != nil {
+	for _, taskMessage := range tasks {
+		if err := w.processTask(ctx, taskMessage.Task); err != nil {
+			return err
+		}
+		if err := taskMessage.Ack(ctx); err != nil {
 			return err
 		}
 	}

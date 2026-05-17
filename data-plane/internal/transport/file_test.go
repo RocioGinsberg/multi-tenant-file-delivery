@@ -42,7 +42,7 @@ func TestFileSpoolConsumeReadsTaskJSONFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("consume tasks: %v", err)
 	}
-	if len(tasks) != 1 || tasks[0].TaskID != "task-1" {
+	if len(tasks) != 1 || tasks[0].Task.TaskID != "task-1" {
 		t.Fatalf("unexpected tasks: %+v", tasks)
 	}
 }

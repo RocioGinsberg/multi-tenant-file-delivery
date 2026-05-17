@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.53
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.0
+	github.com/segmentio/kafka-go v0.4.48
 )
 
 require (
@@ -24,4 +25,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.20 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
+	github.com/klauspost/compress v1.15.9 // indirect
+	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 )

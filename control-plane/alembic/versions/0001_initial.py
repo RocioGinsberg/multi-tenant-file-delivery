@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("idempotency_key", sa.String(64), nullable=False),
         sa.Column("submission_label", sa.String(255), nullable=False, server_default=""),
         sa.Column("temp_dir", sa.String(512), nullable=False, server_default=""),
-        sa.Column("summary_json", sa.JSON, nullable=False, server_default="{}"),
+        sa.Column("summary_json", sa.JSON, nullable=False),
         sa.Column("created_by", sa.String(64), nullable=False, server_default="local-user"),
         sa.Column(
             "created_at",
@@ -77,7 +77,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(16), primary_key=True),
         sa.Column("task_id", sa.String(16), nullable=False),
         sa.Column("event_type", sa.String(64), nullable=False),
-        sa.Column("payload_json", sa.JSON, nullable=False, server_default="{}"),
+        sa.Column("payload_json", sa.JSON, nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

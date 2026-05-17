@@ -54,7 +54,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.1 MySQL compose 与配置
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - `deploy/docker-compose.yml` 增加 MySQL 服务、健康检查和初始化环境变量。
@@ -63,10 +63,19 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - `docker compose up -d mysql` 可启动。
   - `cd control-plane && alembic upgrade head` 可连接 MySQL 并建表。
+- **实际变更**：
+  - `deploy/docker-compose.yml`：新增 MySQL 8.4 服务、healthcheck 和 `mysql_data` volume。
+  - `control-plane/.env.example`：新增 MySQL `DATABASE_URL` 示例。
+  - `control-plane/pyproject.toml` / `uv.lock`：新增 `asyncmy` driver。
+- **验证**：
+  - `cd deploy && docker compose config`
+  - `cd deploy && docker compose up -d mysql`
+  - `cd deploy && docker compose ps mysql`
+  - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_settings.py`
 
 ### 3.2 MySQL migration 兼容性
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 检查现有 migration 在 MySQL 下的 JSON、DateTime、String、索引和默认值。
@@ -75,6 +84,12 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - MySQL 上 `alembic upgrade head` 成功。
   - SQLite 测试库仍可创建表并运行 repo 测试。
+- **实际变更**：
+  - `control-plane/alembic/versions/0001_initial.py`：移除 JSON 列的数据库层 default，避免 MySQL `JSON column can't have a default value`。
+- **验证**：
+  - `cd control-plane && DATABASE_URL='mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4' .venv/bin/python -m alembic upgrade head`
+  - `cd deploy && docker compose exec -T mysql mysql -ucontrol_plane -pcontrol_plane control_plane -e "SHOW TABLES;"`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_db.py`
 
 ### 3.3 数据层测试矩阵
 

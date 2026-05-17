@@ -520,7 +520,7 @@ file-delivery-platform/   ← 建议项目改名（更通用）
 - **完成定义**：相同的端到端流程，但上传环节由 Go worker 完成
 
 ### Phase 3：换上"真"数据层（3-4 天）
-- SQLite → PostgreSQL（用 alembic 做 schema migration）
+- SQLite → MySQL（用 alembic 做 schema migration）
 - 本地磁盘 → MinIO 暂存
 - **完成定义**：`docker compose up` 起全栈，跑通端到端
 

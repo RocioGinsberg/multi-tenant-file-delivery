@@ -1,9 +1,10 @@
 # Phase 3 — MySQL 数据层与 source reference 迁移
 
-> **状态**：Current（3.1-3.17 部分完成；后续继续拆分并发、benchmark 和完整 DLQ 实现）
+> **状态**：Done（3.1-3.8 已完成；3.x hardening 已拆到独立计划）
 > **目标**：把控制面数据层切到 MySQL，并按 RFC 0002 开始去除 data-plane 对本地临时目录的运行时依赖。
 > **完成定义**：本地 compose 可启动 MySQL / Kafka / MinIO；control-plane 使用 MySQL 跑通核心测试；任务发布支持 object source reference；Go worker 可从 staged object storage 读取源文件并完成上传结果回写。
 > **关联 RFC**：[0001 控制面 / 数据面分离与消息桥接](../RFC/0001-control-data-plane-bridge.md)、[0002 Stateless data-plane 与 source reference 迁移](../RFC/0002-stateless-data-plane-source-ref.md)
+> **后续计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
 
 ## Summary
 
@@ -12,7 +13,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - 数据层从 SQLite 开发形态升级到 MySQL 形态，稳定 migration、连接配置和本地 compose。
 - 源文件输入从 `temp_dir + src_path` 的本地路径模型，迁移到 durable object storage 上的 source reference 模型。
 
-这不是为了提前做复杂分布式，而是为后续 worker 集群、重试恢复、staging GC 和多实例部署扫清基础约束。
+这不是为了提前做复杂分布式，而是为后续 worker 集群、重试恢复、staging GC 和多实例部署扫清基础约束。Phase 3 只负责把基础数据层和 source reference 迁移链路打通；性能、GC、幂等和生产化验证进入 Phase 3.x。
 
 ## 一、先决决策（已确认 / 待确认）
 
@@ -208,102 +209,19 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
   - `data-plane/README.md`：补 `-source-mode object` worker 示例。
   - `docs/ARCHITECTURE.md`：补 source reference 写路径。
 
-### 3.9 Kafka source reference 端到端验证
+## 四、Phase 3.x 拆分边界
 
-- **状态**：`[x]`
-- **L 等级**：L2
-- **范围**：
-  - control-plane 将 schema_version=2 source reference task 发布到 Kafka。
-  - Go worker 使用 Kafka transport 和 object source mode 消费任务。
-  - Go worker 将 result 写回 Kafka。
-  - control-plane Kafka result consumer 回写 task / item 状态。
-- **验收**：
-  - 测试不依赖 control-plane 与 data-plane 共享本地解压目录。
-  - Kafka topic 使用测试唯一名，避免重跑时读取历史消息。
-- **实际变更**：
-  - `control-plane/tests/integration/test_phase2_bridge.py`：新增 source reference Kafka bridge round-trip。
-- **验证**：
-  - `cd deploy && docker compose up -d kafka minio minio-init`
-  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_source_reference_kafka_bridge_round_trip`
+Phase 3 的完成点是“本地 compose + MySQL + source reference + Go object source worker 基础链路可用”。从 Kafka 真实链路验证开始，后续任务不再继续追加到本文，统一进入 [Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)。
 
-### 3.10 Archive fetch cache
+Phase 3.x 覆盖：
 
-- **状态**：`[x]`
-- **L 等级**：L2
-- **范围**：
-  - data-plane object source resolver 按 `bucket/key` 缓存 staged archive bytes。
-  - 同一 task 多 item 解析时避免重复 `GetObject`。
-- **验收**：
-  - 同一 archive 内两个 item 解析只触发一次 object fetch。
-- **实际变更**：
-  - `data-plane/internal/source/resolver.go`：`ZipArchiveResolver` 增加 archive cache。
-  - `data-plane/internal/source/resolver_test.go`：新增 fetch count 回归测试。
-- **验证**：
-  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/source`
+- Kafka source reference 端到端验证。
+- archive fetch cache 和后续性能优化。
+- staging source metadata / GC / retention。
+- Kafka retry / DLQ / idempotency 语义。
+- worker 并发、benchmark、health/readiness。
 
-### 3.13 Staging source metadata
-
-- **状态**：`[x]`
-- **L 等级**：L1
-- **范围**：
-  - object source task 发布时，把 staging source metadata 写入 task event。
-  - 不新增表，先复用 append-only event log。
-- **验收**：
-  - `task_staged_source` event 包含 bucket/key/sha256/size。
-- **实际变更**：
-  - `control-plane/app/api/tasks.py`：object source 模式下追加 `task_staged_source` event。
-  - `control-plane/tests/integration/test_api_tasks.py`：覆盖 event payload。
-
-### 3.14 Staging object cleanup service
-
-- **状态**：`[x]`
-- **L 等级**：L2
-- **范围**：
-  - 扫描终态 task 的过期 `task_staged_source` event。
-  - 删除对应 S3 / MinIO object。
-  - 删除成功后写 `task_staged_source_deleted` event，避免重复删除。
-- **验收**：
-  - 未终态 task 不删。
-  - 未过 retention 不删。
-  - 已删除 source 不重复删。
-- **实际变更**：
-  - `control-plane/app/services/staging_cleanup.py`：新增 cleanup service。
-  - `control-plane/tests/integration/test_staging_cleanup.py`：覆盖删除、跳过、重复删除保护。
-
-### 3.15 GC command
-
-- **状态**：`[x]`
-- **L 等级**：L1
-- **范围**：
-  - 提供手动运行的 staging source cleanup job。
-  - 暂不引入 Celery / cron / scheduler 框架。
-- **验收**：
-  - 可通过 `python -m app.jobs.cleanup_staging_sources` 手动执行。
-- **实际变更**：
-  - `control-plane/app/jobs/cleanup_staging_sources.py`：新增 CLI job。
-  - `control-plane/tests/unit/test_cleanup_staging_job.py`：覆盖参数解析。
-
-### 3.16 Kafka retry / DLQ contract
-
-- **状态**：`[x]`
-- **L 等级**：L1
-- **范围**：
-  - 明确 Kafka ack、retry、DLQ 和幂等边界。
-  - 暂不实现 DLQ topic。
-- **实际变更**：
-  - `docs/RFC/0003-kafka-retry-dlq-idempotency.md`：新增生产化语义草案。
-
-### 3.17 Idempotency hardening
-
-- **状态**：`[~]`
-- **L 等级**：L2
-- **范围**：
-  - 当前阶段先覆盖 duplicate result apply 的 DB 最终状态稳定性。
-  - 后续继续补重复 task execution / sink 幂等 key 的端到端验证。
-- **实际变更**：
-  - `control-plane/tests/integration/test_delivery.py`：新增重复 result apply 回归测试。
-
-## 四、执行顺序建议
+## 五、执行顺序建议
 
 1. 先做 MySQL compose 与 migration smoke，保证基础设施可用。
 2. 再做 message v2 的 Python / Go 契约测试。
@@ -313,7 +231,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 不要一开始就改 worker 并发模型。先把“任意 worker 能读到源文件”这个前置条件解决。
 
-## 五、验证计划
+## 六、验证计划
 
 默认快速验证：
 
@@ -352,22 +270,22 @@ RUN_DOCKER_TESTS=1 go test ./...
 
 具体命令可随实现落地调整。
 
-## 六、风险与控制
+## 七、风险与控制
 
 - MySQL 与 SQLite 行为不一致：先补 smoke test，不一次性扩大测试矩阵。
 - v1 / v2 消息并存导致复杂度上升：所有新增字段必须有 round-trip 测试。
-- object source 读取 zip 内单文件可能引入重复下载：已补 worker 进程内 archive fetch cache；后续再做本地临时文件 cache / streaming。
-- staging object 泄露：已补 event metadata、cleanup service 和手动 GC job；后续可接 cron / K8s CronJob。
-- Kafka at-least-once 造成重复上传：已补 retry / DLQ / idempotency RFC 和 duplicate result apply 测试；后续补 duplicate task execution e2e。
+- object source 读取 zip 内单文件可能引入重复下载：进入 Phase 3.x 性能线处理。
+- staging object 泄露：进入 Phase 3.x GC 线处理。
+- Kafka at-least-once 造成重复上传：进入 Phase 3.x 生产化线处理。
 
-## 七、预算档位与派工
+## 八、预算档位与派工
 
 - **默认预算档位**：L1 文档和小配置；L2 compose、测试和普通适配；L3 消息契约、migration 兼容、SourceResolver 和跨语言闭环。
 - **主编排 Agent 职责**：规划、拆任务、review diff、跑测试、诊断失败、控制接口边界。
 - **升档触发**：数据库 schema、消息字段语义、跨语言兼容、worker 读取模型、Kafka ack / 幂等语义。
 - **单次派工文件上限**：默认 1-3 个文件；超过 5 个文件先拆任务。
 
-## 八、当前假设
+## 九、当前假设
 
 - MySQL 是 Phase 3 的主数据库。
 - MinIO 继续作为本地 S3-compatible object storage。

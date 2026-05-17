@@ -29,7 +29,7 @@
 
 ## Current Implementation
 - `control-plane/app/services/delivery.py`：构建 `DeliveryTaskMessage`，本地 outbox publisher 写入 `delivery.tasks.v1/{task_id}.json`。
-- `control-plane/app/services/delivery.py`：定义 `DeliveryResultMessage`，本地 result consumer 读取 `delivery.results.v1/*.json`，`apply_delivery_result()` 回写 task / item 状态。
+- `control-plane/app/services/delivery.py`：定义 `DeliveryResultMessage`，本地 result consumer 读取 `delivery.results.v1/*.json`，`consume_delivery_results()` 调用 `apply_delivery_result()` 回写 task / item 状态。
 - `control-plane/app/api/tasks.py`：`DELIVERY_BACKEND=go-worker` 时发布任务消息并把 task 状态更新为 `queued`。
 - `data-plane/cmd/worker`：本地 worker CLI，默认读取 `/tmp/auto_upload_outbox/delivery.tasks.v1`。
 - `data-plane/internal/worker`：目录扫描、JSON decode、调用 pipeline、写 `delivery.results.v1` result；result item 明细带上传 receipt 或错误。

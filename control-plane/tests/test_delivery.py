@@ -17,6 +17,7 @@ from app.services.delivery import (
     FileSpoolDeliveryResultConsumer,
     apply_delivery_result,
     build_delivery_task_message,
+    consume_delivery_results,
 )
 
 
@@ -203,3 +204,55 @@ async def test_file_spool_delivery_result_consumer_reads_messages(tmp_path):
     assert len(messages) == 1
     assert messages[0].task_id == "task-1"
     assert messages[0].items[0].key == "reports/ok.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_consume_delivery_results_applies_file_spool_messages(
+    session: AsyncSession,
+    tmp_path,
+):
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-consume", status="queued")
+    session.add(task)
+    await session.flush()
+    item = (
+        await item_repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "ok.xlsx", "filename": "ok.xlsx"}],
+        )
+    )[0]
+
+    result_dir = tmp_path / "delivery.results.v1"
+    result_dir.mkdir()
+    payload = {
+        "topic": "delivery.results.v1",
+        "task_id": task.id,
+        "status": "uploaded",
+        "uploaded": 1,
+        "failed": 0,
+        "processed": 1,
+        "started_at": "2026-05-17T11:59:00Z",
+        "ended_at": "2026-05-17T12:00:00Z",
+        "items": [
+            {
+                "item_id": item.id,
+                "status": "uploaded",
+                "key": "reports/ok.xlsx",
+                "size": 5,
+                "sha256": "abc",
+            },
+        ],
+    }
+    (result_dir / f"{task.id}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    summaries = await consume_delivery_results(
+        session,
+        FileSpoolDeliveryResultConsumer(tmp_path),
+    )
+    updated_items = await item_repo.list_by_task(session, task.id)
+
+    assert len(summaries) == 1
+    assert summaries[0].status == "uploaded"
+    assert task.status == "uploaded"
+    assert updated_items[0].upload_status == "uploaded"

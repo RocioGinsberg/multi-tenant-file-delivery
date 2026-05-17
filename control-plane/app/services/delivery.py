@@ -281,3 +281,14 @@ class FileSpoolDeliveryResultConsumer:
                 path.read_text(encoding="utf-8")
             ))
         return messages
+
+
+async def consume_delivery_results(
+    session: AsyncSession,
+    consumer: FileSpoolDeliveryResultConsumer,
+) -> list[DeliveryResultApplySummary]:
+    """Read pending local result messages and apply them in order."""
+    summaries: list[DeliveryResultApplySummary] = []
+    for message in await consumer.consume():
+        summaries.append(await apply_delivery_result(session, message))
+    return summaries

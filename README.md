@@ -41,7 +41,7 @@
 
 **Phase 0（完成）**：清理半成品脚手架，建立 monorepo 骨架。
 
-**下一步：Phase 1** —— Python 单体 MVP，FastAPI + SQLite + 进程内 worker，本地 MinIO 作为对端，把 HQ 写路径跑通。
+**下一步：Phase 2** —— 拆 Go 数据面，把分类后的上传执行从 Python 控制面迁到 Go worker。
 
 详细阶段计划见 [BLUEPRINT § 十](./BLUEPRINT.md#十实施阶段每阶段都有完成定义)。
 

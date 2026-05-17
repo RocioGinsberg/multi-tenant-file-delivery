@@ -3,7 +3,7 @@
 > **状态**：✅ 已完成（2026-05-11）
 > **预计工时**：4-6 天
 > **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
-> **关联 BLUEPRINT 章节**：§ 十 Phase 1
+> **关联路线图**：[ROADMAP Phase 1](../ROADMAP.md)
 > **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)、[0011 Classifier Core 与业务 Profile 分层](../ADR/0011-classification-profile-engine.md)
 
 > **执行方命名说明**：实际执行时按 [DISPATCH.md](../../DISPATCH.md) 的宿主无关规则解释：`主对话` / `主编排 Agent` 等价当前宿主的编排层；L1 首选 `aider+DeepSeek`；L2 在 Claude Code 宿主用 `Agent(model="sonnet")`，在 Codex 宿主用 `spawn_agent + gpt-5.3-codex + medium`；L3 由主编排 Agent 亲自掌握。
@@ -61,7 +61,7 @@
 - **依赖**：1.1, 1.2
 - **范围**：
   - `control-plane/app/core/db.py`：SQLAlchemy 2.0 async + aiosqlite engine + sessionmaker
-  - `control-plane/app/models/task.py`、`task_item.py`、`task_event.py`：三张表，参考 BLUEPRINT § 八（去掉 tenant_id / workspace_id 字段，简化版）
+  - `control-plane/app/models/task.py`、`task_item.py`、`task_event.py`：三张表，参考 PDR / ROADMAP 的 MVP 范围（去掉 tenant_id / workspace_id 字段，简化版）
   - `control-plane/alembic.ini` + `control-plane/alembic/env.py` + 第一份 migration
 - **完整字段表**（已定）：
   - `task`：`id, status, idempotency_key, source_archive_name, temp_dir, summary_json, created_by, created_at, confirmed_at, finished_at`
@@ -483,7 +483,7 @@ class ProgressBus:
 - **依赖**：所有任务完成
 - **范围**：
   - `control-plane/README.md` 改成完整启动指南（pyproject 装依赖 / .env 配置 / alembic / uvicorn / docker compose）
-  - BLUEPRINT.md 加 Phase 1 完成 changelog
+  - docs/plans 更新 Phase 1 完成 changelog
   - 本文档（phase-1-python-mvp.md）所有任务标 `[x]`，加"完成总结"小节
 
 ---

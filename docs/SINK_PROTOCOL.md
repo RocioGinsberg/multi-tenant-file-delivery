@@ -5,7 +5,7 @@
 
 ## 通用接口
 
-参见 BLUEPRINT § 4.1 / § 4.2 / § 4.3。
+Sink / Source 抽象的架构背景见 [ARCHITECTURE](./ARCHITECTURE.md) 和 [RFC](./RFC/)。
 
 ```go
 type Sink interface {

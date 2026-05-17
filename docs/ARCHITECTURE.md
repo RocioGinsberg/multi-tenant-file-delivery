@@ -1,7 +1,6 @@
-# Architecture（详细设计）
+# Architecture
 
-> 这是 [BLUEPRINT.md](../BLUEPRINT.md) 的补充说明文件，记录架构层面的细节决策与图示。
-> Phase 1 之后逐步填充。
+> 当前实现架构说明。产品范围见 [PDR](./PDR.md)，阶段进度见 [ROADMAP](./ROADMAP.md)，方案评审见 [RFC](./RFC/)。
 
 ## 目录
 - [写路径详细时序图](#写路径详细时序图)

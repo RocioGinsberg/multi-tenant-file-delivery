@@ -1,7 +1,7 @@
 # Benchmarks
 
 > Phase 7 之后填充。每组实验包含：场景描述、参数、结果数据、结论。
-> 参见 BLUEPRINT § 十一 的实验列表。
+> 压测目标来自 [ROADMAP](./ROADMAP.md) 的后续阶段和 [PDR](./PDR.md) 的成功标准。
 
 ## 待做实验
 - 平台层 dedup 命中率（HQ → N 子公司，首版重头戏）

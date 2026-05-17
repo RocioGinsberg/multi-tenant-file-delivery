@@ -78,5 +78,6 @@ Profile 是版本化业务包。Phase 1 只加载一个本地静态 profile，�
 ## 相关文档
 
 - [ADR 0010 — 项目起源叙事 & 首版后端选 S3/MinIO](0010-pivot-to-generic-object-storage.md)
-- [BLUEPRINT.md](../../BLUEPRINT.md)
+- [PDR](../PDR.md)
+- [ARCHITECTURE](../ARCHITECTURE.md)
 - [Phase 1 计划](../plans/phase-1-python-mvp.md)

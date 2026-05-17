@@ -15,13 +15,14 @@
 
 ## 项目导览
 
-> **完整设计**：[BLUEPRINT.md](./BLUEPRINT.md) — 项目北极星，所有重大决策的来源
-> **协作规范**：[DISPATCH.md](./DISPATCH.md) — 多 Agent 协作执行规范（宿主共用）；[AGENTS.md](./AGENTS.md)（Codex 宿主）；[.claude/CLAUDE.md](./.claude/CLAUDE.md)（Claude Code 宿主）
-> **派工计划**：[docs/plans/](./docs/plans/) — 每个 Phase 的子任务清单与执行方分配
+> **文档总索引**：[docs/README.md](./docs/README.md)
+> **产品需求（PDR）**：[docs/PDR.md](./docs/PDR.md)
+> **路线图**：[docs/ROADMAP.md](./docs/ROADMAP.md)
 > **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+> **数据模型**：[docs/DATA_MODEL.md](./docs/DATA_MODEL.md)
+> **技术方案 RFC**：[docs/RFC/](./docs/RFC/)
 > **架构决策记录**：[docs/ADR/](./docs/ADR/)
-> **Sink 协议规范**：[docs/SINK_PROTOCOL.md](./docs/SINK_PROTOCOL.md)
-> **性能基准**：[docs/BENCHMARKS.md](./docs/BENCHMARKS.md)
+> **协作规范**：[DISPATCH.md](./DISPATCH.md)；[AGENTS.md](./AGENTS.md)
 
 ## Monorepo 布局
 
@@ -33,8 +34,8 @@
 ├── web/                   前端（HQ 上传台 + 子公司观测窗口）
 ├── deploy/                docker-compose、Grafana、Prometheus、OTel 配置
 ├── proto/                 跨语言消息/接口定义（备用，主用 Kafka JSON）
-├── docs/                  架构文档与 ADR
-└── BLUEPRINT.md           项目蓝图
+├── docs/                  PDR / RFC / ADR / Roadmap / Data Model / Plans
+└── BLUEPRINT.md           兼容入口，指向 docs/
 ```
 
 ## 当前阶段
@@ -43,9 +44,9 @@
 
 **Phase 1（完成）**：Python 控制面 MVP，包含任务创建、分类、确认、Python 直传、repo/API/e2e 测试。
 
-**Phase 2（进行中）**：Go 数据面已完成本地 outbox bridge scaffold。控制面可在 `go-worker` 模式下写入 `delivery.tasks.v1` JSON，Go worker 可读取任务、执行 mock sink pipeline，并写出 `delivery.results.v1` 结果。
+**Phase 2（完成）**：Go 数据面、file-spool / Kafka transport、S3 / MinIO 单段 PUT、结果回写、跨语言集成验证已完成。
 
-详细阶段计划见 [BLUEPRINT § 十](./BLUEPRINT.md#十实施阶段每阶段都有完成定义)。
+详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 
 ## 回滚
 

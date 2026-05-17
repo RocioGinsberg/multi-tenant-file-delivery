@@ -1,6 +1,6 @@
 # Phase 3 — MySQL 数据层与 source reference 迁移
 
-> **状态**：Planned
+> **状态**：Current（3.1-3.8 已完成；后续可继续拆分性能、GC 和生产化任务）
 > **目标**：把控制面数据层切到 MySQL，并按 RFC 0002 开始去除 data-plane 对本地临时目录的运行时依赖。
 > **完成定义**：本地 compose 可启动 MySQL / Kafka / MinIO；control-plane 使用 MySQL 跑通核心测试；任务发布支持 object source reference；Go worker 可从 staged object storage 读取源文件并完成上传结果回写。
 > **关联 RFC**：[0001 控制面 / 数据面分离与消息桥接](../RFC/0001-control-data-plane-bridge.md)、[0002 Stateless data-plane 与 source reference 迁移](../RFC/0002-stateless-data-plane-source-ref.md)
@@ -194,7 +194,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.8 文档和运行手册
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 更新 `README.md`、`control-plane/README.md`、`data-plane/README.md`。
@@ -202,6 +202,11 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
   - 记录 MySQL 和 source reference 的本地启动命令。
 - **验收**：
   - 新开发者能按 README 起 MySQL / Kafka / MinIO 并跑通最小链路。
+- **实际变更**：
+  - `README.md`：标注 Phase 3 进行中能力。
+  - `control-plane/README.md`：补 MySQL、staging bucket、source mode 和测试命令。
+  - `data-plane/README.md`：补 `-source-mode object` worker 示例。
+  - `docs/ARCHITECTURE.md`：补 source reference 写路径。
 
 ## 四、执行顺序建议
 

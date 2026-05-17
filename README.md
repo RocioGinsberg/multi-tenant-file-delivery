@@ -46,6 +46,8 @@
 
 **Phase 2（完成）**：Go 数据面、file-spool / Kafka transport、S3 / MinIO 单段 PUT、结果回写、跨语言集成验证已完成。
 
+**Phase 3（进行中）**：MySQL 数据层已接入本地 compose；source reference 迁移已开始，control-plane 可把原始 zip 暂存到 MinIO staging bucket，Go worker 可用 `-source-mode object` 从 staged archive 读取源文件。
+
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 
 ## 回滚

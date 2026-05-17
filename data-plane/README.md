@@ -67,10 +67,25 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+Object source reference（从 MinIO / S3 staged archive 读取源文件）：
+```bash
+go run ./cmd/worker \
+  -transport file \
+  -inbox /tmp/auto_upload_outbox/delivery.tasks.v1 \
+  -results /tmp/auto_upload_outbox/delivery.results.v1 \
+  -source-mode object \
+  -s3-endpoint http://localhost:9000 \
+  -s3-region us-east-1 \
+  -s3-access-key-id minioadmin \
+  -s3-secret-access-key minioadmin \
+  -s3-path-style=true \
+  -sink mock
+```
+
 本地 Kafka / MinIO：
 ```bash
 cd ../deploy
-docker compose up -d kafka minio minio-init
+docker compose up -d mysql kafka minio minio-init
 ```
 
 Kafka 真 broker 集成测试默认跳过；启动 Compose 后可手动开启：
@@ -88,11 +103,12 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 - `cmd/worker`：CLI 参数 -> inbox -> result JSON 的本地 bridge。
 - `internal/message`：任务消息 JSON round-trip 和 metadata 兼容。
 - `internal/source`：文件路径、打开、大小、缺失文件错误。
+- `internal/source`：file resolver、zip archive object resolver、S3 object fetcher。
 - `internal/sink`：mock sink、S3 单段 PutObject 请求和配置校验。
 - `internal/transport`：file-spool 任务读取和结果写出。
 - `internal/pipeline`：可上传 item、跳过不可上传 item、部分失败。
 - `internal/worker`：本地 inbox -> mock sink -> result JSON 闭环。
-- `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
+- `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox / source reference -> Go worker -> Python result consumer 的跨语言闭环。
 
 ## 后续阶段
 - S3 multipart、断点续传、平台层 dedup。

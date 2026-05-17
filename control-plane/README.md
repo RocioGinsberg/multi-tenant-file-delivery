@@ -10,9 +10,9 @@ app/
   core/          配置（pydantic-settings）、数据库（SQLAlchemy 2.0 async）
   models/        SQLAlchemy ORM 模型（task / task_item / task_event）
   schemas/       Pydantic v2 response schemas
-  services/      classifier、classification_profile、s3_uploader、progress_bus、task_runner
+  services/      classifier、classification_profile、delivery、staging_source、progress_bus、task_runner
   repos/         数据访问层（task_repo / item_repo / event_repo）
-alembic/         DB migrations（SQLite dev，PostgreSQL prod）
+alembic/         DB migrations（SQLite test，MySQL dev/prod target）
 tests/           pytest 单测 + e2e 集成测试
 _legacy/         v0 历史代码（参考用，不参与构建）
 profiles/        静态 classification profile JSON 文件
@@ -40,12 +40,14 @@ cp .env.example .env
 |---|---|---|
 | `S3_ENDPOINT_URL` | `http://localhost:9000` | MinIO API 端口 |
 | `S3_BUCKET_NAME` | `auto-upload-dev` | 目标 bucket |
+| `STAGING_BUCKET_NAME` | `auto-upload-staging` | source reference 暂存 bucket |
 | `S3_ACCESS_KEY_ID` | `minioadmin` | MinIO root user |
 | `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
 | `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
 | `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
+| `DELIVERY_SOURCE_MODE` | `file` | `go-worker` 模式下的 source：`file` 或 `object` |
 | `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker 地址 |
 | `KAFKA_TASK_TOPIC` | `delivery.tasks.v1` | 控制面发布任务 topic |
@@ -57,14 +59,14 @@ cp .env.example .env
 ```bash
 cd ../deploy
 docker compose up -d minio minio-init
-# minio-init 自动创建 auto-upload-dev bucket，约 10 秒完成
+# minio-init 自动创建 auto-upload-dev / auto-upload-staging bucket，约 10 秒完成
 # Console: http://localhost:9001  用户名/密码: minioadmin/minioadmin
 ```
 
-Phase 2 Kafka transport 验证时额外启动：
+Phase 3 MySQL / Kafka / MinIO 全栈验证：
 
 ```bash
-docker compose up -d kafka
+docker compose up -d mysql kafka minio minio-init
 ```
 
 Kafka Docker 集成测试：
@@ -79,6 +81,13 @@ RUN_DOCKER_TESTS=1 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 ```bash
 cd control-plane
 alembic upgrade head
+```
+
+MySQL 本地 compose：
+
+```bash
+DATABASE_URL='mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4' \
+  .venv/bin/python -m alembic upgrade head
 ```
 
 ### 5. 启动 API 服务
@@ -122,6 +131,13 @@ pytest tests/ -v
 
 # 只跑 e2e
 pytest tests/e2e -v -m e2e
+
+# MySQL smoke（需要 deploy/docker-compose.yml mysql running）
+RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker.py
+
+# source reference bridge（需要 MinIO running）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
+  tests/integration/test_phase2_bridge.py::test_source_reference_file_spool_bridge_round_trip
 ```
 
 当前测试按 `unit / integration / e2e` 分层组织。

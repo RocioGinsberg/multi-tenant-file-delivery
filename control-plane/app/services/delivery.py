@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repos.event_repo import EventRepo
+from app.repos.item_repo import ItemRepo
+from app.repos.task_repo import TaskRepo
 
 
 class DeliveryItemSpec(BaseModel):
@@ -56,6 +61,50 @@ class DeliveryTaskMessage(BaseModel):
         return self.model_dump(mode="json")
 
 
+class DeliveryResultItemSpec(BaseModel):
+    """One data-plane item result from ``delivery.results.v1``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str
+    status: str
+    key: str | None = None
+    size: int | None = None
+    sha256: str | None = None
+    error: str | None = None
+
+
+class DeliveryResultMessage(BaseModel):
+    """Data-plane to control-plane result contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = "delivery.results.v1"
+    task_id: str
+    status: str
+    uploaded: int = 0
+    failed: int = 0
+    processed: int = 0
+    items: list[DeliveryResultItemSpec] = Field(default_factory=list)
+    started_at: datetime
+    ended_at: datetime
+    error: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", exclude_none=True)
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryResultApplySummary:
+    task_id: str
+    status: str
+    uploaded: int
+    failed: int
+    processed: int
+    applied_items: int
+    missing_items: list[str]
+
+
 def build_delivery_task_message(
     *,
     task,
@@ -103,6 +152,85 @@ def build_delivery_task_message(
     )
 
 
+async def apply_delivery_result(
+    session: AsyncSession,
+    result: DeliveryResultMessage | dict[str, Any],
+    *,
+    task_repo: TaskRepo | None = None,
+    item_repo: ItemRepo | None = None,
+    event_repo: EventRepo | None = None,
+) -> DeliveryResultApplySummary:
+    """Apply a data-plane result event to persisted task/item state.
+
+    Transaction ownership stays with the caller. This makes the same function
+    usable from local file-spool polling and, later, Kafka consumption.
+    """
+    message = (
+        result
+        if isinstance(result, DeliveryResultMessage)
+        else DeliveryResultMessage.model_validate(result)
+    )
+    task_repo = task_repo or TaskRepo()
+    item_repo = item_repo or ItemRepo()
+    event_repo = event_repo or EventRepo()
+
+    applied_items = 0
+    missing_items: list[str] = []
+    for item in message.items:
+        if item.status == "uploaded":
+            updated = await item_repo.update_upload_status(
+                session,
+                item.item_id,
+                "uploaded",
+                uploaded_at=message.ended_at,
+            )
+        elif item.status == "failed":
+            updated = await item_repo.update_upload_status(
+                session,
+                item.item_id,
+                "failed",
+                upload_error=(item.error or message.error or "upload failed")[:1000],
+            )
+        else:
+            missing_items.append(item.item_id)
+            continue
+
+        if updated is None:
+            missing_items.append(item.item_id)
+        else:
+            applied_items += 1
+
+    await task_repo.update_status(
+        session,
+        message.task_id,
+        message.status,
+        finished_at=message.ended_at,
+    )
+    await event_repo.append(
+        session,
+        message.task_id,
+        "delivery_result_applied",
+        {
+            "topic": message.topic,
+            "status": message.status,
+            "uploaded": message.uploaded,
+            "failed": message.failed,
+            "processed": message.processed,
+            "applied_items": applied_items,
+            "missing_items": missing_items,
+        },
+    )
+    return DeliveryResultApplySummary(
+        task_id=message.task_id,
+        status=message.status,
+        uploaded=message.uploaded,
+        failed=message.failed,
+        processed=message.processed,
+        applied_items=applied_items,
+        missing_items=missing_items,
+    )
+
+
 @dataclass(slots=True)
 class FileSpoolDeliveryPublisher:
     """Durable local stand-in for the Phase 2 Kafka topic bridge.
@@ -130,3 +258,26 @@ class FileSpoolDeliveryPublisher:
         )
         tmp_path.replace(final_path)
         return final_path
+
+
+@dataclass(slots=True)
+class FileSpoolDeliveryResultConsumer:
+    """Local file-spool reader for ``delivery.results.v1`` result events."""
+
+    base_dir: Path | str
+    result_topic: str = "delivery.results.v1"
+    _result_dir: Path = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._result_dir = Path(self.base_dir) / self.result_topic
+
+    async def consume(self) -> list[DeliveryResultMessage]:
+        if not self._result_dir.exists():
+            return []
+
+        messages: list[DeliveryResultMessage] = []
+        for path in sorted(self._result_dir.glob("*.json")):
+            messages.append(DeliveryResultMessage.model_validate_json(
+                path.read_text(encoding="utf-8")
+            ))
+        return messages

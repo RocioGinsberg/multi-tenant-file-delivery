@@ -13,6 +13,7 @@
 5. 调用 `Sink.Upload`；当前支持 `mock` 和 `s3`。
 6. sink 返回 `key/size/sha256` receipt。
 7. worker 写出 `delivery.results.v1/{task_id}.json`，其中 `items[]` 带 item 级 `status/key/size/sha256/error`。
+8. control-plane 可通过本地 result consumer 读取 result JSON，并回写 task / item 状态。
 
 ## 目录
 ```

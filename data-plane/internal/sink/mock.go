@@ -2,6 +2,8 @@ package sink
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
@@ -36,7 +38,8 @@ func (s *MockSink) Upload(ctx context.Context, src Source, meta Meta) (Receipt, 
 	s.objects[meta.DstPath] = data
 	s.mu.Unlock()
 
-	return Receipt{Key: meta.DstPath, Size: int64(len(data))}, nil
+	sum := sha256.Sum256(data)
+	return Receipt{Key: meta.DstPath, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}, nil
 }
 
 func (s *MockSink) Close() error { return nil }

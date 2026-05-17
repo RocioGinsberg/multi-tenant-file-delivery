@@ -17,7 +17,8 @@
 - [x] 首个真实 sink adapter：S3 / MinIO 单段 `PutObject`。
 - [x] 抽象 task/result transport：当前实现 file-spool，Kafka 可替换此层。
 - [ ] Kafka transport 替换目录扫描。
-- [ ] S3 multipart / resume / checksum / dedup。
+- [x] S3 / mock sink receipt 返回 SHA-256。
+- [ ] S3 multipart / resume / dedup。
 
 ## Test Plan
 - [x] 控制面单测：消息构建、outbox 写入、go-worker 模式路由。
@@ -32,7 +33,7 @@
 - `data-plane/internal/transport`：定义 task/result transport 接口，当前 file-spool 实现负责目录扫描和 result JSON 写出。
 - `data-plane/internal/pipeline`：只上传 pending 且 severity 为 ok/warning 的 item。
 - `data-plane/internal/source`：从控制面解压目录读取源文件。
-- `data-plane/internal/sink`：定义 `Sink` / `Source` 接口，当前实现 `MockSink` 和 S3 / MinIO 单段 PUT sink。
+- `data-plane/internal/sink`：定义 `Sink` / `Source` 接口，当前实现 `MockSink` 和 S3 / MinIO 单段 PUT sink，receipt 返回 `key/size/sha256`。
 
 ## Verification
 - `GOCACHE=/tmp/smh_go_cache go test ./...`

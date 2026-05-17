@@ -12,8 +12,9 @@ type Meta struct {
 }
 
 type Receipt struct {
-	Key  string
-	Size int64
+	Key    string
+	Size   int64
+	SHA256 string
 }
 
 // Source is the byte-provider contract for sink adapters. Later S3-staged or

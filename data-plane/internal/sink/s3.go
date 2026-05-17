@@ -2,7 +2,10 @@ package sink
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -34,6 +37,7 @@ func NewS3Sink(ctx context.Context, cfg S3Config) (*S3Sink, error) {
 
 	loadOptions := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.Region),
+		config.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
 	}
 	if cfg.AccessKeyID != "" || cfg.SecretAccessKey != "" {
 		loadOptions = append(loadOptions, config.WithCredentialsProvider(
@@ -62,23 +66,37 @@ func (s *S3Sink) Upload(ctx context.Context, src Source, meta Meta) (Receipt, er
 	if err != nil {
 		return Receipt{}, err
 	}
-	defer reader.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, reader); err != nil {
+		reader.Close()
+		return Receipt{}, fmt.Errorf("hash source %q: %w", src.Path(), err)
+	}
+	if err := reader.Close(); err != nil {
+		return Receipt{}, fmt.Errorf("close source %q: %w", src.Path(), err)
+	}
 
 	size, err := src.Size()
 	if err != nil {
 		return Receipt{}, err
 	}
 
+	body, err := src.Open()
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer body.Close()
+
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(meta.DstPath),
-		Body:          reader,
+		Body:          body,
 		ContentLength: aws.Int64(size),
 	})
 	if err != nil {
 		return Receipt{}, fmt.Errorf("put s3 object %q: %w", meta.DstPath, err)
 	}
-	return Receipt{Key: meta.DstPath, Size: size}, nil
+	return Receipt{Key: meta.DstPath, Size: size, SHA256: hex.EncodeToString(hash.Sum(nil))}, nil
 }
 
 func (s *S3Sink) Close() error { return nil }

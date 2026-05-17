@@ -3,7 +3,7 @@
 高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
 
 ## 当前状态
-**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、transport 抽象，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
+**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
 
 当前 worker 的本地闭环：
 1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
@@ -11,7 +11,8 @@
 3. 过滤 `upload_status=pending` 且 `severity=ok/warning` 的 item。
 4. 用 `FileSource` 从 `temp_dir + src_path` 打开文件。
 5. 调用 `Sink.Upload`；当前支持 `mock` 和 `s3`。
-6. 写出 `delivery.results.v1/{task_id}.json`。
+6. sink 返回 `key/size/sha256` receipt，作为后续结果消息和平台层 dedup 的基础。
+7. 写出 `delivery.results.v1/{task_id}.json`。
 
 ## 目录
 ```
@@ -71,5 +72,5 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 
 ## 尚未实现
 - Kafka consumer / producer。
-- S3 multipart、断点续传、checksum / 平台层 dedup。
+- S3 multipart、断点续传、平台层 dedup。
 - 并发调度和 backpressure。

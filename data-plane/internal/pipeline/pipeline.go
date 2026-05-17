@@ -19,6 +19,15 @@ type Result struct {
 // ProcessTask is deliberately narrow: it trusts the control plane's
 // classification output and only moves bytes for uploadable items.
 func ProcessTask(ctx context.Context, task message.DeliveryTask, sinkImpl sink.Sink) (Result, error) {
+	return ProcessTaskWithResolver(ctx, task, sinkImpl, source.NewFileResolver())
+}
+
+func ProcessTaskWithResolver(
+	ctx context.Context,
+	task message.DeliveryTask,
+	sinkImpl sink.Sink,
+	resolver source.Resolver,
+) (Result, error) {
 	result := Result{TaskID: task.TaskID}
 
 	for _, item := range task.Items {
@@ -29,7 +38,16 @@ func ProcessTask(ctx context.Context, task message.DeliveryTask, sinkImpl sink.S
 			continue
 		}
 
-		src := source.NewFileSource(task.TempDir, item.SrcPath)
+		src, err := resolver.Resolve(ctx, task, item)
+		if err != nil {
+			result.Failed++
+			result.Items = append(result.Items, message.DeliveryResultItem{
+				ItemID: item.ItemID,
+				Status: "failed",
+				Error:  err.Error(),
+			})
+			continue
+		}
 		receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{
 			TaskID:  task.TaskID,
 			ItemID:  item.ItemID,

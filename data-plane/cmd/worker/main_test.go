@@ -84,6 +84,14 @@ func TestRunRejectsUnsupportedSink(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnsupportedSourceMode(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"-source-mode", "missing"}, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestRunRejectsKafkaTransportWithoutBrokers(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run(context.Background(), []string{

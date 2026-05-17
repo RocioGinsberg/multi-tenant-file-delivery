@@ -7,6 +7,7 @@ import (
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/pipeline"
 	"smh_auto_upload/data-plane/internal/sink"
+	"smh_auto_upload/data-plane/internal/source"
 	"smh_auto_upload/data-plane/internal/transport"
 )
 
@@ -20,6 +21,7 @@ type Config struct {
 type Worker struct {
 	cfg     Config
 	sink    sink.Sink
+	source  source.Resolver
 	tasks   transport.TaskConsumer
 	results transport.ResultProducer
 }
@@ -35,7 +37,17 @@ func NewWithTransport(
 	tasks transport.TaskConsumer,
 	results transport.ResultProducer,
 ) *Worker {
-	return &Worker{cfg: cfg, sink: sinkImpl, tasks: tasks, results: results}
+	return NewWithTransportAndResolver(cfg, sinkImpl, source.NewFileResolver(), tasks, results)
+}
+
+func NewWithTransportAndResolver(
+	cfg Config,
+	sinkImpl sink.Sink,
+	sourceResolver source.Resolver,
+	tasks transport.TaskConsumer,
+	results transport.ResultProducer,
+) *Worker {
+	return &Worker{cfg: cfg, sink: sinkImpl, source: sourceResolver, tasks: tasks, results: results}
 }
 
 // Run processes tasks from the configured transport. Kafka can replace the
@@ -66,7 +78,7 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 		StartedAt: started,
 	}
 
-	pipelineResult, err := pipeline.ProcessTask(ctx, task, w.sink)
+	pipelineResult, err := pipeline.ProcessTaskWithResolver(ctx, task, w.sink, w.source)
 	result.Uploaded = pipelineResult.Uploaded
 	result.Failed = pipelineResult.Failed
 	result.Processed = len(task.Items)

@@ -153,7 +153,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.6 Data-plane SourceResolver
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 抽象 `SourceResolver`，按任务 source 打开 item source。
@@ -163,6 +163,13 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - Go 单测覆盖 v1 file resolver 和 v2 object resolver。
   - mock/object source 可在无共享本地目录情况下跑通 pipeline。
+- **实际变更**：
+  - `data-plane/internal/source`：新增 `Resolver`、`FileResolver`、`ZipArchiveResolver`、`MemorySource` 和 S3 object fetcher。
+  - `data-plane/internal/pipeline`：新增 `ProcessTaskWithResolver()`，默认 `ProcessTask()` 仍使用 file resolver。
+  - `data-plane/internal/worker`：支持注入 source resolver。
+  - `data-plane/cmd/worker`：新增 `-source-mode file|object`，object 模式使用 S3 / MinIO staged archive。
+- **验证**：
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...`
 
 ### 3.7 跨语言 source reference 集成测试
 

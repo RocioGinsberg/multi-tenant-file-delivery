@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"smh_auto_upload/data-plane/internal/sink"
+	"smh_auto_upload/data-plane/internal/source"
 	"smh_auto_upload/data-plane/internal/transport"
 	"smh_auto_upload/data-plane/internal/worker"
 )
@@ -39,6 +40,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	s3AccessKey := flags.String("s3-access-key-id", "minioadmin", "S3 access key ID for s3 sink")
 	s3SecretKey := flags.String("s3-secret-access-key", "minioadmin", "S3 secret access key for s3 sink")
 	s3PathStyle := flags.Bool("s3-path-style", true, "use path-style addressing for S3-compatible sinks")
+	sourceMode := flags.String("source-mode", "file", "source resolver mode: file, object")
 	once := flags.Bool("once", true, "process current inbox contents once and exit")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -75,6 +77,25 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		Once:       *once,
 	}
 
+	var sourceResolver source.Resolver = source.NewFileResolver()
+	switch *sourceMode {
+	case "file":
+	case "object":
+		fetcher, err := source.NewS3ObjectFetcher(ctx, source.S3Config{
+			Endpoint:        *s3Endpoint,
+			Region:          *s3Region,
+			AccessKeyID:     *s3AccessKey,
+			SecretAccessKey: *s3SecretKey,
+			UsePathStyle:    *s3PathStyle,
+		})
+		if err != nil {
+			return fmt.Errorf("create source fetcher: %w", err)
+		}
+		sourceResolver = source.NewZipArchiveResolver(fetcher)
+	default:
+		return fmt.Errorf("unsupported source mode %q", *sourceMode)
+	}
+
 	var taskConsumer transport.TaskConsumer
 	var resultProducer transport.ResultProducer
 	switch *transportName {
@@ -106,7 +127,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		return fmt.Errorf("unsupported transport %q", *transportName)
 	}
 
-	w := worker.NewWithTransport(cfg, sinkImpl, taskConsumer, resultProducer)
+	w := worker.NewWithTransportAndResolver(cfg, sinkImpl, sourceResolver, taskConsumer, resultProducer)
 
 	return w.Run(ctx)
 }

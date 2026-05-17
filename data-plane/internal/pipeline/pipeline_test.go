@@ -8,6 +8,7 @@ import (
 
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/sink"
+	"smh_auto_upload/data-plane/internal/source"
 )
 
 func TestProcessTaskUploadsPendingItems(t *testing.T) {
@@ -100,4 +101,46 @@ func TestProcessTaskPartialFailureReturnsError(t *testing.T) {
 	if len(result.Items) != 1 || result.Items[0].ItemID != "item-1" || result.Items[0].Status != "failed" || result.Items[0].Error == "" {
 		t.Fatalf("unexpected item result: %+v", result.Items)
 	}
+}
+
+func TestProcessTaskWithResolverUploadsWithoutTempDir(t *testing.T) {
+	task := message.DeliveryTask{
+		TaskID: "task-source",
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SourcePath:   "report.txt",
+			DstPath:      "reports/report.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+
+	mockSink := sink.NewMockSink()
+	result, err := ProcessTaskWithResolver(
+		context.Background(),
+		task,
+		mockSink,
+		staticResolver{src: source.NewMemorySource("memory://report.txt", []byte("hello"))},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Uploaded != 1 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	data, ok := mockSink.Object("reports/report.txt")
+	if !ok {
+		t.Fatal("expected uploaded object")
+	}
+	if string(data) != "hello" {
+		t.Fatalf("unexpected content: %q", string(data))
+	}
+}
+
+type staticResolver struct {
+	src source.Source
+}
+
+func (r staticResolver) Resolve(context.Context, message.DeliveryTask, message.DeliveryItem) (source.Source, error) {
+	return r.src, nil
 }

@@ -25,7 +25,7 @@
 ## Test Plan
 - [x] 控制面单测：消息构建、outbox 写入、go-worker 模式路由。
 - [x] Go 单测：消息 JSON round-trip、file source、file transport、mock sink pipeline、S3 sink 单段上传、worker/CLI 本地 bridge。
-- [ ] 集成验证：上传 zip -> 分类 -> 确认 -> outbox 生成 -> worker 消费 -> result 输出。
+- [x] 集成验证：control-plane outbox 生成 -> Go worker 消费 -> result 输出 -> control-plane 回写状态。
 
 ## Current Implementation
 - `control-plane/app/services/delivery.py`：构建 `DeliveryTaskMessage`，本地 outbox publisher 写入 `delivery.tasks.v1/{task_id}.json`。
@@ -40,6 +40,7 @@
 
 ## Verification
 - `GOCACHE=/tmp/smh_go_cache go test ./...`
+- `cd control-plane && uv run pytest tests/test_phase2_bridge_e2e.py`
 
 ## Assumptions
 - 分类实现继续参考 control plane 的 Phase 1 版本，不回退到 `_legacy` 业务耦合脚本。

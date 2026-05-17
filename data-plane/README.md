@@ -70,6 +70,7 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 - `internal/transport`：file-spool 任务读取和结果写出。
 - `internal/pipeline`：可上传 item、跳过不可上传 item、部分失败。
 - `internal/worker`：本地 inbox -> mock sink -> result JSON 闭环。
+- `control-plane/tests/test_phase2_bridge_e2e.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
 
 ## 尚未实现
 - Kafka consumer / producer。

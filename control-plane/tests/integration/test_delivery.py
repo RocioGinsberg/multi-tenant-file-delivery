@@ -13,6 +13,7 @@ from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.services.delivery import (
     DeliveryResultMessage,
+    DeliverySourceReference,
     FileSpoolDeliveryPublisher,
     FileSpoolDeliveryResultConsumer,
     KafkaDeliveryPublisher,
@@ -90,6 +91,53 @@ async def test_build_delivery_task_message_filters_uploadable_items():
     assert payload["bucket_name"] == "auto-upload-dev"
     assert len(payload["items"]) == 1
     assert payload["items"][0]["dst_path"] == "reports/report.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_build_delivery_task_message_can_emit_source_reference_payload():
+    task = SimpleNamespace(
+        id="task-source",
+        idempotency_key="idem-source",
+        submission_label="upload.zip",
+        temp_dir="/tmp/task-source",
+        status="confirmed",
+        created_by="local-user",
+        created_at=None,
+        confirmed_at=None,
+    )
+    item = SimpleNamespace(
+        id="item-source",
+        src_path="acme/report.xlsx",
+        filename="report.xlsx",
+        ext=".xlsx",
+        file_size=123,
+        dst_path="reports/report.xlsx",
+        severity="ok",
+        target_name_raw="acme",
+        target_name_matched="acme",
+        document_type="report",
+        category_name="reports",
+        upload_status="pending",
+    )
+
+    message = build_delivery_task_message(
+        task=task,
+        upload_items=[item],
+        bucket_name="auto-upload-dev",
+        source=DeliverySourceReference(
+            bucket="auto-upload-staging",
+            key="staged/tasks/task-source/archive.zip",
+            sha256="abc",
+            size=456,
+        ),
+    )
+
+    payload = message.to_payload()
+    assert payload["schema_version"] == 2
+    assert payload["source"]["bucket"] == "auto-upload-staging"
+    assert payload["source"]["key"] == "staged/tasks/task-source/archive.zip"
+    assert payload["items"][0]["src_path"] == "acme/report.xlsx"
+    assert payload["items"][0]["source_path"] == "acme/report.xlsx"
 
 
 @pytest.mark.asyncio

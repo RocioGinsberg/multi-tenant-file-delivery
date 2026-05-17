@@ -75,6 +75,55 @@ func TestDeliveryTaskAcceptsControlPlaneMetadataValues(t *testing.T) {
 	}
 }
 
+func TestDeliveryTaskAcceptsSourceReferencePayload(t *testing.T) {
+	raw := []byte(`{
+		"schema_version": 2,
+		"topic": "delivery.tasks.v1",
+		"task_id": "task-source",
+		"idempotency_key": "idem-source",
+		"submission_label": "upload.zip",
+		"bucket_name": "auto-upload-dev",
+		"created_at": "2026-05-13T10:00:00Z",
+		"source": {
+			"type": "object",
+			"bucket": "auto-upload-staging",
+			"key": "staged/tasks/task-source/archive.zip",
+			"sha256": "abc",
+			"size": 456
+		},
+		"items": [{
+			"item_id": "item-source",
+			"src_path": "acme/report.xlsx",
+			"source_path": "acme/report.xlsx",
+			"filename": "report.xlsx",
+			"ext": ".xlsx",
+			"file_size": 123,
+			"dst_path": "reports/report.xlsx",
+			"severity": "ok",
+			"target_name_raw": "acme",
+			"target_name_matched": "acme",
+			"document_type": "report",
+			"category_name": "reports",
+			"upload_status": "pending"
+		}]
+	}`)
+
+	var decoded DeliveryTask
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.SchemaVersion != 2 || decoded.Source == nil {
+		t.Fatalf("unexpected source payload: %+v", decoded)
+	}
+	if decoded.Source.Bucket != "auto-upload-staging" || decoded.Source.Size != 456 {
+		t.Fatalf("unexpected source reference: %+v", decoded.Source)
+	}
+	if len(decoded.Items) != 1 || decoded.Items[0].SourcePath != "acme/report.xlsx" {
+		t.Fatalf("unexpected source item: %+v", decoded.Items)
+	}
+}
+
 func TestDeliveryResultJSONRoundTripIncludesItems(t *testing.T) {
 	result := DeliveryResult{
 		Topic:     "delivery.results.v1",

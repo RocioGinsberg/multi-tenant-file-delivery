@@ -9,6 +9,7 @@ type DeliveryItem struct {
 	ItemID string `json:"item_id"`
 	// SrcPath is relative to DeliveryTask.TempDir, not an arbitrary absolute path.
 	SrcPath           string `json:"src_path"`
+	SourcePath        string `json:"source_path,omitempty"`
 	Filename          string `json:"filename"`
 	Ext               string `json:"ext"`
 	FileSize          int64  `json:"file_size"`
@@ -35,8 +36,17 @@ type DeliveryTask struct {
 	BucketName      string         `json:"bucket_name"`
 	CreatedAt       time.Time      `json:"created_at"`
 	Items           []DeliveryItem `json:"items"`
+	Source          *SourceRef     `json:"source,omitempty"`
 	Traceparent     string         `json:"traceparent,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
+}
+
+type SourceRef struct {
+	Type   string `json:"type"`
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
+	SHA256 string `json:"sha256,omitempty"`
+	Size   int64  `json:"size,omitempty"`
 }
 
 // DeliveryResult is the worker's result event. The control plane will later

@@ -111,7 +111,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.4 Source reference 消息模型
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - control-plane `DeliveryTaskMessage` 增加 source reference 字段。
@@ -121,6 +121,14 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - Python / Go 消息 round-trip 测试覆盖 v1 和 v2。
   - 未启用 object source 时，现有 Phase 2 bridge 不回归。
+- **实际变更**：
+  - `control-plane/app/services/delivery.py`：新增 `DeliverySourceReference`，`DeliveryTaskMessage` 支持可选 `source`，builder 可生成 `schema_version=2` payload。
+  - `data-plane/internal/message/message.go`：新增 `SourceRef`，`DeliveryTask` 支持可选 `source`，item 支持 `source_path`。
+  - Python / Go 契约测试覆盖 source reference payload。
+- **验证**：
+  - `cd control-plane && .venv/bin/python -m ruff check app/services/delivery.py tests/integration/test_delivery.py`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_delivery.py`
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/message`
 
 ### 3.5 Control-plane staging source
 

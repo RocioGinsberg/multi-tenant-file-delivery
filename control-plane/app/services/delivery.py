@@ -35,6 +35,19 @@ class DeliveryItemSpec(BaseModel):
     document_type: str
     category_name: str
     upload_status: str = "pending"
+    source_path: str | None = None
+
+
+class DeliverySourceReference(BaseModel):
+    """Durable source reference for schema_version=2 delivery tasks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = "object"
+    bucket: str
+    key: str
+    sha256: str | None = None
+    size: int | None = None
 
 
 class DeliveryTaskMessage(BaseModel):
@@ -55,6 +68,7 @@ class DeliveryTaskMessage(BaseModel):
     bucket_name: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     items: list[DeliveryItemSpec] = Field(default_factory=list)
+    source: DeliverySourceReference | None = None
     traceparent: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -117,6 +131,7 @@ def build_delivery_task_message(
     task,
     upload_items: list[Any],
     bucket_name: str,
+    source: DeliverySourceReference | dict[str, Any] | None = None,
     traceparent: str | None = None,
 ) -> DeliveryTaskMessage:
     """Build the data-plane task message from already-classified upload items."""
@@ -134,6 +149,7 @@ def build_delivery_task_message(
             document_type=item.document_type,
             category_name=item.category_name,
             upload_status=item.upload_status,
+            source_path=item.src_path if source is not None else None,
         )
         for item in upload_items
     ]
@@ -148,12 +164,14 @@ def build_delivery_task_message(
         metadata["confirmed_at"] = task.confirmed_at.isoformat()
 
     return DeliveryTaskMessage(
+        schema_version=2 if source is not None else 1,
         task_id=task.id,
         idempotency_key=task.idempotency_key,
         submission_label=task.submission_label,
         temp_dir=task.temp_dir,
         bucket_name=bucket_name,
         items=items,
+        source=source,
         traceparent=traceparent,
         metadata=metadata,
     )

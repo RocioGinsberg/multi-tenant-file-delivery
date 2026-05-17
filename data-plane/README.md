@@ -3,7 +3,7 @@
 高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
 
 ## 当前状态
-**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge，以及 message / source / sink / pipeline / worker 单测。
+**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge，以及 message / source / sink / pipeline / worker / CLI 测试。
 
 当前 worker 的本地闭环：
 1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
@@ -60,6 +60,7 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 ```
 
 当前覆盖：
+- `cmd/worker`：CLI 参数 -> inbox -> result JSON 的本地 bridge。
 - `internal/message`：任务消息 JSON round-trip 和 metadata 兼容。
 - `internal/source`：文件路径、打开、大小、缺失文件错误。
 - `internal/sink`：mock sink、S3 单段 PutObject 请求和配置校验。

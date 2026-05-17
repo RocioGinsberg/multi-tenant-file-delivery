@@ -13,14 +13,14 @@
 - [x] 控制面上传入口切到双模式：
   - `python`：保留 Phase 1 直传，便于回归。
   - `go-worker`：写入 outbox，交给 Go worker 消费。
-- [x] 本地 bridge 覆盖：worker 读取 inbox JSON、执行 mock sink、写出 result JSON。
+- [x] 本地 bridge 覆盖：worker/CLI 读取 inbox JSON、执行 mock sink、写出 result JSON。
 - [x] 首个真实 sink adapter：S3 / MinIO 单段 `PutObject`。
 - [ ] Kafka transport 替换目录扫描。
 - [ ] S3 multipart / resume / checksum / dedup。
 
 ## Test Plan
 - [x] 控制面单测：消息构建、outbox 写入、go-worker 模式路由。
-- [x] Go 单测：消息 JSON round-trip、file source、mock sink pipeline、S3 sink 单段上传、worker 本地 bridge。
+- [x] Go 单测：消息 JSON round-trip、file source、mock sink pipeline、S3 sink 单段上传、worker/CLI 本地 bridge。
 - [ ] 集成验证：上传 zip -> 分类 -> 确认 -> outbox 生成 -> worker 消费 -> result 输出。
 
 ## Current Implementation

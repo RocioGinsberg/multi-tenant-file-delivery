@@ -41,7 +41,9 @@
 
 **Phase 0（完成）**：清理半成品脚手架，建立 monorepo 骨架。
 
-**下一步：Phase 2** —— 拆 Go 数据面，把分类后的上传执行从 Python 控制面迁到 Go worker。
+**Phase 1（完成）**：Python 控制面 MVP，包含任务创建、分类、确认、Python 直传、repo/API/e2e 测试。
+
+**Phase 2（进行中）**：Go 数据面已完成本地 outbox bridge scaffold。控制面可在 `go-worker` 模式下写入 `delivery.tasks.v1` JSON，Go worker 可读取任务、执行 mock sink pipeline，并写出 `delivery.results.v1` 结果。
 
 详细阶段计划见 [BLUEPRINT § 十](./BLUEPRINT.md#十实施阶段每阶段都有完成定义)。
 

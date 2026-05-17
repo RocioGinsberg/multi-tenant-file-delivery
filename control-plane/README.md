@@ -44,6 +44,8 @@ cp .env.example .env
 | `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
+| `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
+| `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
 
 ### 3. 起 MinIO（需要 Docker）
 

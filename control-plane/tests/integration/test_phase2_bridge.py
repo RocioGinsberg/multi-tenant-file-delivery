@@ -41,7 +41,7 @@ async def test_phase2_file_spool_bridge_round_trip(
     if shutil.which("go") is None:
         pytest.skip("go command is required for phase2 bridge integration test")
 
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     data_plane_dir = repo_root / "data-plane"
     outbox_dir = tmp_path / "outbox"
     task_dir = tmp_path / "task"

@@ -405,7 +405,7 @@ class ProgressBus:
     - `GET /api/v1/tasks` → 列表（分页）
   - 路由前缀 `/api/v1`（与旧 `/api/upload/cosdrive` 区分）
   - 主入口在 `control-plane/app/main.py` 注册
-- **验收**：`pytest tests/test_api_tasks.py` 全过；至少 10 个 test case
+- **验收**：`pytest tests/integration/test_api_tasks.py` 全过；至少 10 个 test case
 - **commit message 草案**：`phase1(1.9): tasks API routes with SSE progress endpoint`
 
 ### 1.10 Pydantic Schema
@@ -435,7 +435,7 @@ class ProgressBus:
 - **执行方**：**aider+DeepSeek**
 - **依赖**：1.6
 - **范围**：
-  - `control-plane/tests/test_s3_uploader.py`
+  - `control-plane/tests/unit/test_s3_uploader.py`
   - 用 `moto` mock S3
   - case：单段上传 / multipart 上传 / 上传失败重试 / 流式校验内存峰值（用大文件 mock）
 
@@ -445,11 +445,11 @@ class ProgressBus:
 - **执行方**：L2 worker（Codex 宿主默认 `gpt-5.3-codex` + `medium` / `gpt-5.4-mini` + `medium`；Claude 宿主可用 Sonnet）
 - **依赖**：1.9 全部完成 + MinIO 容器（1.16）
 - **范围**：
-  - `control-plane/tests/test_e2e.py`
+  - `control-plane/tests/e2e/test_upload_flow.py`
   - FastAPI TestClient + 真 MinIO（用 docker-compose 起）
   - 完整流程：上传测试 zip → classify → confirm → upload → 验证 MinIO bucket 里有文件
   - 用 pytest mark 标注 `@pytest.mark.e2e`，CI 时按需跑
-- **验收**：`pytest tests/test_e2e.py -v` 全过
+- **验收**：`pytest tests/e2e/test_upload_flow.py -v` 全过
 
 ### 1.15 前端改造
 - **状态**：`[x]`

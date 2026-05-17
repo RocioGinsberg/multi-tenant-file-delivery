@@ -7,8 +7,6 @@ from __future__ import annotations
 import io
 import zipfile
 
-import pytest
-
 from app.services.classification_profile import (
     DocumentTypeConfig,
     EntryFilterConfig,
@@ -17,7 +15,7 @@ from app.services.classification_profile import (
     TargetConfig,
     TargetExtractionConfig,
 )
-from app.services.classifier import ClassifiedItem, ClassifySummary, classify_zip
+from app.services.classifier import classify_zip
 
 # ---------------------------------------------------------------------------
 # Profile Fixtures (defined inline, no disk IO)
@@ -214,7 +212,7 @@ def test_broadcast_all_files_get_same_target():
 
 
 def test_fallback_flat_file_uses_filename_segment():
-    """strategy=directory_or_filename；根目录 月报-acme.xlsx → 回退 filename_segment，raw='acme'。"""
+    """Flat root file falls back to filename segment target extraction."""
     zb = _make_zip([("月报-acme.xlsx", b"data")])
     items, _ = classify_zip(zb, PROFILE_A)
     assert len(items) == 1
@@ -235,7 +233,7 @@ def test_mixed_zip_dir_and_flat_both_resolved():
 
 
 def test_flat_file_no_delimiter_produces_error():
-    """根目录 月报.xlsx（无分隔符）→ filename_segment 解析不出 target → severity='error', error_code='unknown_target'。"""
+    """Flat root file without delimiter fails target extraction."""
     zb = _make_zip([("月报.xlsx", b"data")])
     items, _ = classify_zip(zb, PROFILE_A)
     assert len(items) == 1
@@ -288,7 +286,7 @@ def test_target_strip_number_prefix():
 
 
 def test_unknown_target_error_item_kept():
-    """raw='unknowncorp' 无匹配 → severity='error', target_name_matched=None，item 仍在 result items。"""
+    """Unknown target keeps an error item in classification results."""
     zb = _make_zip([("unknowncorp/月报.xlsx", b"data")])
     items, _ = classify_zip(zb, PROFILE_A)
     assert len(items) == 1
@@ -317,7 +315,7 @@ def test_description_mapping_exact():
     """无 suffix_priority 命中；描述精确命中 description_mapping。"""
     # "月报.xlsx" — suffix_priority has .pdf→contract (no .xlsx entry); description "月报"→monthly
     # But suffix_priority has no .xlsx key, and suffix_fallback has .xlsx→monthly
-    # To test description takes priority over fallback, need a case where description differs from fallback
+    # Description priority needs a case where description differs from fallback.
     profile = ProfileConfig(
         version="1.0",
         targets=[TargetConfig(key="acme")],

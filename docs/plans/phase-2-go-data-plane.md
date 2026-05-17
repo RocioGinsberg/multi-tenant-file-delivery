@@ -40,7 +40,7 @@
 
 ## Verification
 - `GOCACHE=/tmp/smh_go_cache go test ./...`
-- `cd control-plane && uv run pytest tests/test_phase2_bridge_e2e.py`
+- `cd control-plane && uv run pytest tests/integration/test_phase2_bridge.py`
 
 ## Assumptions
 - 分类实现继续参考 control plane 的 Phase 1 版本，不回退到 `_legacy` 业务耦合脚本。

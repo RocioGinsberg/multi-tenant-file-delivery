@@ -386,7 +386,7 @@ aider \
 
 | 任务 | 命令草稿 |
 |---|---|
-| 写 pytest 单测覆盖某个函数 | `aider ... --message "为 classifier.classify_files 写 5 个 table-driven test，覆盖 zip slip / 中文 / 空文件 / ignored / 不匹配团队" control-plane/app/services/classifier.py control-plane/tests/test_classifier.py` |
+| 写 pytest 单测覆盖某个函数 | `aider ... --message "为 classifier.classify_files 写 5 个 table-driven test，覆盖 zip slip / 中文 / 空文件 / ignored / 不匹配团队" control-plane/app/services/classifier.py control-plane/tests/unit/test_classifier.py` |
 | 给一个 service 加中文 docstring | `aider ... --message "给所有 public 方法加中文 docstring，说明参数和返回值" control-plane/app/services/foo.py` |
 | 批量补 type hint | `aider ... --message "补全本文件所有 def/return 的 type hint，使用 from __future__ import annotations" <files>` |
 | scaffold 5 个相似 endpoint | `aider ... --message "按 list_workspaces 的模式新增 list_objects, list_tasks, list_users, list_audit, list_notifications" <files>` |

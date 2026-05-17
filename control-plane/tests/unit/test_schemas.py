@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 from pydantic import ValidationError
 
 from app.schemas.task import (
-    CreateTaskResponse,
     ClassifyResponse,
+    ConfirmResponse,
+    CreateTaskResponse,
     PreviewItem,
     PreviewResponse,
-    ConfirmResponse,
-    UploadResponse,
+    ProgressEvent,
     TaskDetailResponse,
     TaskListResponse,
-    ProgressEvent,
+    UploadResponse,
 )
 
 

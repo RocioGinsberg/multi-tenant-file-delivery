@@ -35,7 +35,9 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 markers = [
+    "unit: fast unit tests with no cross-process dependency",
     "e2e: end-to-end integration tests that use real SQLite and mocked S3",
     "integration: integration tests that cross process or language boundaries",
 ]

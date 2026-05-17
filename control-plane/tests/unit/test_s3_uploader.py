@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,7 +16,9 @@ def _make_client_mock(*, bucket_exists: bool = True) -> MagicMock:
     if bucket_exists:
         client.put_object = AsyncMock(return_value={"ETag": '"abc123"'})
         client.create_multipart_upload = AsyncMock(return_value={"UploadId": "upload-1"})
-        client.upload_part = AsyncMock(side_effect=lambda **kw: {"ETag": f'"part{kw["PartNumber"]}"'})
+        client.upload_part = AsyncMock(
+            side_effect=lambda **kw: {"ETag": f'"part{kw["PartNumber"]}"'}
+        )
         client.complete_multipart_upload = AsyncMock(return_value={"ETag": '"multipart-etag"'})
         client.abort_multipart_upload = AsyncMock()
     else:

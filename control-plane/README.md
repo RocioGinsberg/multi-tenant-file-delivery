@@ -93,17 +93,20 @@ curl http://localhost:8000/healthz
 ## 运行测试
 
 ```bash
-# 单元测试（不含 e2e）
-pytest tests/ --ignore=tests/test_e2e.py -v
+# 单元测试
+pytest tests/unit -v
+
+# 集成测试
+pytest tests/integration -v
 
 # 包含 e2e（需要内存 SQLite，不需要 MinIO）
 pytest tests/ -v
 
 # 只跑 e2e
-pytest tests/test_e2e.py -v -m e2e
+pytest tests/e2e -v -m e2e
 ```
 
-当前测试覆盖：100 个 test case，全部通过。
+当前测试按 `unit / integration / e2e` 分层组织。
 
 ## 前端
 

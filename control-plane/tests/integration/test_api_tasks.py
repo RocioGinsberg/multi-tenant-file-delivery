@@ -117,7 +117,9 @@ async def test_list_tasks_empty(async_client):
         async def override_session():
             yield mock_session
 
-        app.dependency_overrides[__import__("app.core.db", fromlist=["get_session"]).get_session] = override_session
+        app.dependency_overrides[
+            __import__("app.core.db", fromlist=["get_session"]).get_session
+        ] = override_session
         mock_repo.list = AsyncMock(return_value=[])
 
         async with async_client as client:
@@ -183,7 +185,6 @@ async def test_get_task_found(async_client):
 
 async def test_create_task_file_too_large(async_client):
     from app.core.db import get_session
-    from app.core.settings import get_settings
 
     big_bytes = b"x" * 10
 
@@ -245,7 +246,12 @@ async def test_upload_task_queues_delivery_message_when_go_worker_backend(async_
     task = _mock_task(status="confirmed")
     item = _mock_item()
 
-    with patch("app.api.tasks.get_settings") as mock_settings_fn, patch("app.api.tasks._task_repo") as mock_task_repo, patch("app.api.tasks._item_repo") as mock_item_repo, patch("app.api.tasks._event_repo") as mock_event_repo:
+    with (
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+        patch("app.api.tasks._task_repo") as mock_task_repo,
+        patch("app.api.tasks._item_repo") as mock_item_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
+    ):
         mock_settings = MagicMock()
         mock_settings.delivery_backend = "go-worker"
         mock_settings.delivery_outbox_base = str(tmp_path)
@@ -283,7 +289,11 @@ async def test_upload_task_queues_delivery_message_when_go_worker_backend(async_
 async def test_create_task_new(async_client, tmp_path):
     from app.core.db import get_session
 
-    created_task = _mock_task(task_id="new001", status="draft", temp_dir=str(tmp_path / "new001"))
+    created_task = _mock_task(
+        task_id="new001",
+        status="draft",
+        temp_dir=str(tmp_path / "new001"),
+    )
     zip_bytes = _make_zip_bytes()
 
     with (
@@ -303,7 +313,11 @@ async def test_create_task_new(async_client, tmp_path):
         mock_session_obj.flush = AsyncMock()
         mock_session_obj.commit = AsyncMock()
 
-        updated_task = _mock_task(task_id="new001", status="draft", temp_dir=str(tmp_path / "new001"))
+        updated_task = _mock_task(
+            task_id="new001",
+            status="draft",
+            temp_dir=str(tmp_path / "new001"),
+        )
         mock_repo.get = AsyncMock(return_value=updated_task)
 
         async def override_session():

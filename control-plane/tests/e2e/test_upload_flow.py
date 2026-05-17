@@ -78,10 +78,9 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
     - Patched _load_profile → in-memory ProfileConfig
     - Patched aioboto3.Session → AsyncMock so S3 never hits network
     """
+    import app.core.db as db_module
     from app.core import settings as settings_module
     from app.main import app
-
-    import app.core.db as db_module
 
     # ── Build in-memory session maker ────────────────────────────────────────
     new_session_maker = async_sessionmaker(mem_engine, expire_on_commit=False, class_=AsyncSession)

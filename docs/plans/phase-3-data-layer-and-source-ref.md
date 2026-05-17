@@ -173,7 +173,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.7 跨语言 source reference 集成测试
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - control-plane 创建任务并写 staging source。
@@ -183,6 +183,14 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - 不依赖 control-plane 解压目录共享。
   - `RUN_DOCKER_TESTS=1` 下可用 Kafka / MinIO / MySQL 跑通核心路径。
+- **实际变更**：
+  - `control-plane/tests/integration/test_phase2_bridge.py`：新增 source reference file-spool bridge 测试。
+  - 测试链路：Python 写 staging MinIO -> file-spool task -> Go worker `-source-mode object` -> result apply。
+- **验证**：
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py`
+  - `cd deploy && docker compose up -d minio minio-init`
+  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_source_reference_file_spool_bridge_round_trip`
+  - `cd control-plane && .venv/bin/python -m ruff check tests/integration/test_phase2_bridge.py`
 
 ### 3.8 文档和运行手册
 

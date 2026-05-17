@@ -239,6 +239,45 @@ async def test_create_task_idempotent(async_client):
     assert data["task_id"] == "exist01"
 
 
+async def test_upload_task_queues_delivery_message_when_go_worker_backend(async_client, tmp_path):
+    from app.core.db import get_session
+
+    task = _mock_task(status="confirmed")
+    item = _mock_item()
+
+    with patch("app.api.tasks.get_settings") as mock_settings_fn, patch("app.api.tasks._task_repo") as mock_task_repo, patch("app.api.tasks._item_repo") as mock_item_repo, patch("app.api.tasks._event_repo") as mock_event_repo:
+        mock_settings = MagicMock()
+        mock_settings.delivery_backend = "go-worker"
+        mock_settings.delivery_outbox_base = str(tmp_path)
+        mock_settings.s3_bucket_name = "auto-upload-dev"
+        mock_settings.task_dir_base = str(tmp_path)
+        mock_settings_fn.return_value = mock_settings
+
+        mock_task_repo.get = AsyncMock(return_value=task)
+        mock_task_repo.update_status = AsyncMock(return_value=task)
+        mock_item_repo.list_by_task = AsyncMock(return_value=[item])
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/upload")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+    outbox_file = tmp_path / "delivery.tasks.v1" / "abc123.json"
+    assert outbox_file.exists()
+    payload = json.loads(outbox_file.read_text(encoding="utf-8"))
+    assert payload["task_id"] == "abc123"
+    assert payload["bucket_name"] == "auto-upload-dev"
+    assert len(payload["items"]) == 1
+
+
 # ── Test 7: POST /api/v1/tasks — new task created ────────────────────────────
 
 async def test_create_task_new(async_client, tmp_path):

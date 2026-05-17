@@ -32,6 +32,9 @@ Thumbs.db
 .claude/cache/
 .claude/.session/
 
+# --- 本地学习笔记（不入库） ---
+study/
+
 # --- 运行产物 ---
 *.log
 upload_log.txt

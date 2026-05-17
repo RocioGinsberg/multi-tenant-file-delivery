@@ -23,7 +23,7 @@
 ## 索引
 
 - [Phase 1 — Python 单体 MVP](./phase-1-python-mvp.md) ← 当前
-- Phase 2 — 拆 Go 数据面（待写）
+- [Phase 2 — Go 数据面](./phase-2-go-data-plane.md) ← 进行中
 - Phase 3 — 换上"真"数据层（待写）
 - Phase 4 — Redis 一物多用（待写）
 - Phase 5 — 可观测三件套（待写）

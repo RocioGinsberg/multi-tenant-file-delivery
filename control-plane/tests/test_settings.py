@@ -35,6 +35,8 @@ class TestDefaultValues:
             "WORKER_MAX_FILE_CONCURRENT",
             "WORKER_AUTO_ADJUST_CONCURRENT",
             "TASK_DIR_BASE",
+            "DELIVERY_BACKEND",
+            "DELIVERY_OUTBOX_BASE",
             "CLASSIFICATION_PROFILE_PATH",
             "MAX_ZIP_BYTES",
             "MAX_UNZIPPED_BYTES",

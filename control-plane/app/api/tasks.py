@@ -25,6 +25,7 @@ from app.services.classification_profile import (
     TargetExtractionConfig,
 )
 from app.services.classifier import classify_zip
+from app.services.delivery import FileSpoolDeliveryPublisher, build_delivery_task_message
 from app.services.progress_bus import ProgressBus
 from app.services.task_runner import run_task, set_progress_bus
 
@@ -315,6 +316,35 @@ async def upload_task(
             status_code=422,
             detail=f"Task must be in 'confirmed' status to upload, got {task.status!r}",
         )
+
+    settings = get_settings()
+    delivery_backend = getattr(settings, "delivery_backend", "python")
+    if delivery_backend == "go-worker":
+        # Phase 2 bridge: the control plane owns classification and task state,
+        # while the data plane only receives uploadable item specs.
+        items = await _item_repo.list_by_task(session, task_id)
+        upload_items = [
+            item
+            for item in items
+            if item.severity in ("ok", "warning") and item.upload_status == "pending"
+        ]
+        publisher = FileSpoolDeliveryPublisher(
+            getattr(settings, "delivery_outbox_base", settings.task_dir_base),
+        )
+        message = build_delivery_task_message(
+            task=task,
+            upload_items=upload_items,
+            bucket_name=settings.s3_bucket_name,
+        )
+        await publisher.publish(message)
+
+        await _task_repo.update_status(session, task_id, "queued")
+        await _event_repo.append(session, task_id, "task_queued", {
+            "topic": message.topic,
+            "upload_items": len(upload_items),
+        })
+        await session.commit()
+        return {"task_id": task_id, "status": "queued"}
 
     background_tasks.add_task(run_task, task_id)
     return {"task_id": task_id, "status": "uploading"}

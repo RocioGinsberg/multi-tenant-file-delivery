@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # ── Task working directory (zip extraction; used by 1.5 / 1.8) ──
     task_dir_base: str = "/tmp/auto_upload_tasks"
 
+    # ── Delivery backend (Phase 2 bridge) ──
+    # "python" keeps the Phase 1 in-process uploader.
+    # "go-worker" writes a task message into a durable outbox for the Go worker.
+    delivery_backend: str = "python"
+    delivery_outbox_base: str = "/tmp/auto_upload_outbox"
+
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"
 

@@ -42,13 +42,23 @@ type DeliveryTask struct {
 // DeliveryResult is the worker's result event. The control plane will later
 // consume this from delivery.results.v1 and update task/item state.
 type DeliveryResult struct {
-	Topic     string    `json:"topic"`
-	TaskID    string    `json:"task_id"`
-	Status    string    `json:"status"`
-	Uploaded  int       `json:"uploaded"`
-	Failed    int       `json:"failed"`
-	Processed int       `json:"processed"`
-	StartedAt time.Time `json:"started_at"`
-	EndedAt   time.Time `json:"ended_at"`
-	Error     string    `json:"error,omitempty"`
+	Topic     string               `json:"topic"`
+	TaskID    string               `json:"task_id"`
+	Status    string               `json:"status"`
+	Uploaded  int                  `json:"uploaded"`
+	Failed    int                  `json:"failed"`
+	Processed int                  `json:"processed"`
+	Items     []DeliveryResultItem `json:"items,omitempty"`
+	StartedAt time.Time            `json:"started_at"`
+	EndedAt   time.Time            `json:"ended_at"`
+	Error     string               `json:"error,omitempty"`
+}
+
+type DeliveryResultItem struct {
+	ItemID string `json:"item_id"`
+	Status string `json:"status"`
+	Key    string `json:"key,omitempty"`
+	Size   int64  `json:"size,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
+	Error  string `json:"error,omitempty"`
 }

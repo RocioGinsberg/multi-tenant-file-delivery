@@ -13,6 +13,7 @@ type Result struct {
 	TaskID   string
 	Uploaded int
 	Failed   int
+	Items    []message.DeliveryResultItem
 }
 
 // ProcessTask is deliberately narrow: it trusts the control plane's
@@ -29,15 +30,28 @@ func ProcessTask(ctx context.Context, task message.DeliveryTask, sinkImpl sink.S
 		}
 
 		src := source.NewFileSource(task.TempDir, item.SrcPath)
-		if _, err := sinkImpl.Upload(ctx, src, sink.Meta{
+		receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{
 			TaskID:  task.TaskID,
 			ItemID:  item.ItemID,
 			DstPath: item.DstPath,
-		}); err != nil {
+		})
+		if err != nil {
 			result.Failed++
+			result.Items = append(result.Items, message.DeliveryResultItem{
+				ItemID: item.ItemID,
+				Status: "failed",
+				Error:  err.Error(),
+			})
 			continue
 		}
 		result.Uploaded++
+		result.Items = append(result.Items, message.DeliveryResultItem{
+			ItemID: item.ItemID,
+			Status: "uploaded",
+			Key:    receipt.Key,
+			Size:   receipt.Size,
+			SHA256: receipt.SHA256,
+		})
 	}
 
 	if result.Failed > 0 {

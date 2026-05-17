@@ -74,3 +74,36 @@ func TestDeliveryTaskAcceptsControlPlaneMetadataValues(t *testing.T) {
 		t.Fatalf("unexpected metadata: %+v", decoded.Metadata)
 	}
 }
+
+func TestDeliveryResultJSONRoundTripIncludesItems(t *testing.T) {
+	result := DeliveryResult{
+		Topic:     "delivery.results.v1",
+		TaskID:    "task-1",
+		Status:    "uploaded",
+		Uploaded:  1,
+		Processed: 1,
+		Items: []DeliveryResultItem{{
+			ItemID: "item-1",
+			Status: "uploaded",
+			Key:    "reports/report.xlsx",
+			Size:   5,
+			SHA256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+		}},
+		StartedAt: time.Date(2026, 5, 13, 10, 0, 0, 0, time.UTC),
+		EndedAt:   time.Date(2026, 5, 13, 10, 0, 1, 0, time.UTC),
+	}
+
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded DeliveryResult
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(decoded.Items) != 1 || decoded.Items[0].SHA256 != result.Items[0].SHA256 {
+		t.Fatalf("unexpected result items: %+v", decoded.Items)
+	}
+}

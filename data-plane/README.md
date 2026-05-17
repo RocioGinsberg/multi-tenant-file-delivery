@@ -11,8 +11,8 @@
 3. 过滤 `upload_status=pending` 且 `severity=ok/warning` 的 item。
 4. 用 `FileSource` 从 `temp_dir + src_path` 打开文件。
 5. 调用 `Sink.Upload`；当前支持 `mock` 和 `s3`。
-6. sink 返回 `key/size/sha256` receipt，作为后续结果消息和平台层 dedup 的基础。
-7. 写出 `delivery.results.v1/{task_id}.json`。
+6. sink 返回 `key/size/sha256` receipt。
+7. worker 写出 `delivery.results.v1/{task_id}.json`，其中 `items[]` 带 item 级 `status/key/size/sha256/error`。
 
 ## 目录
 ```

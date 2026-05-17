@@ -67,6 +67,7 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 	result.Uploaded = pipelineResult.Uploaded
 	result.Failed = pipelineResult.Failed
 	result.Processed = len(task.Items)
+	result.Items = pipelineResult.Items
 	result.EndedAt = time.Now().UTC()
 	if err != nil {
 		result.Status = "partial_failed"

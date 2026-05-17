@@ -57,6 +57,9 @@ func TestRunProcessesInboxTaskAndWritesResult(t *testing.T) {
 	if result.Status != "uploaded" || result.Uploaded != 1 || result.Failed != 0 || result.Processed != 1 {
 		t.Fatalf("unexpected result: %+v", result)
 	}
+	if len(result.Items) != 1 || result.Items[0].ItemID != "item-1" || result.Items[0].Status != "uploaded" || result.Items[0].SHA256 != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
+		t.Fatalf("unexpected item result: %+v", result.Items)
+	}
 	data, ok := mockSink.Object("reports/report.txt")
 	if !ok {
 		t.Fatal("expected mock sink object")
@@ -110,6 +113,9 @@ func TestRunWritesPartialFailureResult(t *testing.T) {
 	}
 	if result.Error == "" {
 		t.Fatal("expected result error")
+	}
+	if len(result.Items) != 1 || result.Items[0].ItemID != "item-1" || result.Items[0].Status != "failed" || result.Items[0].Error == "" {
+		t.Fatalf("unexpected item result: %+v", result.Items)
 	}
 }
 

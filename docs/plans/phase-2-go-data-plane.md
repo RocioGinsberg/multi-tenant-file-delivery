@@ -18,6 +18,7 @@
 - [x] 抽象 task/result transport：当前实现 file-spool，Kafka 可替换此层。
 - [ ] Kafka transport 替换目录扫描。
 - [x] S3 / mock sink receipt 返回 SHA-256。
+- [x] `delivery.results.v1` 返回 item 级上传 receipt / error。
 - [ ] S3 multipart / resume / dedup。
 
 ## Test Plan
@@ -29,7 +30,7 @@
 - `control-plane/app/services/delivery.py`：构建 `DeliveryTaskMessage`，本地 outbox publisher 写入 `delivery.tasks.v1/{task_id}.json`。
 - `control-plane/app/api/tasks.py`：`DELIVERY_BACKEND=go-worker` 时发布任务消息并把 task 状态更新为 `queued`。
 - `data-plane/cmd/worker`：本地 worker CLI，默认读取 `/tmp/auto_upload_outbox/delivery.tasks.v1`。
-- `data-plane/internal/worker`：目录扫描、JSON decode、调用 pipeline、写 `delivery.results.v1` result。
+- `data-plane/internal/worker`：目录扫描、JSON decode、调用 pipeline、写 `delivery.results.v1` result；result item 明细带上传 receipt 或错误。
 - `data-plane/internal/transport`：定义 task/result transport 接口，当前 file-spool 实现负责目录扫描和 result JSON 写出。
 - `data-plane/internal/pipeline`：只上传 pending 且 severity 为 ok/warning 的 item。
 - `data-plane/internal/source`：从控制面解压目录读取源文件。

@@ -28,6 +28,7 @@ type Sink interface {
 - 已支持 MinIO path-style endpoint 配置。
 - 已接入 `cmd/worker -sink s3`。
 - 单段上传 receipt 已返回 SHA-256，用作后续结果消息和平台层 dedup 的基础。
+- `delivery.results.v1.items[]` 已携带 item 级 `status/key/size/sha256/error`。
 - 暂未实现 multipart、resume、平台层 dedup 和 DB 元数据写入。
 
 **Capability**：

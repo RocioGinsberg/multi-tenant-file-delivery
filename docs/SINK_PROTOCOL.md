@@ -23,6 +23,12 @@ type Sink interface {
 
 ### S3 / MinIO（Phase 1 首版 sink，Phase 2 移到 Go）
 
+**当前实现状态（Phase 2）**：
+- 已实现 Go `S3Sink` 单段 `PutObject`。
+- 已支持 MinIO path-style endpoint 配置。
+- 已接入 `cmd/worker -sink s3`。
+- 暂未实现 multipart、resume、checksum、平台层 dedup 和 DB 元数据写入。
+
 **Capability**：
 - `SupportsInstantUpload = false`（S3 没有内置 dedup；平台层 dedup 在 § 6.10 Stage 1 补）
 - `SupportsResume = true`（multipart upload 支持 resume）

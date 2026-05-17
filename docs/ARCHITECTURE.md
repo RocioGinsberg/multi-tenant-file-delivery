@@ -10,7 +10,7 @@
 - [失败模式与恢复策略](#失败模式与恢复策略) — Phase 4 后写
 
 ## 当前状态
-**v1**：Phase 2 本地 outbox bridge 已落地。当前写路径还不是 Kafka，也没有真实 sink；Go 数据面先通过本地 JSON 文件完成控制面到 worker 的可运行闭环。
+**v1**：Phase 2 本地 outbox bridge 已落地。当前写路径还不是 Kafka；Go 数据面先通过本地 JSON 文件完成控制面到 worker 的可运行闭环，并已支持 S3 / MinIO 单段 PUT sink。
 
 ## 写路径详细时序图
 
@@ -40,11 +40,11 @@ Go data-plane worker
   ├─ json.Unmarshal -> DeliveryTask
   ├─ pipeline.ProcessTask
   │    ├─ FileSource(temp_dir, src_path)
-  │    └─ Sink.Upload
+  │    └─ Sink.Upload（mock 或 S3/MinIO 单段 PUT）
   └─ 写入 delivery.results.v1/{task_id}.json
 ```
 
 后续目标：
 - 用 Kafka 替换本地目录扫描。
-- 用真实 S3 / MinIO sink 替换 mock sink。
+- 为 S3 / MinIO sink 补 multipart、resume、checksum 和平台层 dedup。
 - 控制面消费 `delivery.results.v1` 后统一更新 task / item 状态。

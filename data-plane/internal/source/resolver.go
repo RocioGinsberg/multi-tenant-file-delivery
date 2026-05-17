@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"smh_auto_upload/data-plane/internal/message"
 )
@@ -36,13 +37,18 @@ type ObjectFetcher interface {
 
 type ZipArchiveResolver struct {
 	fetcher ObjectFetcher
+	mu      sync.Mutex
+	cache   map[string][]byte
 }
 
-func NewZipArchiveResolver(fetcher ObjectFetcher) ZipArchiveResolver {
-	return ZipArchiveResolver{fetcher: fetcher}
+func NewZipArchiveResolver(fetcher ObjectFetcher) *ZipArchiveResolver {
+	return &ZipArchiveResolver{
+		fetcher: fetcher,
+		cache:   make(map[string][]byte),
+	}
 }
 
-func (r ZipArchiveResolver) Resolve(ctx context.Context, task message.DeliveryTask, item message.DeliveryItem) (Source, error) {
+func (r *ZipArchiveResolver) Resolve(ctx context.Context, task message.DeliveryTask, item message.DeliveryItem) (Source, error) {
 	if task.Source == nil {
 		return nil, fmt.Errorf("task %s has no source reference", task.TaskID)
 	}
@@ -50,7 +56,7 @@ func (r ZipArchiveResolver) Resolve(ctx context.Context, task message.DeliveryTa
 	if sourcePath == "" {
 		sourcePath = item.SrcPath
 	}
-	archive, err := r.fetcher.GetObject(ctx, task.Source.Bucket, task.Source.Key)
+	archive, err := r.getArchive(ctx, task.Source.Bucket, task.Source.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +83,23 @@ func (r ZipArchiveResolver) Resolve(ctx context.Context, task message.DeliveryTa
 		return NewMemorySource(fmt.Sprintf("s3://%s/%s#%s", task.Source.Bucket, task.Source.Key, sourcePath), data), nil
 	}
 	return nil, fmt.Errorf("source item %q not found in archive %q", sourcePath, task.Source.Key)
+}
+
+func (r *ZipArchiveResolver) getArchive(ctx context.Context, bucket, key string) ([]byte, error) {
+	cacheKey := bucket + "/" + key
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	archive, ok := r.cache[cacheKey]
+	if ok {
+		return archive, nil
+	}
+
+	archive, err := r.fetcher.GetObject(ctx, bucket, key)
+	if err != nil {
+		return nil, err
+	}
+	r.cache[cacheKey] = archive
+	return archive, nil
 }
 
 type MemorySource struct {

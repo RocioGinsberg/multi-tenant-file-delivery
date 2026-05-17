@@ -12,10 +12,12 @@ import (
 )
 
 type fakeObjectFetcher struct {
-	data []byte
+	data  []byte
+	calls int
 }
 
-func (f fakeObjectFetcher) GetObject(context.Context, string, string) ([]byte, error) {
+func (f *fakeObjectFetcher) GetObject(context.Context, string, string) ([]byte, error) {
+	f.calls++
 	return f.data, nil
 }
 
@@ -23,7 +25,8 @@ func TestZipArchiveResolverOpensSourcePathFromArchive(t *testing.T) {
 	archive := buildZip(t, map[string]string{
 		"acme/report.txt": "hello",
 	})
-	resolver := NewZipArchiveResolver(fakeObjectFetcher{data: archive})
+	fetcher := &fakeObjectFetcher{data: archive}
+	resolver := NewZipArchiveResolver(fetcher)
 
 	src, err := resolver.Resolve(context.Background(), message.DeliveryTask{
 		TaskID: "task-1",
@@ -60,7 +63,8 @@ func TestZipArchiveResolverFallsBackToSrcPath(t *testing.T) {
 	archive := buildZip(t, map[string]string{
 		"report.txt": "hello",
 	})
-	resolver := NewZipArchiveResolver(fakeObjectFetcher{data: archive})
+	fetcher := &fakeObjectFetcher{data: archive}
+	resolver := NewZipArchiveResolver(fetcher)
 
 	src, err := resolver.Resolve(context.Background(), message.DeliveryTask{
 		TaskID: "task-1",
@@ -81,6 +85,35 @@ func TestZipArchiveResolverFallsBackToSrcPath(t *testing.T) {
 	}
 	if size != 5 {
 		t.Fatalf("unexpected size: got %d want 5", size)
+	}
+}
+
+func TestZipArchiveResolverCachesArchiveBySourceReference(t *testing.T) {
+	archive := buildZip(t, map[string]string{
+		"one.txt": "one",
+		"two.txt": "two",
+	})
+	fetcher := &fakeObjectFetcher{data: archive}
+	resolver := NewZipArchiveResolver(fetcher)
+	task := message.DeliveryTask{
+		TaskID: "task-1",
+		Source: &message.SourceRef{
+			Bucket: "auto-upload-staging",
+			Key:    "staged/tasks/task-1/archive.zip",
+		},
+	}
+
+	for _, sourcePath := range []string{"one.txt", "two.txt"} {
+		if _, err := resolver.Resolve(context.Background(), task, message.DeliveryItem{
+			ItemID:     sourcePath,
+			SourcePath: sourcePath,
+		}); err != nil {
+			t.Fatalf("resolve %s: %v", sourcePath, err)
+		}
+	}
+
+	if fetcher.calls != 1 {
+		t.Fatalf("unexpected fetch count: got %d want 1", fetcher.calls)
 	}
 }
 

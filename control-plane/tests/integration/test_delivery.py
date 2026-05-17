@@ -264,6 +264,44 @@ async def test_apply_delivery_result_updates_task_and_items(session: AsyncSessio
 
 
 @pytest.mark.asyncio
+async def test_apply_delivery_result_is_stable_for_duplicate_result(
+    session: AsyncSession,
+):
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-duplicate-result", status="queued")
+    session.add(task)
+    await session.flush()
+    item = (
+        await item_repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "ok.xlsx", "filename": "ok.xlsx"}],
+        )
+    )[0]
+
+    message = DeliveryResultMessage(
+        task_id=task.id,
+        status="uploaded",
+        uploaded=1,
+        failed=0,
+        processed=1,
+        started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+        ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+        items=[{"item_id": item.id, "status": "uploaded"}],
+    )
+
+    first = await apply_delivery_result(session, message)
+    second = await apply_delivery_result(session, message)
+
+    updated_items = await item_repo.list_by_task(session, task.id)
+    assert first.applied_items == 1
+    assert second.applied_items == 1
+    assert task.status == "uploaded"
+    assert updated_items[0].upload_status == "uploaded"
+    assert updated_items[0].uploaded_at == message.ended_at
+
+
+@pytest.mark.asyncio
 async def test_file_spool_delivery_result_consumer_reads_messages(tmp_path):
     result_dir = tmp_path / "delivery.results.v1"
     result_dir.mkdir()

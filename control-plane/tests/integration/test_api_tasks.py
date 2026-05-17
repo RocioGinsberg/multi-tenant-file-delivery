@@ -391,6 +391,16 @@ async def test_upload_task_can_publish_object_source_reference(async_client, tmp
     assert payload["source"]["bucket"] == "auto-upload-staging"
     assert payload["source"]["key"] == "staged/tasks/abc123/archive.zip"
     assert payload["items"][0]["source_path"] == "test.txt"
+    assert mock_event_repo.append.await_count == 2
+    staged_event = mock_event_repo.append.await_args_list[0]
+    assert staged_event.args[2] == "task_staged_source"
+    assert staged_event.args[3] == {
+        "type": "object",
+        "bucket": "auto-upload-staging",
+        "key": "staged/tasks/abc123/archive.zip",
+        "sha256": "abc",
+        "size": 123,
+    }
 
 
 # ── Test 7: POST /api/v1/tasks — new task created ────────────────────────────

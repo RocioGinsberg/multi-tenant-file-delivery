@@ -82,6 +82,8 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+同一 worker 进程内，object source resolver 会按 `bucket/key` 缓存 staged archive，避免同一 task 多 item 重复下载原始 zip。
+
 本地 Kafka / MinIO：
 ```bash
 cd ../deploy

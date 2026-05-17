@@ -138,9 +138,21 @@ RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
   tests/integration/test_phase2_bridge.py::test_source_reference_file_spool_bridge_round_trip
+
+# source reference + Kafka bridge（需要 Kafka / MinIO running）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
+  tests/integration/test_phase2_bridge.py::test_source_reference_kafka_bridge_round_trip
 ```
 
 当前测试按 `unit / integration / e2e` 分层组织。
+
+## Staging GC
+
+object source 模式会把原始 zip 暂存到 `STAGING_BUCKET_NAME`。终态 task 超过 retention 后，可手动清理：
+
+```bash
+python -m app.jobs.cleanup_staging_sources --retention-days 7 --bucket-name auto-upload-staging
+```
 
 ## 前端
 

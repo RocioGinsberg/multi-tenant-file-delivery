@@ -339,6 +339,13 @@ async def upload_task(
                 task,
                 bucket_name=getattr(settings, "staging_bucket_name", None),
             )
+            await _event_repo.append(session, task_id, "task_staged_source", {
+                "type": source_ref.type,
+                "bucket": source_ref.bucket,
+                "key": source_ref.key,
+                "sha256": source_ref.sha256,
+                "size": source_ref.size,
+            })
 
         message = build_delivery_task_message(
             task=task,

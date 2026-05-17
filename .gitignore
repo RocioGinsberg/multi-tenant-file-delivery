@@ -32,6 +32,9 @@ Thumbs.db
 .claude/cache/
 .claude/.session/
 
+# --- 本地学习笔记（不入库） ---
+study/
+
 # --- 运行产物 ---
 *.log
 upload_log.txt
@@ -42,5 +45,12 @@ current_teamlist.json
 *.pem
 *.key
 
+# SQLite local databases (alembic / dev / tests may create these)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
 # --- 项目历史遗留 ---
 task_classifications.json
+.aider*

@@ -19,3 +19,4 @@
 - 0008 — 下载走 302 直连 sink — 待写
 - 0009 — 元数据 DB 是真相，不查对端 — 待写
 - [0010 — 项目起源叙事 & 首版后端选 S3/MinIO](0010-pivot-to-generic-object-storage.md)
+- [0011 — Classifier Core 与业务 Profile 分层](0011-classification-profile-engine.md)

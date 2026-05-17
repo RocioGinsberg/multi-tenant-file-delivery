@@ -23,6 +23,15 @@ type Sink interface {
 
 ### S3 / MinIO（Phase 1 首版 sink，Phase 2 移到 Go）
 
+**当前实现状态（Phase 2）**：
+- 已实现 Go `S3Sink` 单段 `PutObject`。
+- 已支持 MinIO path-style endpoint 配置。
+- 已接入 `cmd/worker -sink s3`。
+- 单段上传 receipt 已返回 SHA-256，用作后续结果消息和平台层 dedup 的基础。
+- `delivery.results.v1.items[]` 已携带 item 级 `status/key/size/sha256/error`。
+- 控制面已有本地 result consumer，可应用 result JSON 并回写 task / item 上传状态。
+- 暂未实现 multipart、resume、平台层 dedup 和 DB 元数据写入。
+
 **Capability**：
 - `SupportsInstantUpload = false`（S3 没有内置 dedup；平台层 dedup 在 § 6.10 Stage 1 补）
 - `SupportsResume = true`（multipart upload 支持 resume）
@@ -33,7 +42,7 @@ type Sink interface {
 
 **单段 PUT（< multipartThreshold ~50MB）**：
 - 直接 `PutObject`，body 用 `io.Reader` 流式
-- 边读边算 sha256（`io.TeeReader`）
+- 上传前流式计算 sha256，上传时重新打开 source，保持 AWS SDK 对 seekable body / SigV4 payload hash 的兼容性
 - 上传完成 → 写 `physical_object` 表（hash, size, sink_path）
 
 **Multipart（≥ threshold）**：

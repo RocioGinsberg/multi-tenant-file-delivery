@@ -1,23 +1,132 @@
 # Control Plane（Python FastAPI）
 
-业务逻辑、规则引擎、Workspace 抽象、读路径鉴权与签发。
+业务逻辑、分类引擎、任务编排与 S3/MinIO 上传。
 
-## 当前状态
-**Phase 0 骨架**。Phase 1 起开始填充。
+## 目录结构
 
-## 目录
 ```
 app/
-  api/           FastAPI 路由（按读/写分组）
-  core/          配置、安全、数据库、telemetry
-  models/        SQLAlchemy 模型
-  schemas/       Pydantic
-  services/      规则引擎、分类器、任务编排、Workspace Service
-  repos/         数据访问层（强制 tenant_id 过滤）
-alembic/         DB migrations
-tests/
-_legacy/         v0 历史代码，Phase 1 完成后删
+  api/           FastAPI 路由（/api/v1）
+  core/          配置（pydantic-settings）、数据库（SQLAlchemy 2.0 async）
+  models/        SQLAlchemy ORM 模型（task / task_item / task_event）
+  schemas/       Pydantic v2 response schemas
+  services/      classifier、classification_profile、s3_uploader、progress_bus、task_runner
+  repos/         数据访问层（task_repo / item_repo / event_repo）
+alembic/         DB migrations（SQLite dev，PostgreSQL prod）
+tests/           pytest 单测 + e2e 集成测试
+_legacy/         v0 历史代码（参考用，不参与构建）
+profiles/        静态 classification profile JSON 文件
 ```
 
-## 启动方式
-（Phase 1 完成后填）
+## 本地启动
+
+### 1. 安装依赖
+
+```bash
+cd control-plane
+uv sync --dev          # 或 pip install -e ".[dev]"
+```
+
+### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+# 默认值已对齐本地 MinIO（见下方），dev 环境无需修改
+```
+
+关键字段（`.env.example` 有完整说明）：
+
+| 字段 | 默认值 | 说明 |
+|---|---|---|
+| `S3_ENDPOINT_URL` | `http://localhost:9000` | MinIO API 端口 |
+| `S3_BUCKET_NAME` | `auto-upload-dev` | 目标 bucket |
+| `S3_ACCESS_KEY_ID` | `minioadmin` | MinIO root user |
+| `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
+| `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
+| `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
+| `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
+| `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker 地址 |
+| `KAFKA_TASK_TOPIC` | `delivery.tasks.v1` | 控制面发布任务 topic |
+| `KAFKA_RESULT_TOPIC` | `delivery.results.v1` | 控制面消费结果 topic |
+| `KAFKA_RESULT_GROUP_ID` | `control-plane-results` | 控制面 result consumer group |
+
+### 3. 起本地依赖（需要 Docker）
+
+```bash
+cd ../deploy
+docker compose up -d minio minio-init
+# minio-init 自动创建 auto-upload-dev bucket，约 10 秒完成
+# Console: http://localhost:9001  用户名/密码: minioadmin/minioadmin
+```
+
+Phase 2 Kafka transport 验证时额外启动：
+
+```bash
+docker compose up -d kafka
+```
+
+Kafka Docker 集成测试：
+
+```bash
+RUN_DOCKER_TESTS=1 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+  uv run pytest tests/integration/test_delivery_kafka_docker.py
+```
+
+### 4. 执行数据库迁移
+
+```bash
+cd control-plane
+alembic upgrade head
+```
+
+### 5. 启动 API 服务
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+健康检查：
+
+```bash
+curl http://localhost:8000/healthz
+# {"ok":true,"service":"control-plane","env":"development"}
+```
+
+## API 路由（`/api/v1`）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/tasks` | 上传 zip，创建 task（multipart/form-data，字段名 `file`） |
+| `POST` | `/tasks/{id}/classify` | 调用分类引擎，写入 task_item |
+| `GET` | `/tasks/{id}/preview` | 返回分类结果（items + summary） |
+| `POST` | `/tasks/{id}/confirm` | 确认，status → confirmed |
+| `POST` | `/tasks/{id}/upload` | 触发后台上传（BackgroundTasks） |
+| `GET` | `/tasks/{id}/progress` | SSE 实时进度流（text/event-stream） |
+| `POST` | `/tasks/{id}/retry` | 重置 failed items → pending |
+| `GET` | `/tasks/{id}` | task 详情 |
+| `GET` | `/tasks` | task 列表（limit/offset 分页） |
+
+## 运行测试
+
+```bash
+# 单元测试
+pytest tests/unit -v
+
+# 集成测试
+pytest tests/integration -v
+
+# 包含 e2e（需要内存 SQLite，不需要 MinIO）
+pytest tests/ -v
+
+# 只跑 e2e
+pytest tests/e2e -v -m e2e
+```
+
+当前测试按 `unit / integration / e2e` 分层组织。
+
+## 前端
+
+静态前端位于 `../web/public/index.html`，直接用浏览器打开或通过 nginx/静态服务器伺服。
+API 请求默认打到同域的 `/api/v1`，dev 环境可用 nginx 反向代理到 `localhost:8000`。

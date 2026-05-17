@@ -13,6 +13,7 @@ dependencies = [
     "aioboto3",
     "python-multipart",
     "httpx",
+    "aiokafka>=0.14.0",
 ]
 
 [dependency-groups]
@@ -20,6 +21,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    "moto[s3]",
+    "boto3",
 ]
 
 [tool.ruff]
@@ -30,8 +33,13 @@ exclude = ["_legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-# classifier.py uses fuzzywuzzy / thefuzz (1.5 task); exclude until then
-exclude = ["app/services/classifier.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "unit: fast unit tests with no cross-process dependency",
+    "e2e: end-to-end integration tests that use real SQLite and mocked S3",
+    "integration: integration tests that cross process or language boundaries",
+    "docker: tests that require local docker compose services",
+]

@@ -3,29 +3,97 @@
 高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
 
 ## 当前状态
-**Phase 0 骨架**。Phase 2 起开始填充。
+**Phase 2 completed**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
+
+当前 worker 的本地闭环：
+1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
+2. 反序列化为 `DeliveryTask`。
+3. 过滤 `upload_status=pending` 且 `severity=ok/warning` 的 item。
+4. 用 `FileSource` 从 `temp_dir + src_path` 打开文件。
+5. 调用 `Sink.Upload`；当前支持 `mock` 和 `s3`。
+6. sink 返回 `key/size/sha256` receipt。
+7. worker 写出 `delivery.results.v1/{task_id}.json`，其中 `items[]` 带 item 级 `status/key/size/sha256/error`。
+8. control-plane 可通过本地 result consumer 读取 result JSON，并回写 task / item 状态。
 
 ## 目录
 ```
 cmd/worker/           main 入口
 internal/
-  sink/               Sink interface + 各 adapter
-    smh/              腾讯 SMH/COS（三段协商）
-    s3/               S3 / MinIO（multipart）
-    oss/              阿里云 OSS
-    webhook/          HTTP webhook
-    mock/             压测/测试
-  source/             File / S3 / Memory / RemoteURL Source 实现
-  pipeline/           io.Pipe 编排
-  ratelimit/          Redis 令牌桶 + AIMD
-  kafka/              consumer
-  progress/           Redis pub/sub
-  resume/             multipart 断点续传持久化
-  observability/      OTel + Prometheus
+  message/            delivery task/result JSON schema
+  sink/               Sink interface + mock / S3 sink
+  source/             File source
+  transport/          Task/result transport interface + file spool / Kafka
+  pipeline/           文件处理编排
+  worker/             inbox -> sink -> result 的 worker 主循环
 ```
 
 ## 接口规范
 参见 [../docs/SINK_PROTOCOL.md](../docs/SINK_PROTOCOL.md)。
 
 ## 启动方式
-（Phase 2 完成后填）
+```bash
+cd data-plane
+go run ./cmd/worker
+```
+
+可选参数：
+```bash
+go run ./cmd/worker \
+  -inbox /tmp/auto_upload_outbox/delivery.tasks.v1 \
+  -results /tmp/auto_upload_outbox/delivery.results.v1 \
+  -sink mock
+```
+
+MinIO / S3-compatible 单段上传：
+```bash
+go run ./cmd/worker \
+  -sink s3 \
+  -s3-endpoint http://localhost:9000 \
+  -s3-region us-east-1 \
+  -s3-bucket auto-upload-dev \
+  -s3-access-key-id minioadmin \
+  -s3-secret-access-key minioadmin \
+  -s3-path-style=true
+```
+
+Kafka transport（默认仍是 file-spool；需要本地 Kafka）：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -kafka-task-topic delivery.tasks.v1 \
+  -kafka-result-topic delivery.results.v1 \
+  -kafka-group-id data-plane-worker \
+  -sink mock
+```
+
+本地 Kafka / MinIO：
+```bash
+cd ../deploy
+docker compose up -d kafka minio minio-init
+```
+
+Kafka 真 broker 集成测试默认跳过；启动 Compose 后可手动开启：
+```bash
+RUN_DOCKER_TESTS=1 KAFKA_BROKERS=localhost:9092 go test ./internal/transport
+```
+
+## 测试
+```bash
+cd data-plane
+GOCACHE=/tmp/smh_go_cache go test ./...
+```
+
+当前覆盖：
+- `cmd/worker`：CLI 参数 -> inbox -> result JSON 的本地 bridge。
+- `internal/message`：任务消息 JSON round-trip 和 metadata 兼容。
+- `internal/source`：文件路径、打开、大小、缺失文件错误。
+- `internal/sink`：mock sink、S3 单段 PutObject 请求和配置校验。
+- `internal/transport`：file-spool 任务读取和结果写出。
+- `internal/pipeline`：可上传 item、跳过不可上传 item、部分失败。
+- `internal/worker`：本地 inbox -> mock sink -> result JSON 闭环。
+- `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
+
+## 后续阶段
+- S3 multipart、断点续传、平台层 dedup。
+- 并发调度和 backpressure。

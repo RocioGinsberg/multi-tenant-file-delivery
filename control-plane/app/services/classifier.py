@@ -1,319 +1,455 @@
 from __future__ import annotations
 
-import logging
+import io
 import re
-import uuid
-from typing import Any, Dict, List, Optional
+import zipfile
+from dataclasses import asdict, dataclass, field
+from pathlib import PurePosixPath
+from typing import Any, Literal
 
-logger = logging.getLogger("jobs.cosdrive.classifier")
+from app.services.classification_profile import ProfileConfig
 
-_NUMBER_PREFIX_RE = re.compile(r"^\d+\.\s*")
-_UNKNOWN_TASK_TAGS = frozenset({
-    "未知文件类型", "Excel 文件", "CSV 文件", "PDF 文件",
-    "文本文件", "JSON 文件", "XML 文件",
-})
+Severity = Literal["ok", "warning", "error", "ignored"]
 
 
+@dataclass(frozen=True, slots=True)
+class FileEntry:
+    """A normalized file discovered in an uploaded archive."""
+
+    src_path: str
+    filename: str
+    ext: str = ""
+    file_size: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ClassifiedItem:
-    __slots__ = (
-        "item_id", "filename", "relative_path", "ext", "file_size",
-        "team_name_raw", "team_name_matched", "team_space_id", "team_org_id",
-        "task_name", "category_name", "drive_dir", "drive_path",
-        "team_match_method", "task_match_method", "match_score", "mapping_source",
-        "severity", "error_code", "error_message", "warning_message",
-    )
+    """Classifier output ready to be persisted as a task_item row."""
 
-    def __init__(self, **kwargs):
-        for slot in self.__slots__:
-            setattr(self, slot, kwargs.get(slot, ""))
-        if not self.item_id:
-            self.item_id = uuid.uuid4().hex[:16]
-        if not self.severity:
-            self.severity = "ok"
-        for int_field in ("file_size", "match_score"):
-            val = getattr(self, int_field)
-            if isinstance(val, str) and val == "":
-                setattr(self, int_field, 0)
+    src_path: str
+    filename: str
+    ext: str = ""
+    file_size: int = 0
+    target_name_raw: str = ""
+    target_name_matched: str | None = None
+    document_type: str = ""
+    category_name: str = ""
+    dst_dir: str = ""
+    dst_path: str = ""
+    target_match_method: str = ""
+    document_match_method: str = ""
+    match_score: int = 0
+    mapping_source: str = ""
+    severity: Severity = "ok"
+    error_code: str = ""
+    error_message: str = ""
+    warning_message: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {s: getattr(self, s) for s in self.__slots__}
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
+@dataclass(slots=True)
 class ClassifySummary:
-    def __init__(self):
-        self.total = 0
-        self.ok = 0
-        self.warning = 0
-        self.error = 0
-        self.ignored = 0
-        self.unmatched_teams = 0
-        self.unmatched_tasks = 0
-        self.teams_involved: set = set()
-        self.has_blocking_errors = False
+    """Aggregate counts for preview and task summary_json."""
 
-    def to_dict(self) -> Dict[str, Any]:
+    total: int = 0
+    ok: int = 0
+    warning: int = 0
+    error: int = 0
+    ignored: int = 0
+    unmatched_targets: int = 0
+    unmatched_document_types: int = 0
+    targets_involved: set[str] = field(default_factory=set)
+    has_blocking_errors: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total": self.total,
             "ok": self.ok,
             "warning": self.warning,
             "error": self.error,
             "ignored": self.ignored,
-            "unmatched_teams": self.unmatched_teams,
-            "unmatched_tasks": self.unmatched_tasks,
-            "teams_involved": sorted(self.teams_involved),
+            "unmatched_targets": self.unmatched_targets,
+            "unmatched_document_types": self.unmatched_document_types,
+            "targets_involved": sorted(self.targets_involved),
             "has_blocking_errors": self.has_blocking_errors,
         }
 
 
-def _normalize_text(text: str) -> str:
-    return "".join(re.findall(r"[A-Za-z\u4e00-\u9fff]", text))
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _decode_zip_filename(info: zipfile.ZipInfo) -> str:
+    """Return a properly decoded filename from a ZipInfo entry.
+
+    Python's zipfile may set the UTF-8 flag (0x800) in the central directory
+    even when the original intent was GBK — this happens because ZipInfo re-encodes
+    non-ASCII filenames stored as latin-1 carriers.
+
+    Heuristic: if the filename contains characters in the latin-1 supplemental block
+    (U+0080..U+00FF), attempt GBK recovery (encode to latin-1, decode as GBK).
+    If that fails or the chars are outside latin-1 (genuine Unicode), keep as-is.
+    """
+    filename = info.filename
+    # Check for latin-1 supplemental characters — indicator of GBK-via-latin-1 carrier
+    if any("\x80" <= c <= "\xff" for c in filename):
+        try:
+            raw = filename.encode("latin-1")
+            return raw.decode("gbk")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            pass
+    return filename
 
 
-def _strip_number_prefix(name: str) -> str:
-    return _NUMBER_PREFIX_RE.sub("", name).strip()
+def _is_path_traversal(src_path: str) -> bool:
+    """Return True if the path contains traversal sequences."""
+    if src_path.startswith("/"):
+        return True
+    parts = PurePosixPath(src_path).parts
+    for part in parts:
+        if part == "..":
+            return True
+    return False
 
 
-def _fuzzy_match(text: str, candidates: List[str], threshold: int = 60) -> Optional[tuple[str, int]]:
-    try:
-        from fuzzywuzzy import process as fuzz_process
-    except ImportError:
-        from thefuzz import process as fuzz_process
+def _extract_target_raw(
+    src_path: str,
+    filename: str,
+    profile: ProfileConfig,
+) -> tuple[str, str]:
+    """Return (raw_target, error_code).
 
-    if not candidates:
-        return None
-    result = fuzz_process.extractOne(text, candidates)
-    if result and result[1] >= threshold:
-        return (result[0], result[1])
-    return None
+    error_code is '' when extraction succeeded, 'unknown_target' when it failed.
+    """
+    strategy = profile.target_extraction.strategy
+
+    if strategy == "broadcast":
+        broadcast = profile.target_extraction.broadcast_target or ""
+        return broadcast, ""
+
+    # strategy == "directory_or_filename"
+    parts = PurePosixPath(src_path).parts
+    # parts[0] is the filename itself for root-level files,
+    # parts[0] is top-level directory for nested files.
+    if len(parts) >= 2:
+        # File is inside a directory: first part is top-level dir
+        return parts[0], ""
+
+    # Root-level file: fall back to filename_segment
+    return _filename_segment(filename, profile)
 
 
-def classify_files(
-    file_entries: List[Dict[str, Any]],
-    config: Dict[str, Any],
-    teams: List[Dict[str, Any]],
-    task_id: str,
-) -> tuple[List[ClassifiedItem], ClassifySummary]:
-    team_aliases = config.get("team_aliases", {})
-    task_to_info = config.get("task_classification", {})
-    description_mapping = config.get("description_mapping", {})
-    mapping_config = config.get("mapping_config", {})
-    suffix_priority = config.get("suffix_priority", {})
-    suffix_fallback = config.get("suffix_fallback", {})
-    ignored_filenames = set(config.get("ignored_filenames", []))
+def _filename_segment(
+    filename: str,
+    profile: ProfileConfig,
+) -> tuple[str, str]:
+    """Split filename stem by delimiters and take the last segment as raw target.
 
-    fuzzy_enabled = mapping_config.get("enable_fuzzy_match", True)
-    fuzzy_threshold = mapping_config.get("fuzzy_threshold", 65)
-    desc_fuzzy_threshold = mapping_config.get("description_mapping_fuzzy_threshold", 70)
+    Returns (raw, '') on success, ('', 'unknown_target') on failure.
+    """
+    stem = PurePosixPath(filename).stem
+    delimiters = profile.target_extraction.delimiters
 
-    valid_team_names = [t["name"] for t in teams if t.get("name")]
-    team_name_to_info = {}
-    for t in teams:
-        team_name_to_info[t["name"]] = t
-        if t.get("original_name"):
-            team_name_to_info[t["original_name"]] = t
+    # Build a regex that splits on any of the delimiters
+    if not delimiters:
+        return "", "unknown_target"
 
-    stripped_team_index: Dict[str, str] = {}
-    for name in valid_team_names:
-        stripped = _strip_number_prefix(name)
-        if stripped and stripped != name:
-            stripped_team_index[stripped] = name
+    # Escape each delimiter and join with |
+    pattern = "|".join(re.escape(d) for d in delimiters)
+    segments = re.split(pattern, stem)
 
-    team_name_mapping: Dict[str, str] = {}
-    for t in teams:
-        if t.get("name") and t.get("original_name"):
-            team_name_mapping[t["name"]] = t["original_name"]
+    if len(segments) >= 2:
+        last = segments[-1].strip()
+        if last:
+            return last, ""
 
-    items: List[ClassifiedItem] = []
+    return "", "unknown_target"
+
+
+def _resolve_target(
+    raw: str,
+    profile: ProfileConfig,
+) -> tuple[str | None, str]:
+    """Resolve raw target string to a target key.
+
+    Returns (matched_key, match_method) where matched_key is None on failure.
+    """
+    raw_lower = raw.lower()
+
+    for tc in profile.targets:
+        # Exact match (case-insensitive)
+        if tc.key.lower() == raw_lower:
+            return tc.key, "exact"
+
+        # Alias match (case-insensitive)
+        for alias in tc.aliases:
+            if alias.lower() == raw_lower:
+                return tc.key, "alias"
+
+        # Strip number prefix match
+        if tc.strip_number_prefix:
+            stripped = re.sub(r"^\d+\.\s*", "", tc.key)
+            if stripped.lower() == raw_lower:
+                return tc.key, "strip_number_prefix"
+
+    return None, ""
+
+
+def _resolve_document_type(
+    filename: str,
+    ext: str,
+    profile: ProfileConfig,
+) -> tuple[str, str, int]:
+    """Determine document type for a file.
+
+    Priority: suffix_priority > description_mapping (exact then fuzzy) > suffix_fallback.
+
+    Returns (document_type, match_method, match_score).
+    document_type is '' when nothing matched.
+    """
+    # 1. suffix_priority
+    if ext in profile.suffix_priority:
+        return profile.suffix_priority[ext], "suffix_priority", 100
+
+    # 2. description_mapping — exact substring match against stem
+    stem = PurePosixPath(filename).stem
+    for keyword, doc_type in profile.description_mapping.items():
+        if keyword in stem:
+            return doc_type, "description_exact", 100
+
+    # 3. description_mapping — fuzzy match (if enabled)
+    if profile.matching_config.enable_fuzzy_match and profile.description_mapping:
+        import difflib
+
+        threshold = profile.matching_config.description_fuzzy_threshold
+        best_score = 0.0
+        best_doc_type = ""
+        for keyword, doc_type in profile.description_mapping.items():
+            score = difflib.SequenceMatcher(None, keyword, stem).ratio() * 100
+            if score > best_score:
+                best_score = score
+                best_doc_type = doc_type
+        if best_score >= threshold:
+            return best_doc_type, "description_fuzzy", int(best_score)
+
+    # 4. suffix_fallback
+    if ext in profile.suffix_fallback:
+        return profile.suffix_fallback[ext], "suffix_fallback", 0
+
+    return "", "unmatched", 0
+
+
+def _render_path(
+    profile: ProfileConfig,
+    category: str,
+    document_type: str,
+    filename: str,
+) -> tuple[str, str]:
+    """Render dst_path from path_template.
+
+    Returns (dst_path, error_code). error_code is 'path_render_error' when
+    the rendered path contains '..'.
+    """
+    rendered = profile.path_template.format(
+        category=category,
+        document_type=document_type,
+        filename=filename,
+    )
+    # Check for path traversal in rendered path
+    parts = PurePosixPath(rendered).parts
+    for part in parts:
+        if part == "..":
+            return "", "path_render_error"
+    return rendered, ""
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def classify_zip(
+    zip_bytes: bytes,
+    profile: ProfileConfig,
+) -> tuple[list[ClassifiedItem], ClassifySummary]:
+    """Classify an uploaded zip using a static Classification Profile."""
     summary = ClassifySummary()
+    items: list[ClassifiedItem] = []
 
-    for entry in sorted(file_entries, key=lambda e: e.get("relative_path", "")):
-        summary.total += 1
-        filename = entry["filename"]
-        relative_path = entry.get("relative_path", filename)
-        ext = entry.get("ext", "")
-        file_size = entry.get("file_size", 0)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        for info in zf.infolist():
+            src_path = _decode_zip_filename(info)
 
-        if filename in ignored_filenames:
-            items.append(ClassifiedItem(
-                filename=filename, relative_path=relative_path,
-                ext=ext, file_size=file_size,
-                severity="ignored", error_code="IGNORED_FILE",
-                error_message=f"文件 '{filename}' 在忽略列表中",
-            ))
-            summary.ignored += 1
-            continue
+            # Skip pure directory entries
+            if src_path.endswith("/"):
+                continue
 
-        base = filename.rsplit(".", 1)[0] if "." in filename else filename
-        parts = [p.strip() for p in re.split(r"\s*[-—–\u2018-]\s*", base)]
-        team_raw = parts[-1] if len(parts) >= 2 else ""
-        desc_candidate = " ".join(parts[:-1]).strip() if len(parts) >= 2 else (parts[0] if parts else "")
+            summary.total += 1
+            filename = PurePosixPath(src_path).name
+            ext = PurePosixPath(filename).suffix.lower()
 
-        team_match_method = ""
-        team_matched = ""
-        team_space_id = ""
-        team_org_id = ""
-        team_error = ""
-        team_suggestion = ""
-        if team_raw:
-            team_matched, team_match_method, team_space_id, team_org_id, team_error, team_suggestion = _match_team(
-                team_raw, team_aliases, valid_team_names, stripped_team_index, team_name_mapping, team_name_to_info,
+            # --- Safety: path traversal ---
+            if _is_path_traversal(src_path):
+                item = ClassifiedItem(
+                    src_path=src_path,
+                    filename=filename,
+                    ext=ext,
+                    file_size=info.file_size,
+                    severity="error",
+                    error_code="path_traversal",
+                    error_message=f"Path traversal detected: {src_path}",
+                )
+                items.append(item)
+                summary.error += 1
+                summary.has_blocking_errors = True
+                continue
+
+            # --- Entry filter: ignored filenames ---
+            if filename in profile.entry_filters.ignored_filenames:
+                summary.ignored += 1
+                continue
+
+            # --- Ignored prefixes ---
+            skip_prefix = False
+            for prefix in profile.entry_filters.ignored_prefixes:
+                if src_path.startswith(prefix):
+                    skip_prefix = True
+                    break
+            if skip_prefix:
+                summary.ignored += 1
+                continue
+
+            # --- Target extraction ---
+            raw_target, target_error = _extract_target_raw(src_path, filename, profile)
+
+            if target_error == "unknown_target":
+                item = ClassifiedItem(
+                    src_path=src_path,
+                    filename=filename,
+                    ext=ext,
+                    file_size=info.file_size,
+                    target_name_raw=raw_target,
+                    target_name_matched=None,
+                    severity="error",
+                    error_code="unknown_target",
+                    error_message="Could not determine target from filename",
+                )
+                items.append(item)
+                summary.error += 1
+                summary.has_blocking_errors = True
+                summary.unmatched_targets += 1
+                continue
+
+            # --- Target resolution ---
+            if profile.target_extraction.strategy == "broadcast":
+                # broadcast: raw_target IS the broadcast target key, resolve directly
+                matched_key = raw_target
+                match_method = "broadcast"
+                if not matched_key:
+                    matched_key = None
+                    match_method = ""
+            else:
+                matched_key, match_method = _resolve_target(raw_target, profile)
+
+            if matched_key is None:
+                item = ClassifiedItem(
+                    src_path=src_path,
+                    filename=filename,
+                    ext=ext,
+                    file_size=info.file_size,
+                    target_name_raw=raw_target,
+                    target_name_matched=None,
+                    severity="error",
+                    error_code="unknown_target",
+                    error_message=f"Target '{raw_target}' did not match any known target",
+                )
+                items.append(item)
+                summary.error += 1
+                summary.has_blocking_errors = True
+                summary.unmatched_targets += 1
+                continue
+
+            # --- Document type classification ---
+            doc_type, doc_match_method, match_score = _resolve_document_type(
+                filename, ext, profile
             )
 
-        description = _normalize_text(desc_candidate)
-        task_name, task_match_method, task_score, task_mapping_source = _classify_task(
-            description, ext, suffix_priority, description_mapping, task_to_info,
-            suffix_fallback, fuzzy_enabled, fuzzy_threshold, desc_fuzzy_threshold,
-        )
+            # --- Category lookup ---
+            category_name = ""
+            if doc_type and doc_type in profile.document_types:
+                category_name = profile.document_types[doc_type].category
 
-        task_error = ""
-        if not task_name or task_name in _UNKNOWN_TASK_TAGS:
-            task_error = f"文件 '{filename}' 的任务 '{task_name}' 未在配置中找到"
+            # --- Path rendering ---
+            dst_path = ""
+            path_error = ""
+            if doc_type and category_name:
+                dst_path, path_error = _render_path(
+                    profile, category_name, doc_type, filename
+                )
 
-        info = task_to_info.get(task_name, {})
-        if isinstance(info, dict):
-            category = info.get("category", "未知类别")
-            task_display = info.get("task", "")
-        else:
-            category = "未知类别"
-            task_display = task_name
+            if path_error:
+                item = ClassifiedItem(
+                    src_path=src_path,
+                    filename=filename,
+                    ext=ext,
+                    file_size=info.file_size,
+                    target_name_raw=raw_target,
+                    target_name_matched=matched_key,
+                    target_match_method=match_method,
+                    document_type=doc_type,
+                    category_name=category_name,
+                    severity="error",
+                    error_code="path_render_error",
+                    error_message="Rendered path contains '..'",
+                )
+                items.append(item)
+                summary.error += 1
+                summary.has_blocking_errors = True
+                continue
 
-        if task_display and task_display.strip():
-            drive_dir = f"{category}/{task_display}" if category != "未知类别" else task_display
-        else:
-            drive_dir = category if category != "未知类别" else "未分类"
+            dst_dir = str(PurePosixPath(dst_path).parent) if dst_path else ""
+            if dst_dir == ".":
+                dst_dir = ""
 
-        drive_path = f"{drive_dir}/{filename}"
-        final_team = team_name_mapping.get(team_matched, team_matched) if team_matched else ""
+            severity: Severity = "ok"
+            if not doc_type:
+                severity = "warning"
+                summary.unmatched_document_types += 1
 
-        severity = "ok"
-        error_code = ""
-        error_message = ""
-        warning_message = ""
+            item = ClassifiedItem(
+                src_path=src_path,
+                filename=filename,
+                ext=ext,
+                file_size=info.file_size,
+                target_name_raw=raw_target,
+                target_name_matched=matched_key,
+                document_type=doc_type,
+                category_name=category_name,
+                dst_dir=dst_dir,
+                dst_path=dst_path,
+                target_match_method=match_method,
+                document_match_method=doc_match_method,
+                match_score=match_score,
+                severity=severity,
+            )
+            items.append(item)
 
-        if team_error:
-            severity = "error"
-            error_code = "TEAM_NOT_FOUND"
-            error_message = team_error
-            if team_suggestion:
-                warning_message = f"建议团队: {team_suggestion}"
-            summary.unmatched_teams += 1
-            summary.has_blocking_errors = True
-            summary.error += 1
-        elif task_error:
-            severity = "error"
-            error_code = "TASK_NOT_FOUND"
-            error_message = task_error
-            summary.unmatched_tasks += 1
-            summary.has_blocking_errors = True
-            summary.error += 1
-        elif task_score and task_score < 100:
-            severity = "warning"
-            warning_message = f"任务匹配为模糊结果，分数={task_score}"
-            summary.warning += 1
-        else:
-            summary.ok += 1
+            if severity == "ok":
+                summary.ok += 1
+                if matched_key:
+                    summary.targets_involved.add(matched_key)
+            elif severity == "warning":
+                summary.warning += 1
 
-        if final_team:
-            summary.teams_involved.add(final_team)
-
-        items.append(ClassifiedItem(
-            filename=filename,
-            relative_path=relative_path,
-            ext=ext,
-            file_size=file_size,
-            team_name_raw=team_raw,
-            team_name_matched=final_team,
-            team_space_id=team_space_id,
-            team_org_id=team_org_id,
-            task_name=task_display or task_name,
-            category_name=category,
-            drive_dir=drive_dir,
-            drive_path=drive_path,
-            team_match_method=team_match_method,
-            task_match_method=task_match_method,
-            match_score=task_score,
-            mapping_source=task_mapping_source,
-            severity=severity,
-            error_code=error_code,
-            error_message=error_message,
-            warning_message=warning_message,
-        ))
+    summary.has_blocking_errors = summary.error > 0
 
     return items, summary
 
 
-def _match_team(
-    team_raw: str,
-    team_aliases: Dict[str, str],
-    valid_team_names: List[str],
-    stripped_team_index: Dict[str, str],
-    team_name_mapping: Dict[str, str],
-    team_name_to_info: Dict[str, Dict[str, Any]],
-) -> tuple[str, str, str, str, str, str]:
-    if team_raw in team_aliases:
-        team_name = team_aliases[team_raw]
-        team_info = team_name_to_info.get(team_name) or team_name_to_info.get(team_name_mapping.get(team_name, ""))
-        return (
-            team_name,
-            "team_aliases",
-            str((team_info or {}).get("spaceId", "")),
-            str((team_info or {}).get("orgId", "")),
-            "",
-            "",
-        )
-
-    if team_raw in valid_team_names:
-        team_info = team_name_to_info.get(team_raw, {})
-        return team_raw, "exact", str(team_info.get("spaceId", "")), str(team_info.get("orgId", "")), "", ""
-
-    stripped_raw = _strip_number_prefix(team_raw)
-    if stripped_raw in stripped_team_index:
-        matched = stripped_team_index[stripped_raw]
-        team_info = team_name_to_info.get(matched, {})
-        return matched, "strip_prefix_exact", str(team_info.get("spaceId", "")), str(team_info.get("orgId", "")), "", ""
-
-    fuzzy = _fuzzy_match(team_raw, valid_team_names, threshold=70)
-    if fuzzy:
-        suggestion, _ = fuzzy
-        return "", "", "", "", f"未匹配团队: {team_raw}", suggestion
-    return "", "", "", "", f"未匹配团队: {team_raw}", ""
-
-
-def _classify_task(
-    description: str,
-    ext: str,
-    suffix_priority: Dict[str, str],
-    description_mapping: Dict[str, str],
-    task_to_info: Dict[str, Any],
-    suffix_fallback: Dict[str, str],
-    fuzzy_enabled: bool,
-    fuzzy_threshold: int,
-    desc_fuzzy_threshold: int,
-) -> tuple[str, str, int, str]:
-    suffix_hit = suffix_priority.get(ext, "")
-    if suffix_hit:
-        return suffix_hit, "suffix_priority", 100, "suffix_priority"
-
-    if description in description_mapping:
-        return description_mapping[description], "description_mapping_exact", 100, "description_mapping"
-
-    if fuzzy_enabled and description_mapping:
-        fuzzy_desc = _fuzzy_match(description, list(description_mapping.keys()), threshold=desc_fuzzy_threshold)
-        if fuzzy_desc:
-            matched_desc, score = fuzzy_desc
-            return description_mapping[matched_desc], "description_mapping_fuzzy", score, "description_mapping"
-
-    task_names = list(task_to_info.keys())
-    if description in task_names:
-        return description, "task_exact", 100, "task_classification"
-
-    if fuzzy_enabled and task_names:
-        fuzzy_task = _fuzzy_match(description, task_names, threshold=fuzzy_threshold)
-        if fuzzy_task:
-            matched_task, score = fuzzy_task
-            return matched_task, "task_fuzzy", score, "task_classification"
-
-    fallback = suffix_fallback.get(ext, "")
-    if fallback:
-        return fallback, "suffix_fallback", 60, "suffix_fallback"
-    return "未知文件类型", "unknown", 0, ""
+def classify_entries(
+    entries: list[FileEntry],
+    profile: dict[str, Any],
+) -> tuple[list[ClassifiedItem], ClassifySummary]:
+    """Classify normalized file entries using a static Classification Profile."""
+    raise NotImplementedError("Phase 1.5 implements classifier profile engine")

@@ -16,7 +16,7 @@
 ## 项目导览
 
 > **完整设计**：[BLUEPRINT.md](./BLUEPRINT.md) — 项目北极星，所有重大决策的来源
-> **协作规范**：[AGENTS.md](./AGENTS.md) — 多模型协作执行规范（主对话 / subagent / 外部模型的责任划分）
+> **协作规范**：[DISPATCH.md](./DISPATCH.md) — 多 Agent 协作执行规范（宿主共用）；[AGENTS.md](./AGENTS.md)（Codex 宿主）；[.claude/CLAUDE.md](./.claude/CLAUDE.md)（Claude Code 宿主）
 > **派工计划**：[docs/plans/](./docs/plans/) — 每个 Phase 的子任务清单与执行方分配
 > **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 > **架构决策记录**：[docs/ADR/](./docs/ADR/)
@@ -41,11 +41,12 @@
 
 **Phase 0（完成）**：清理半成品脚手架，建立 monorepo 骨架。
 
-**下一步：Phase 1** —— Python 单体 MVP，FastAPI + SQLite + 进程内 worker，本地 MinIO 作为对端，把 HQ 写路径跑通。
+**Phase 1（完成）**：Python 控制面 MVP，包含任务创建、分类、确认、Python 直传、repo/API/e2e 测试。
+
+**Phase 2（进行中）**：Go 数据面已完成本地 outbox bridge scaffold。控制面可在 `go-worker` 模式下写入 `delivery.tasks.v1` JSON，Go worker 可读取任务、执行 mock sink pipeline，并写出 `delivery.results.v1` 结果。
 
 详细阶段计划见 [BLUEPRINT § 十](./BLUEPRINT.md#十实施阶段每阶段都有完成定义)。
 
 ## 回滚
 
 回到 Phase 0 之前的状态：`git checkout pre-phase-0`。
-

@@ -5,17 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <link href="/css/tailwind.css" rel="stylesheet"/>
 <link href="/css/portal.css" rel="stylesheet"/>
-<title>Smart Ops — 企业网盘</title>
+<title>Auto Upload — 文件上传台</title>
 <style>
 .cos-page{padding-top:0}
 .page-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-top:32px;margin-bottom:18px}
 .hero-kicker{font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--c-text-3);margin-bottom:10px}
 .hero-title{font-family:var(--font-display);font-size:38px;font-weight:800;letter-spacing:-.06em;line-height:.96;color:var(--c-text);margin:0}
 .hero-subtitle{max-width:700px;font-size:14px;line-height:1.7;color:var(--c-text-2);margin:10px 0 0}
-.hero-actions{display:grid;gap:10px;min-width:300px}
-.hero-card{padding:14px 16px;border-radius:18px;background:rgba(255,252,245,.84);border:1px solid var(--c-border);box-shadow:var(--shadow-sm)}
-.hero-card-label{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--c-text-3);margin-bottom:6px}
-.hero-card-value{font-size:13px;font-weight:700;color:var(--c-text);line-height:1.55}
 .cos-section{background:linear-gradient(180deg,rgba(255,252,245,.95),rgba(250,246,237,.96));border:1px solid var(--c-border);border-radius:22px;padding:20px 20px 18px;box-shadow:var(--shadow-sm)}
 .section-title{font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-.04em;color:var(--c-text);margin:0}
 .section-copy{font-size:13px;line-height:1.65;color:var(--c-text-3);margin:8px 0 0}
@@ -53,30 +49,20 @@ table.item-table{width:100%;font-size:13px;border-collapse:collapse}
 table.item-table th{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e5ea;font-weight:600;color:#6e6e73;font-size:12px}
 table.item-table td{padding:6px 8px;border-bottom:1px solid #f2f2f7;vertical-align:top}
 
-.json-editor{width:100%;min-height:400px;font-family:'SF Mono',Menlo,monospace;font-size:13px;border:1px solid #d2d2d7;border-radius:8px;padding:12px;resize:vertical}
-
 .progress-bar{height:6px;border-radius:3px;background:#f2f2f7;overflow:hidden}
 .progress-fill{height:100%;background:#22c55e;transition:width .3s}
 .detail-card{border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fafafa;margin-top:12px}
-.timeline-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-.timeline-item{border-left:2px solid #ddd6fe;padding-left:10px}
 .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
-.registry-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:16px}
-.registry-stack{display:flex;flex-direction:column;gap:14px}
-.registry-card{border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:16px}
-.registry-card h3{font-size:14px;font-weight:700;color:#111827;margin-bottom:4px}
-.registry-card p{font-size:12px;color:#6b7280;margin-bottom:12px}
-.registry-card.compact p{margin-bottom:10px}
-.registry-aside{display:flex;flex-direction:column;gap:14px}
-.runtime-banner{border-radius:18px;padding:16px 18px;border:1px solid rgba(59,140,255,.18);background:linear-gradient(135deg,rgba(255,252,245,.94),rgba(239,246,255,.84));margin-bottom:18px;box-shadow:var(--shadow-sm)}
-.runtime-banner.warn{border-color:#fde68a;background:linear-gradient(135deg,rgba(255,252,245,.94),rgba(255,251,235,.9))}
-.runtime-banner.err{border-color:#fecaca;background:linear-gradient(135deg,rgba(255,252,245,.94),rgba(255,241,242,.9))}
-.runtime-banner .title{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--c-text-3);margin-bottom:8px}
-.runtime-banner .meta{font-size:13px;color:var(--c-text-2);line-height:1.65}
-.inline-note{font-size:12px;color:#6b7280}
-.list-table{display:flex;flex-direction:column;gap:8px}
-.pill-list{display:flex;flex-wrap:wrap;gap:8px}
-.pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:12px;font-weight:600}
+
+.blocking-note{border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,rgba(255,245,245,.94),rgba(255,241,242,.92));border:1px solid #fecaca;color:#b42318;font-size:13px;line-height:1.6}
+.group-head-note{font-size:11px;color:var(--c-text-3)}
+.status-note-error{font-size:11px;color:#b42318;margin-top:4px}
+.status-note-warn{font-size:11px;color:#9a6700;margin-top:4px}
+.table-path{font-size:12px;color:var(--c-text-3)}
+.upload-status-ok{color:#1f7a45;font-weight:700}
+.upload-status-error{color:#b42318;font-weight:700}
+.upload-status-muted{color:var(--c-text-3);font-weight:600}
+.section-divider{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 .action-btn{padding:8px 18px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .15s;border:1px solid transparent}
 .action-btn.primary{background:var(--c-accent);color:var(--c-ink)}
 .action-btn.primary:hover{filter:brightness(1.03)}
@@ -85,28 +71,7 @@ table.item-table td{padding:6px 8px;border-bottom:1px solid #f2f2f7;vertical-ali
 .action-btn.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
 .action-btn.warn:hover{background:#ffedd5}
 .action-btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
-.mini-link-btn{padding:6px 12px;border-radius:999px;border:1px solid rgba(22,19,15,.1);background:rgba(255,252,245,.82);color:var(--c-text);font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .15s}
-.mini-link-btn:hover{background:rgba(180,234,88,.12);border-color:rgba(180,234,88,.32)}
-.editor-select{padding:8px 14px;border:1px solid var(--c-border);border-radius:999px;background:rgba(255,252,245,.82);font-size:12px;color:var(--c-text);font-family:inherit;outline:none}
-.editor-select:focus{border-color:var(--c-accent)}
-table.item-table input,.list-table input,#tbl-mapping-config input{width:100%;padding:7px 10px;border:1px solid var(--c-border);border-radius:10px;background:rgba(255,252,245,.9);font-size:12px;color:var(--c-text);font-family:inherit;outline:none}
-table.item-table input:focus,.list-table input:focus,#tbl-mapping-config input:focus{border-color:var(--c-accent)}
-.editor-danger-btn{padding:5px 10px;border-radius:999px;border:1px solid #f7c1b9;background:#fff1ef;color:#a33c2c;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
-.editor-danger-btn:hover{background:#ffe5df}
-.json-error{font-size:12px;color:#b42318;margin-top:6px}
-.blocking-note{border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,rgba(255,245,245,.94),rgba(255,241,242,.92));border:1px solid #fecaca;color:#b42318;font-size:13px;line-height:1.6}
-.group-head-note{font-size:11px;color:var(--c-text-3)}
-.status-note-error{font-size:11px;color:#b42318;margin-top:4px}
-.status-note-warn{font-size:11px;color:#9a6700;margin-top:4px}
-.table-path{font-size:12px;color:var(--c-text-3)}
-.runtime-link{color:var(--c-text);text-decoration:none;border-bottom:1px solid rgba(22,19,15,.14);font-size:12px;font-weight:700}
-.runtime-link:hover{border-bottom-color:var(--c-text)}
-.upload-status-ok{color:#1f7a45;font-weight:700}
-.upload-status-error{color:#b42318;font-weight:700}
-.upload-status-muted{color:var(--c-text-3);font-weight:600}
-.section-divider{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 @media (max-width: 960px){
-  .registry-layout{grid-template-columns:1fr}
   .hero-title{font-size:32px}
 }
 </style>
@@ -118,144 +83,31 @@ table.item-table input:focus,.list-table input:focus,#tbl-mapping-config input:f
 <main class="cos-page max-w-5xl mx-auto px-4 py-6">
 <section class="page-hero">
   <div>
-    <div class="hero-kicker">CosDrive Workspace</div>
-    <h1 class="hero-title">企业网盘上传台</h1>
-    <p class="hero-subtitle">用于维护 CosDrive 分类注册表、完成 zip 分类预检，并驱动腾讯企业网盘上传任务。这个链路和 MinIO 上传域严格分离，属于独立 worker 与独立执行语义。</p>
+    <div class="hero-kicker">Auto Upload</div>
+    <h1 class="hero-title">文件上传台</h1>
+    <p class="hero-subtitle">上传 zip 包，自动分类预检，确认后批量上传至 MinIO 对象存储。</p>
   </div>
 </section>
 
 <!-- ════════════════════════════════════════════════════════ -->
-<!-- SECTION 1: 注册表管理 -->
-<!-- ════════════════════════════════════════════════════════ -->
-<section id="sec-registry" class="cos-section mb-8">
-<div class="section-divider">
-  <div>
-    <h2 class="section-title">分类规则配置台</h2>
-    <p class="section-copy">用同一套注册表维护团队别名、任务分类、后缀策略和模糊匹配参数，分类预览和真实上传都以发布态注册表为准。</p>
-  </div>
-</div>
-<details>
-<summary style="list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-  <span class="text-sm font-semibold" style="margin:0;color:var(--c-text)">展开配置编辑器</span>
-  <div class="flex gap-2" onclick="event.stopPropagation()">
-    <button class="tab-btn active" onclick="switchRegTab('table')">表格模式</button>
-    <button class="tab-btn" style="color:var(--c-text-3);font-size:12px" onclick="switchRegTab('json')">JSON</button>
-  </div>
-</summary>
-
-  <div id="reg-info" class="text-sm text-gray-500 mb-3">加载中...</div>
-
-  <!-- 表格模式 -->
-  <div id="reg-tab-table">
-    <div class="registry-layout">
-      <div class="registry-stack">
-        <article class="registry-card">
-          <h3>团队匹配</h3>
-          <p>统一维护团队别名，优先解决 zip 文件名中的团队称呼不一致问题。</p>
-          <div id="tbl-team-aliases"></div>
-          <button class="mini-link-btn" onclick="addAliasRow()">添加别名</button>
-        </article>
-
-        <article class="registry-card">
-          <h3>任务分类</h3>
-          <p>定义任务名到分类与子任务的映射，决定分类结果和后续目录结构。</p>
-          <div id="tbl-task-class"></div>
-          <button class="mini-link-btn" onclick="addTaskRow()">添加任务</button>
-        </article>
-
-        <article class="registry-card">
-          <h3>描述映射</h3>
-          <p>当文件名不能直接匹配任务时，用关键词或描述短语兜底映射到标准任务。</p>
-          <div id="tbl-desc-map"></div>
-          <button class="mini-link-btn" onclick="addDescRow()">添加映射</button>
-        </article>
-      </div>
-
-      <aside class="registry-aside">
-        <article class="registry-card compact">
-          <h3>文件后缀规则</h3>
-          <p>用于控制后缀优先级与未知任务兜底标签，避免新文件类型无法归类。</p>
-          <div class="space-y-4">
-            <div>
-              <label class="text-xs text-gray-500">优先任务</label>
-              <div id="tbl-suffix-pri" class="mt-1"></div>
-            </div>
-            <div>
-              <label class="text-xs text-gray-500">兜底标签</label>
-              <div id="tbl-suffix-fb" class="mt-1"></div>
-            </div>
-          </div>
-        </article>
-
-        <article class="registry-card compact">
-          <h3>忽略文件</h3>
-          <p>维护不参与分类的系统文件、缓存文件或无效附件。</p>
-          <div id="tbl-ignored" class="list-table"></div>
-          <button class="mini-link-btn" onclick="addIgnoredRow()">添加文件名</button>
-        </article>
-
-        <details>
-        <summary style="list-style:none;cursor:pointer"><article class="registry-card compact" style="margin-bottom:0">
-          <h3 style="pointer-events:none">高级匹配参数</h3>
-          <p style="pointer-events:none">控制模糊匹配开关与阈值。只有当精确匹配不足时，再调整这里。</p>
-        </article></summary>
-        <article class="registry-card compact" style="border-top:none;border-radius:0 0 10px 10px;margin-top:0">
-          <div id="tbl-mapping-config"></div>
-        </article>
-        </details>
-
-        <article class="registry-card compact">
-          <h3>当前结构预览</h3>
-          <p>帮助快速判断配置规模，避免把所有规则都堆在一个长表里。</p>
-          <div id="reg-outline" class="pill-list"></div>
-        </article>
-      </aside>
-    </div>
-  </div>
-
-  <!-- JSON 模式 -->
-  <div id="reg-tab-json" style="display:none">
-    <textarea id="reg-json-editor" class="json-editor" spellcheck="false"></textarea>
-    <div id="reg-json-error" class="json-error" style="display:none"></div>
-  </div>
-
-  <div class="flex gap-2 mt-4">
-    <button id="btn-reg-save" class="action-btn secondary" onclick="saveRegistryDraft()">保存草稿</button>
-    <button id="btn-reg-publish" class="action-btn primary" onclick="publishRegistry()">发布注册表</button>
-    <button id="btn-reg-validate" class="action-btn secondary" onclick="validateRegistry()">校验配置</button>
-    <select id="sel-reg-version" class="editor-select" onchange="loadRegistryVersion(this.value)">
-      <option value="">版本历史</option>
-    </select>
-  </div>
-</details>
-</section>
-
-<!-- ════════════════════════════════════════════════════════ -->
-<!-- SECTION 2: 上传准备 -->
+<!-- SECTION 1: 上传准备 -->
 <!-- ════════════════════════════════════════════════════════ -->
 <section id="sec-prepare" class="cos-section mb-8">
   <div class="section-divider">
     <div>
       <h2 class="section-title">上传准备</h2>
-      <p class="section-copy">上传 zip 创建任务实例，可选同步在线团队，然后再进入自动分类。safe-mode 下可以只验证注册表和分类结果。</p>
+      <p class="section-copy">选择或拖放 zip 文件，上传后自动解压并等待分类。</p>
     </div>
   </div>
 
-  <div class="flex gap-4 items-start">
-    <div id="dz-zip" class="drop-box flex-1" onclick="document.getElementById('inp-zip').click()">
-      <input type="file" id="inp-zip" accept=".zip" class="hidden" onchange="onZipSelected(this.files[0])"/>
-      <p class="text-sm text-gray-500">拖放或点击选择 .zip 文件</p>
-      <p id="zip-info" class="text-xs text-gray-400 mt-1"></p>
-    </div>
-    <div class="flex flex-col gap-2">
-      <button id="btn-refresh-teams" class="action-btn warn" onclick="refreshTeams()">同步在线团队</button>
-      <div id="team-info" class="text-xs text-gray-400">safe-mode 下可跳过</div>
-      <div id="upload-mode-tip" class="inline-note">分类可直接使用当前注册表。</div>
-    </div>
+  <div id="dz-zip" class="drop-box" onclick="document.getElementById('inp-zip').click()">
+    <input type="file" id="inp-zip" accept=".zip" class="hidden" onchange="onZipSelected(this.files[0])"/>
+    <p class="text-sm text-gray-500">拖放或点击选择 .zip 文件</p>
+    <p id="zip-info" class="text-xs text-gray-400 mt-1"></p>
   </div>
 
   <div class="mt-4">
-    <button id="btn-classify" class="action-btn primary disabled:opacity-50" disabled onclick="startClassify()">
+    <button id="btn-classify" class="action-btn primary" disabled onclick="startClassify()">
       开始自动分类
     </button>
     <span id="classify-spinner" class="ml-2 text-sm text-gray-400" style="display:none">分类中...</span>
@@ -263,50 +115,45 @@ table.item-table input:focus,.list-table input:focus,#tbl-mapping-config input:f
 </section>
 
 <!-- ════════════════════════════════════════════════════════ -->
-<!-- SECTION 3: 分类预览（强制） -->
+<!-- SECTION 2: 分类预览（强制） -->
 <!-- ════════════════════════════════════════════════════════ -->
 <section id="sec-preview" class="cos-section mb-8" style="display:none">
   <div class="section-divider">
     <div>
       <h2 class="section-title">分类预览</h2>
-      <p class="section-copy">正式上传前必须先看预览，重点确认团队、任务、路径和错误分组，避免把错误文件直接推入企业网盘。</p>
+      <p class="section-copy">正式上传前必须先看预览，确认接收方、文档类型、路径和错误分组。</p>
     </div>
   </div>
 
-  <!-- 统计卡片 -->
   <div id="preview-stats" class="flex gap-3 mb-4 flex-wrap"></div>
-
-  <!-- 阻断错误提示 -->
   <div id="preview-blocking" class="blocking-note" style="display:none"></div>
 
-  <!-- 分组视图切换 -->
   <div class="flex gap-2 mb-3">
-    <button class="tab-btn active" onclick="switchPreviewGroup('team', this)">按团队</button>
+    <button class="tab-btn active" onclick="switchPreviewGroup('target', this)">按接收方</button>
     <button class="tab-btn" onclick="switchPreviewGroup('category', this)">按分类</button>
     <button class="tab-btn" onclick="switchPreviewGroup('severity', this)">按状态</button>
   </div>
 
   <div id="preview-groups"></div>
 
-  <!-- 操作按钮 -->
   <div class="flex gap-3 mt-4">
-    <button id="btn-confirm" class="action-btn primary disabled:opacity-50" disabled onclick="confirmUpload()">
+    <button id="btn-confirm" class="action-btn primary" disabled onclick="confirmUpload()">
       确认上传
     </button>
-    <button class="action-btn secondary" onclick="reclassify()">
-      修改规则后重新分类
+    <button class="action-btn secondary" onclick="startClassify()">
+      重新分类
     </button>
   </div>
 </section>
 
 <!-- ════════════════════════════════════════════════════════ -->
-<!-- SECTION 4: 执行结果 -->
+<!-- SECTION 3: 执行结果 -->
 <!-- ════════════════════════════════════════════════════════ -->
 <section id="sec-result" class="cos-section mb-8" style="display:none">
   <div class="section-divider">
     <div>
       <h2 class="section-title">上传执行</h2>
-      <p class="section-copy">上传开始后，这里负责显示整体进度、结果统计和逐文件投递状态。失败项可继续重试，但不改变原始分类结果。</p>
+      <p class="section-copy">实时显示上传进度，失败项可重试。</p>
     </div>
   </div>
 
@@ -316,7 +163,6 @@ table.item-table input:focus,.list-table input:focus,#tbl-mapping-config input:f
   </div>
 
   <div id="upload-stats" class="flex gap-3 mb-4 flex-wrap"></div>
-  <div id="task-detail" class="detail-card" style="display:none"></div>
   <div id="upload-items"></div>
 
   <div class="flex gap-3 mt-4">
@@ -334,36 +180,25 @@ table.item-table input:focus,.list-table input:focus,#tbl-mapping-config input:f
 <script src="/js/components/nav.js"></script>
 <script src="/js/components/status-vocab.js"></script>
 <script src="/js/components/toast.js"></script>
-<script src="/js/components/tabs.js"></script>
-<script src="/js/components/modal.js"></script>
-<script src="/js/components/notice.js"></script>
-<script src="/js/components/status-badge.js"></script>
-<script src="/js/components/timeline.js"></script>
-<script src="/js/components/task-detail.js"></script>
-<script src="/js/components/execution-ui.js"></script>
-<div id="reg-toast"></div>
+<div id="app-toast"></div>
 <script>
 PortalNav.render();
-const API = '/api/upload/cosdrive';
+const API = '/api/v1';
 
 // ── 全局状态 ──
 let currentTaskId = null;
-let currentRegistryVersionId = null;
-let currentTeams = [];
 let previewItems = [];
 let previewSummary = {};
-let registryConfig = {};
-let runtimeStatus = null;
-const COS_STATUS_LABELS={draft:'草稿',classified:'已分类',classification_failed:'分类失败',confirmed:'已确认',queued:'待处理',uploading:'上传中',uploaded:'已完成',partial_failed:'部分失败',failed:'失败',pending:'待处理',running:'执行中',completed:'已完成',cancelled:'已取消'};
-const COS_EVENT_LABELS={delivery_started:'开始投递',delivery_finished:'投递完成',attempt_heartbeat:'执行心跳',attempt_retry_scheduled:'已安排重试',circuit_breaker_opened:'断路器已打开',manual_compensation_requested:'已请求补偿',manual_reconcile_checked:'已执行对账检查',stale_heartbeat_detected:'检测到心跳超时'};
-const COS_STATUS_CHIPS={draft:'background:#f1f5f9;color:#64748b',classified:'background:#e0e7ff;color:#4338ca',classification_failed:'background:#fef2f2;color:#b91c1c',confirmed:'background:#dcfce7;color:#166534',queued:'background:#ede9fe;color:#6d28d9',uploading:'background:#dbeafe;color:#2563eb',uploaded:'background:#dcfce7;color:#166534',partial_failed:'background:#fef3c7;color:#92400e',failed:'background:#fee2e2;color:#991b1b',pending:'background:#f3f4f6;color:#6b7280',running:'background:#e0e7ff;color:#4338ca',completed:'background:#dcfce7;color:#166534',cancelled:'background:#f3f4f6;color:#6b7280'};
-const esc=PortalDom.esc;
-const escAttr=PortalDom.escAttr;
-const fmtDate=PortalFormat.fmtDate;
-const fmtSize=PortalFormat.fmtBytes;
-const showToast=PortalToast.makeFloatingToast('reg-toast',{
-  duration:4000,
-  baseStyle:`
+let _sseSource = null;
+let _uploadDone = 0;
+let _uploadTotal = 0;
+let _uploadFailed = 0;
+
+const esc = PortalDom.esc;
+const fmtSize = PortalFormat.fmtBytes;
+const showToast = PortalToast.makeFloatingToast('app-toast', {
+  duration: 4000,
+  baseStyle: `
     position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:10px;
     font-size:13px;font-weight:600;z-index:200;opacity:0;
     transform:translateY(8px);transition:all .25s;pointer-events:none;
@@ -372,397 +207,64 @@ const showToast=PortalToast.makeFloatingToast('reg-toast',{
 });
 
 // ═══════════════════════════════════════════════════════════
-// 注册表管理
-// ═══════════════════════════════════════════════════════════
-
-async function loadRegistry() {
-  let currentLoaded = false;
-  try {
-    // 加载当前发布版本
-    try {
-      const v = await PortalApi.getJson(`${API}/registry/current`);
-      registryConfig = v.config_json || {};
-      currentRegistryVersionId = v.id;
-      currentLoaded = true;
-      document.getElementById('reg-info').textContent =
-        `当前版本: v${v.version_no} (${v.status}) — ${v.published_by || v.created_by} @ ${v.published_at || v.created_at}`;
-      renderRegistryTables(registryConfig);
-      document.getElementById('reg-json-editor').value = JSON.stringify(registryConfig, null, 2);
-    } catch (_) {
-      document.getElementById('reg-info').textContent = '尚无已发布版本，请先配置并发布';
-      registryConfig = defaultConfig();
-      renderRegistryTables(registryConfig);
-      document.getElementById('reg-json-editor').value = JSON.stringify(registryConfig, null, 2);
-    }
-    // 加载版本列表
-    const versions = await PortalApi.getJson(`${API}/registry/versions`);
-    const sel = document.getElementById('sel-reg-version');
-    sel.innerHTML = '<option value="">版本历史</option>';
-    versions.forEach(v => {
-      sel.innerHTML += `<option value="${v.id}">v${v.version_no} (${v.status})</option>`;
-    });
-    if (!currentLoaded && !currentRegistryVersionId && versions[0]) {
-      await loadRegistryVersion(versions[0].id);
-      showMsg('reg-msg', `已自动加载最近版本 v${versions[0].version_no}，可继续修改或分类`, 'text-gray-600');
-    }
-  } catch (e) { console.error('loadRegistry:', e); }
-  PortalNav.setConn(true);
-}
-
-function defaultConfig() {
-  return {
-    team_aliases: {},
-    task_classification: {},
-    description_mapping: {},
-    mapping_config: { enable_fuzzy_match: true, fuzzy_threshold: 65, description_mapping_fuzzy_threshold: 70 },
-    suffix_priority: {},
-    suffix_fallback: { ".xlsx": "Excel 文件", ".csv": "CSV 文件", ".pdf": "PDF 文件" },
-    ignored_filenames: [".DS_Store", "Thumbs.db", "desktop.ini"]
-  };
-}
-
-async function loadRegistryVersion(versionId) {
-  if (!versionId) return;
-  try {
-    const v = await PortalApi.getJson(`${API}/registry/${versionId}`);
-    registryConfig = v.config_json || {};
-    currentRegistryVersionId = v.id;
-    renderRegistryTables(registryConfig);
-    document.getElementById('reg-json-editor').value = JSON.stringify(registryConfig, null, 2);
-    showMsg('reg-msg', `已加载版本 v${v.version_no}`, 'text-gray-600');
-  } catch (e) {
-    showMsg('reg-msg', PortalApi.errorMessage(e, '版本加载失败'), 'text-red-600');
-  }
-}
-
-function collectConfigFromTables() {
-  // 如果在 JSON 模式，从 textarea 读取
-  if (document.getElementById('reg-tab-json').style.display !== 'none') {
-    try {
-      return JSON.parse(document.getElementById('reg-json-editor').value);
-    } catch (e) {
-      throw new Error('JSON 格式错误: ' + e.message);
-    }
-  }
-  // 从表格收集
-  registryConfig.team_aliases = collectKV('tbl-team-aliases');
-  registryConfig.task_classification = collectTaskClass();
-  registryConfig.description_mapping = collectKV('tbl-desc-map');
-  registryConfig.mapping_config = collectMappingConfig();
-  registryConfig.suffix_priority = collectKV('tbl-suffix-pri');
-  registryConfig.suffix_fallback = collectKV('tbl-suffix-fb');
-  registryConfig.ignored_filenames = collectList('tbl-ignored');
-  return registryConfig;
-}
-
-async function saveRegistryDraft() {
-  try {
-    const config = collectConfigFromTables();
-    const d = await PortalApi.sendJson(`${API}/registry/draft`, {
-      method: 'POST',
-      body: { config }
-    });
-    currentRegistryVersionId = d.id;
-    showMsg('reg-msg', `草稿已保存 (v${d.version_no})`, 'text-green-600');
-    loadRegistry();
-  } catch (e) { showMsg('reg-msg', PortalApi.errorMessage(e, '保存失败'), 'text-red-600'); }
-}
-
-async function publishRegistry() {
-  if (!currentRegistryVersionId) { showMsg('reg-msg', '请先保存草稿', 'text-red-600'); return; }
-  const confirmed = await PortalModal.confirm({
-    title: '发布分类注册表',
-    message: '确认发布当前版本？',
-    confirmLabel: '发布',
-  });
-  if (!confirmed) return;
-  try {
-    const d = await PortalApi.sendJson(`${API}/registry/${currentRegistryVersionId}/publish`, { method: 'POST' });
-    showMsg('reg-msg', `版本 v${d.version_no} 已发布`, 'text-green-600');
-    loadRegistry();
-  } catch (e) {
-    showMsg('reg-msg', PortalApi.errorMessage(e, '发布失败'), 'text-red-600');
-  }
-}
-
-async function validateRegistry() {
-  try {
-    const config = collectConfigFromTables();
-    const d = await PortalApi.sendJson(`${API}/registry/validate`, {
-      method: 'POST',
-      body: { config }
-    });
-    if (d.valid) {
-      let msg = '校验通过';
-      if (d.warnings.length) msg += `（${d.warnings.length} 个警告）`;
-      showMsg('reg-msg', msg, 'text-green-600');
-    } else {
-      showMsg('reg-msg', '校验失败: ' + d.errors.join('; '), 'text-red-600');
-    }
-  } catch (e) { showMsg('reg-msg', PortalApi.errorMessage(e, '校验失败'), 'text-red-600'); }
-}
-
-function switchRegTab(tab) {
-  PortalTabs.switchNamedTabs({
-    buttonSelector: '#sec-registry .tab-btn',
-    names: ['table', 'json'],
-    active: tab,
-    panels: {
-      table: {id: 'reg-tab-table'},
-      json: {id: 'reg-tab-json'},
-    },
-  });
-  if (tab === 'json') {
-    // 从表格同步到 JSON
-    try {
-      const config = collectConfigFromTables();
-      document.getElementById('reg-json-editor').value = JSON.stringify(config, null, 2);
-    } catch (_) {}
-  } else {
-    // 从 JSON 同步到表格
-    try {
-      registryConfig = JSON.parse(document.getElementById('reg-json-editor').value);
-      renderRegistryTables(registryConfig);
-    } catch (_) {}
-  }
-}
-
-// ── 表格渲染辅助 ──
-
-function renderRegistryTables(cfg) {
-  renderKVTable('tbl-team-aliases', cfg.team_aliases || {}, '别名', '标准团队名');
-  renderTaskClassTable('tbl-task-class', cfg.task_classification || {});
-  renderKVTable('tbl-desc-map', cfg.description_mapping || {}, '描述关键词', '映射任务名');
-  renderKVTable('tbl-suffix-pri', cfg.suffix_priority || {}, '后缀', '任务');
-  renderKVTable('tbl-suffix-fb', cfg.suffix_fallback || {}, '后缀', '标签');
-  renderListTable('tbl-ignored', cfg.ignored_filenames || []);
-  renderMappingConfig('tbl-mapping-config', cfg.mapping_config || {});
-  renderRegistryOutline(cfg);
-}
-
-function renderKVTable(containerId, obj, kLabel, vLabel) {
-  const el = document.getElementById(containerId);
-  let html = `<table class="item-table"><tr><th>${esc(kLabel)}</th><th>${esc(vLabel)}</th><th></th></tr>`;
-  for (const [k, v] of Object.entries(obj)) {
-    html += `<tr><td><input class="kv-k border rounded px-2 py-1 text-sm w-full" value="${esc(k)}"/></td>
-      <td><input class="kv-v border rounded px-2 py-1 text-sm w-full" value="${esc(v)}"/></td>
-      <td><button class="editor-danger-btn" onclick="this.closest('tr').remove()">删除</button></td></tr>`;
-  }
-  html += '</table>';
-  el.innerHTML = html;
-}
-
-function renderTaskClassTable(containerId, obj) {
-  const el = document.getElementById(containerId);
-  let html = '<table class="item-table"><tr><th>任务名</th><th>分类 (category)</th><th>子任务 (task)</th><th></th></tr>';
-  for (const [name, info] of Object.entries(obj)) {
-    const cat = typeof info === 'object' ? (info.category || '') : '';
-    const task = typeof info === 'object' ? (info.task || '') : '';
-    html += `<tr><td><input class="tc-name border rounded px-2 py-1 text-sm w-full" value="${esc(name)}"/></td>
-      <td><input class="tc-cat border rounded px-2 py-1 text-sm w-full" value="${esc(cat)}"/></td>
-      <td><input class="tc-task border rounded px-2 py-1 text-sm w-full" value="${esc(task)}"/></td>
-      <td><button class="editor-danger-btn" onclick="this.closest('tr').remove()">删除</button></td></tr>`;
-  }
-  html += '</table>';
-  el.innerHTML = html;
-}
-
-function renderListTable(containerId, arr) {
-  const el = document.getElementById(containerId);
-  let html = '<div class="list-table">';
-  arr.forEach(v => {
-    html += `<div class="flex gap-1"><input class="list-v border rounded px-2 py-1 text-xs flex-1" value="${esc(v)}"/>
-      <button class="editor-danger-btn" onclick="this.parentElement.remove()">删除</button></div>`;
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-function renderRegistryOutline(cfg) {
-  const el = document.getElementById('reg-outline');
-  if (!el) return;
-  const cards = [
-    `团队别名 ${Object.keys(cfg.team_aliases || {}).length}`,
-    `任务分类 ${Object.keys(cfg.task_classification || {}).length}`,
-    `描述映射 ${Object.keys(cfg.description_mapping || {}).length}`,
-    `后缀优先 ${Object.keys(cfg.suffix_priority || {}).length}`,
-    `后缀兜底 ${Object.keys(cfg.suffix_fallback || {}).length}`,
-    `忽略文件 ${(cfg.ignored_filenames || []).length}`,
-  ];
-  el.innerHTML = cards.map(item => `<span class="pill">${esc(item)}</span>`).join('');
-}
-
-function renderMappingConfig(containerId, mc) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = `<div class="grid grid-cols-3 gap-3 text-sm">
-    <label class="flex items-center gap-2">
-      <input type="checkbox" id="mc-fuzzy" ${mc.enable_fuzzy_match !== false ? 'checked' : ''}/> 启用模糊匹配
-    </label>
-    <label>模糊阈值 <input id="mc-threshold" type="number" class="border rounded px-2 py-1 w-16" value="${mc.fuzzy_threshold || 65}" min="0" max="100"/></label>
-    <label>描述映射阈值 <input id="mc-desc-threshold" type="number" class="border rounded px-2 py-1 w-16" value="${mc.description_mapping_fuzzy_threshold || 70}" min="0" max="100"/></label>
-  </div>`;
-}
-
-function collectKV(containerId) {
-  const obj = {};
-  document.querySelectorAll(`#${containerId} tr`).forEach(tr => {
-    const k = tr.querySelector('.kv-k');
-    const v = tr.querySelector('.kv-v');
-    if (k && v && k.value.trim()) obj[k.value.trim()] = v.value.trim();
-  });
-  return obj;
-}
-
-function collectTaskClass() {
-  const obj = {};
-  document.querySelectorAll('#tbl-task-class tr').forEach(tr => {
-    const name = tr.querySelector('.tc-name');
-    const cat = tr.querySelector('.tc-cat');
-    const task = tr.querySelector('.tc-task');
-    if (name && name.value.trim()) {
-      const entry = { category: cat ? cat.value.trim() : '' };
-      if (task && task.value.trim()) entry.task = task.value.trim();
-      obj[name.value.trim()] = entry;
-    }
-  });
-  return obj;
-}
-
-function collectMappingConfig() {
-  return {
-    enable_fuzzy_match: document.getElementById('mc-fuzzy')?.checked ?? true,
-    fuzzy_threshold: parseInt(document.getElementById('mc-threshold')?.value || '65'),
-    description_mapping_fuzzy_threshold: parseInt(document.getElementById('mc-desc-threshold')?.value || '70'),
-  };
-}
-
-function collectList(containerId) {
-  const arr = [];
-  document.querySelectorAll(`#${containerId} .list-v`).forEach(inp => {
-    if (inp.value.trim()) arr.push(inp.value.trim());
-  });
-  return arr;
-}
-
-function addAliasRow() { appendKVRow('tbl-team-aliases'); }
-function addDescRow() { appendKVRow('tbl-desc-map'); }
-function addIgnoredRow() {
-  const list = document.querySelector('#tbl-ignored .list-table') || document.querySelector('#tbl-ignored > div');
-  if (!list) return;
-  const row = document.createElement('div');
-  row.className = 'flex gap-1';
-  row.innerHTML = `<input class="list-v border rounded px-2 py-1 text-xs flex-1" value=""/>
-    <button class="editor-danger-btn" onclick="this.parentElement.remove()">删除</button>`;
-  list.appendChild(row);
-}
-function addTaskRow() {
-  const tbl = document.querySelector('#tbl-task-class table');
-  if (!tbl) return;
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input class="tc-name border rounded px-2 py-1 text-sm w-full" value=""/></td>
-    <td><input class="tc-cat border rounded px-2 py-1 text-sm w-full" value=""/></td>
-    <td><input class="tc-task border rounded px-2 py-1 text-sm w-full" value=""/></td>
-    <td><button class="editor-danger-btn" onclick="this.closest('tr').remove()">删除</button></td>`;
-  tbl.appendChild(tr);
-}
-
-function appendKVRow(containerId) {
-  const tbl = document.querySelector(`#${containerId} table`);
-  if (!tbl) return;
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input class="kv-k border rounded px-2 py-1 text-sm w-full" value=""/></td>
-    <td><input class="kv-v border rounded px-2 py-1 text-sm w-full" value=""/></td>
-    <td><button class="editor-danger-btn" onclick="this.closest('tr').remove()">删除</button></td>`;
-  tbl.appendChild(tr);
-}
-
-// ═══════════════════════════════════════════════════════════
 // 上传准备
 // ═══════════════════════════════════════════════════════════
 
-async function refreshTeams() {
-  if (runtimeStatus && !runtimeStatus.team_refresh_enabled) {
-    const reasons = [];
-    if (runtimeStatus.safe_mode) reasons.push('当前为 safe-mode，未启用在线团队同步');
-    if ((runtimeStatus.smh_missing_fields || []).length) {
-      reasons.push(`缺失配置：${runtimeStatus.smh_missing_fields.join(', ')}`);
-    }
-    if ((runtimeStatus.smh_runtime_errors || []).length) {
-      reasons.push(runtimeStatus.smh_runtime_errors.join('；'));
-    }
-    document.getElementById('team-info').textContent = reasons.join('；') || '在线团队同步当前不可用';
+async function onZipSelected(file) {
+  if (!file || !file.name.endsWith('.zip')) {
+    showToast('请选择 .zip 文件', 'err');
     return;
   }
-  document.getElementById('team-info').textContent = '刷新中...';
-  try {
-    const d = await PortalApi.sendJson(`${API}/teams/refresh`, { method: 'POST' });
-    currentTeams = d.teams;
-    document.getElementById('team-info').textContent = `已加载 ${d.count} 个团队`;
-    checkClassifyReady();
-  } catch (e) { document.getElementById('team-info').textContent = '刷新异常: ' + PortalApi.errorMessage(e, '请求失败'); }
-}
-
-async function onZipSelected(file) {
-  if (!file || !file.name.endsWith('.zip')) { showMsg('reg-msg', '请选择 .zip 文件', 'text-red-600'); return; }
   const dz = document.getElementById('dz-zip');
   dz.classList.add('done');
-  document.getElementById('zip-info').textContent = `${file.name} (${fmtSize(file.size)})`;
+  document.getElementById('zip-info').textContent = `${file.name} (${fmtSize(file.size)}) — 上传中...`;
 
-  // 上传 zip 创建 task
   const fd = new FormData();
-  fd.append('zip_file', file);
+  fd.append('file', file);
 
   try {
     const d = await PortalApi.sendForm(`${API}/tasks`, fd, { method: 'POST' });
     currentTaskId = d.task_id;
     document.getElementById('zip-info').textContent =
-      `${file.name} (${fmtSize(file.size)}) — Task: ${d.task_id}, ${d.file_count} 个文件`;
-    checkClassifyReady();
-  } catch (e) { showMsg('reg-msg', '上传异常: ' + PortalApi.errorMessage(e, '创建任务失败'), 'text-red-600'); }
+      `${file.name} (${fmtSize(file.size)}) — Task: ${d.task_id}`;
+    document.getElementById('btn-classify').disabled = false;
+  } catch (e) {
+    dz.classList.remove('done');
+    document.getElementById('zip-info').textContent = '';
+    showToast('上传失败: ' + PortalApi.errorMessage(e, '创建任务失败'), 'err');
+  }
 }
 
 // 拖放支持
-(function() {
+(function () {
   const dz = document.getElementById('dz-zip');
-  ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => {ev.preventDefault();dz.classList.add('dragover')}));
-  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => {ev.preventDefault();dz.classList.remove('dragover')}));
-  dz.addEventListener('drop', ev => { if(ev.dataTransfer.files[0]) onZipSelected(ev.dataTransfer.files[0]); });
+  ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); }));
+  dz.addEventListener('drop', ev => { if (ev.dataTransfer.files[0]) onZipSelected(ev.dataTransfer.files[0]); });
 })();
-
-function checkClassifyReady() {
-  const ready = currentTaskId && currentRegistryVersionId;
-  document.getElementById('btn-classify').disabled = !ready;
-}
 
 // ═══════════════════════════════════════════════════════════
 // 分类
 // ═══════════════════════════════════════════════════════════
 
 async function startClassify() {
-  if (!currentTaskId || !currentRegistryVersionId) return;
+  if (!currentTaskId) return;
   document.getElementById('btn-classify').disabled = true;
   document.getElementById('classify-spinner').style.display = '';
+  document.getElementById('sec-preview').style.display = 'none';
 
   try {
-    const d = await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/classify`, {
-      method: 'POST',
-      body: { registry_version_id: currentRegistryVersionId }
-    });
+    await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/classify`, { method: 'POST' });
+    const d = await PortalApi.getJson(`${API}/tasks/${currentTaskId}/preview`);
     previewItems = d.items || [];
     previewSummary = d.summary || {};
     renderPreview(d);
-    await loadTaskDetail();
-  } catch (e) { showMsg('reg-msg', '分类异常: ' + PortalApi.errorMessage(e, '分类失败'), 'text-red-600'); }
-  finally {
+  } catch (e) {
+    showToast('分类失败: ' + PortalApi.errorMessage(e, '请求失败'), 'err');
+  } finally {
     document.getElementById('btn-classify').disabled = false;
     document.getElementById('classify-spinner').style.display = 'none';
   }
-}
-
-async function reclassify() {
-  // 先同步注册表（可能用户刚修改了规则）
-  try { await saveRegistryDraft(); } catch(_) {}
-  await startClassify();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -771,29 +273,27 @@ async function reclassify() {
 
 function renderPreview(data) {
   document.getElementById('sec-preview').style.display = '';
-  const s = data.summary;
+  const s = data.summary || {};
 
-  // 统计卡片
   document.getElementById('preview-stats').innerHTML = [
-    statCard(s.total, '总文件', '#f3f4f6', '#374151'),
-    statCard(s.ok, '成功', '#dcfce7', '#166534'),
-    statCard(s.warning, '警告', '#fef3c7', '#92400e'),
-    statCard(s.error, '错误', '#fee2e2', '#991b1b'),
-    statCard(s.ignored, '忽略', '#f3f4f6', '#6b7280'),
+    statCard(s.total || 0, '总文件', '#f3f4f6', '#374151'),
+    statCard(s.ok || 0, '成功', '#dcfce7', '#166534'),
+    statCard(s.warning || 0, '警告', '#fef3c7', '#92400e'),
+    statCard(s.error || 0, '错误', '#fee2e2', '#991b1b'),
+    statCard(s.ignored || 0, '忽略', '#f3f4f6', '#6b7280'),
   ].join('');
 
-  // 阻断错误
   const blocking = document.getElementById('preview-blocking');
   if (s.has_blocking_errors) {
     blocking.style.display = '';
-    blocking.innerHTML = `存在 ${s.error} 个阻断错误（未匹配团队: ${s.unmatched_teams}，未匹配任务: ${s.unmatched_tasks}）。请修改注册表规则后重新分类。`;
+    blocking.textContent = `存在 ${s.error} 个阻断错误，请检查接收方或文件分类后重新分类。`;
     document.getElementById('btn-confirm').disabled = true;
   } else {
     blocking.style.display = 'none';
     document.getElementById('btn-confirm').disabled = false;
   }
 
-  switchPreviewGroup('team');
+  switchPreviewGroup('target');
 }
 
 function switchPreviewGroup(groupBy, button) {
@@ -801,16 +301,16 @@ function switchPreviewGroup(groupBy, button) {
   if (button) {
     button.classList.add('active');
   } else {
-    const fallback = document.querySelector(`#sec-preview .tab-btn[onclick*="${groupBy}"]`);
+    const fallback = document.querySelector(`#sec-preview .tab-btn[onclick*="'${groupBy}'"]`);
     if (fallback) fallback.classList.add('active');
   }
 
   const groups = {};
   previewItems.forEach(item => {
     let key;
-    if (groupBy === 'team') key = item.team_name_matched || item.team_name_raw || '未匹配';
+    if (groupBy === 'target') key = item.target_name_matched || item.target_name_raw || '未匹配';
     else if (groupBy === 'category') key = item.category_name || '未分类';
-    else key = item.severity;
+    else key = item.severity || 'ok';
     (groups[key] = groups[key] || []).push(item);
   });
 
@@ -830,74 +330,18 @@ function switchPreviewGroup(groupBy, button) {
   }
 }
 
-async function loadRuntimeStatus() {
-  try {
-    runtimeStatus = await PortalApi.getJson(`${API}/runtime-status`);
-  } catch (e) {
-    runtimeStatus = null;
-    const meta = document.getElementById('cos-runtime-meta');
-    meta.textContent = PortalApi.errorMessage(e, '运行态检查失败');
-    document.getElementById('cos-runtime-banner').classList.add('err');
-    return;
-  }
-
-  const banner = document.getElementById('cos-runtime-banner');
-  const meta = document.getElementById('cos-runtime-meta');
-  const teamInfo = document.getElementById('team-info');
-  const uploadTip = document.getElementById('upload-mode-tip');
-  const refreshBtn = document.getElementById('btn-refresh-teams');
-  const prefixes = (runtimeStatus.allowed_prefixes || []).length
-    ? runtimeStatus.allowed_prefixes.join(' / ')
-    : '未限制';
-  const disableRefresh = !runtimeStatus.team_refresh_enabled;
-
-  refreshBtn.disabled = disableRefresh;
-  refreshBtn.classList.toggle('opacity-50', disableRefresh);
-  refreshBtn.classList.toggle('cursor-not-allowed', disableRefresh);
-
-  if (runtimeStatus.safe_mode) {
-    banner.classList.add('warn');
-    meta.textContent = `当前为 safe-mode：分类使用注册表中的团队别名，不依赖在线团队同步。真实上传未就绪时，可先完成分类与预览联调。路径白名单：${prefixes}`;
-    teamInfo.textContent = 'safe-mode：不要求在线团队刷新';
-    uploadTip.textContent = runtimeStatus.upload_ready
-      ? '上传链路已具备条件，可继续验证 worker 调度。'
-      : '当前更适合做注册表、分类与任务流转联调。';
-  } else if (!runtimeStatus.upload_ready) {
-    banner.classList.add('err');
-    meta.textContent = `已启用在线模式，但企业网盘上传前置条件还不完整。请先检查 SMH 凭证与服务配置。路径白名单：${prefixes}`;
-    uploadTip.textContent = '请先补齐企业网盘配置，再验证真实上传。';
-  } else {
-    meta.textContent = `在线团队同步与上传链路已就绪，可执行完整 CosDrive 联调。路径白名单：${prefixes}`;
-    uploadTip.textContent = '当前可以执行完整分类与上传流程。';
-  }
-
-  if (!runtimeStatus.smh_api_configured) {
-    meta.textContent += ' 当前 SMH API 端点未配置完整。';
-  }
-
-  if ((runtimeStatus.smh_missing_fields || []).length) {
-    meta.textContent += ` 缺失配置：${runtimeStatus.smh_missing_fields.join(', ')}。`;
-  }
-
-  if ((runtimeStatus.smh_runtime_errors || []).length) {
-    meta.textContent += ` 运行态异常：${runtimeStatus.smh_runtime_errors.join('；')}。`;
-  }
-}
-
 function renderItemTable(items) {
-  let html = '<table class="item-table"><tr><th>文件名</th><th>团队</th><th>任务</th><th>路径</th><th>匹配方式</th><th>状态</th></tr>';
+  let html = '<table class="item-table"><tr><th>文件名</th><th>接收方</th><th>文档类型</th><th>路径</th><th>状态</th></tr>';
   items.forEach(i => {
-    const sev = i.severity;
+    const sev = i.severity || 'ok';
     const sevBadge = `<span class="badge badge-${sev}">${sev}</span>`;
-    const method = i.team_match_method ? `<span class="badge badge-method">${esc(i.team_match_method)}</span>` : '';
     const errMsg = i.error_message ? `<div class="status-note-error">${esc(i.error_message)}</div>` : '';
     const warnMsg = i.warning_message ? `<div class="status-note-warn">${esc(i.warning_message)}</div>` : '';
     html += `<tr>
       <td>${esc(i.filename)}${errMsg}${warnMsg}</td>
-      <td>${esc(i.team_name_matched || i.team_name_raw)}</td>
-      <td>${esc(i.task_name)}</td>
-      <td class="table-path">${esc(i.drive_path)}</td>
-      <td>${method} <span class="group-head-note">${esc(i.task_match_method)}</span></td>
+      <td>${esc(i.target_name_matched || i.target_name_raw || '')}</td>
+      <td>${esc(i.document_type || '')}</td>
+      <td class="table-path">${esc(i.dst_path || '')}</td>
       <td>${sevBadge}</td>
     </tr>`;
   });
@@ -911,138 +355,105 @@ function renderItemTable(items) {
 
 async function confirmUpload() {
   if (!currentTaskId) return;
-  const confirmed = await PortalModal.confirm({
-    title: '开始上传',
-    message: '确认开始上传？此操作不可撤销。',
-    confirmLabel: '开始上传',
-  });
-  if (!confirmed) return;
+  document.getElementById('btn-confirm').disabled = true;
 
   try {
     await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/confirm`, { method: 'POST' });
   } catch (e) {
-    showMsg('reg-msg', PortalApi.errorMessage(e, '确认失败'), 'text-red-600');
+    showToast(PortalApi.errorMessage(e, '确认失败'), 'err');
+    document.getElementById('btn-confirm').disabled = false;
     return;
   }
-  await loadTaskDetail();
 
-  // 开始上传
   document.getElementById('sec-result').style.display = '';
-  document.getElementById('btn-confirm').disabled = true;
 
   try {
     await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/upload`, { method: 'POST' });
   } catch (e) {
-    showMsg('reg-msg', PortalApi.errorMessage(e, '触发上传失败'), 'text-red-600');
+    showToast(PortalApi.errorMessage(e, '触发上传失败'), 'err');
     return;
   }
-  await loadTaskDetail();
 
-  // 轮询进度
-  pollProgress();
+  _uploadDone = 0;
+  _uploadTotal = previewItems.filter(i => i.severity === 'ok' || i.severity === 'warning').length || 1;
+  _uploadFailed = 0;
+  startSSE();
 }
 
-async function pollProgress() {
-  if (!currentTaskId) return;
-  try {
-    const d = await PortalApi.getJson(`${API}/tasks/${currentTaskId}/progress`);
+// ═══════════════════════════════════════════════════════════
+// SSE 进度
+// ═══════════════════════════════════════════════════════════
 
-    const total = d.total || 1;
-    const done = (d.uploaded || 0) + (d.failed || 0) + (d.skipped || 0);
-    const pct = Math.round(done / total * 100);
+function startSSE() {
+  if (_sseSource) { _sseSource.close(); _sseSource = null; }
+  _sseSource = new EventSource(`${API}/tasks/${currentTaskId}/progress`);
 
-    document.getElementById('upload-progress-fill').style.width = pct + '%';
-    document.getElementById('upload-progress-text').textContent =
-      `${done}/${total} (${pct}%) — 成功: ${d.uploaded || 0}, 失败: ${d.failed || 0}`;
+  _sseSource.onmessage = function (ev) {
+    let event;
+    try { event = JSON.parse(ev.data); } catch (_) { return; }
+    handleProgressEvent(event);
+  };
 
-    document.getElementById('upload-stats').innerHTML = [
-      statCard(d.uploaded || 0, '成功', '#dcfce7', '#166534'),
-      statCard(d.failed || 0, '失败', '#fee2e2', '#991b1b'),
-      statCard(d.pending || 0, '待处理', '#f3f4f6', '#6b7280'),
-    ].join('');
-
-    if (d.failed > 0) {
-      document.getElementById('btn-retry').style.display = '';
-    }
-
-    if (d.status === 'uploading') {
-      setTimeout(pollProgress, 2000);
-    } else {
-      // 上传完成，加载 item 列表
-      await loadTaskDetail();
-      loadUploadItems();
-    }
-  } catch (e) { setTimeout(pollProgress, 3000); }
+  _sseSource.onerror = function () {
+    _sseSource.close();
+    _sseSource = null;
+  };
 }
 
-async function loadTaskDetail() {
-  if (!currentTaskId) return;
-  const box = document.getElementById('task-detail');
-  box.style.display = '';
-  box.innerHTML = '<div class="text-gray-400 text-sm">加载任务详情…</div>';
-  try {
-    const d = await PortalApi.getJson(`${API}/tasks/${currentTaskId}`);
-    box.innerHTML = renderTaskDetail(d);
-  } catch (e) {
-    box.innerHTML = PortalNotice.block(esc(PortalApi.errorMessage(e, '任务详情加载失败')), {style:'font-size:13px;color:#b42318'});
+function handleProgressEvent(event) {
+  const type = event.type;
+
+  if (type === 'task_plan') {
+    _uploadTotal = event.total_items || _uploadTotal;
+  } else if (type === 'item_done') {
+    _uploadDone++;
+    updateProgressBar();
+  } else if (type === 'item_failed') {
+    _uploadDone++;
+    _uploadFailed++;
+    updateProgressBar();
+    document.getElementById('btn-retry').style.display = '';
+  } else if (type === 'task_done' || type === 'task_failed') {
+    if (_sseSource) { _sseSource.close(); _sseSource = null; }
+    updateProgressBar();
+    loadUploadItems();
+    if (type === 'task_failed') {
+      showToast('上传任务失败: ' + (event.error || ''), 'err');
+    }
   }
 }
 
-function renderTaskDetail(t) {
-  const header = window.ExecutionUI.renderTaskHeader(t, {
-    esc,
-    title: t.task_id || '',
-    subtitle: `状态：${window.ExecutionUI.statusChip(t.status, {esc, label: labelCosStatus, style: cosStatusChipStyle, className: 'status-chip'})} · 最近 Attempt：${esc(labelCosStatus(t.latest_attempt_status) || '—')}`,
-    trailing: window.ExecutionUI.runtimeOpsLink(t.prefect_ui_url,{esc:escAttr,className:'runtime-link',label:'查看运维详情',emptyHtml:'<span class="group-head-note">暂无运维深链</span>'}),
-  });
-  return PortalTaskDetail.renderCard({
-    headerHtml: header,
-    bodyHtml: `<div class="mt-3 text-xs text-gray-500">创建时间：${fmtDate(t.created_at)}${t.finished_at ? ` · 完成时间：${fmtDate(t.finished_at)}` : ''}</div>`,
-    sections: [
-      window.ExecutionUI.renderDetailSection('执行尝试', `<div class="timeline-list">${renderAttemptList(t.attempts || [])}</div>`),
-      window.ExecutionUI.renderDetailSection('事件记录', `<div class="timeline-list">${renderEventList(t.events || [])}</div>`),
-    ],
-  });
-}
+function updateProgressBar() {
+  const pct = _uploadTotal > 0 ? Math.round(_uploadDone / _uploadTotal * 100) : 0;
+  document.getElementById('upload-progress-fill').style.width = pct + '%';
+  document.getElementById('upload-progress-text').textContent =
+    `${_uploadDone}/${_uploadTotal} (${pct}%) — 成功: ${_uploadDone - _uploadFailed}, 失败: ${_uploadFailed}`;
 
-function renderAttemptList(items) {
-  return window.ExecutionUI.renderAttemptList(items, {
-    esc, fmtTime: fmtDate, statusLabel: labelCosStatus, metaClassName: 'group-head-note',
-    metaLine: (a) => `${esc(a.worker_key || 'worker 未知')} · ${fmtDate(a.started_at)} ~ ${fmtDate(a.finished_at)}`,
-    timeLine: (a) => a.error_message ? `<span class="status-note-error">${esc(a.error_message)}</span>` : '—',
-    emptyHtml: '<div class="group-head-note">暂无 attempt 记录</div>',
-  });
-}
-
-function renderEventList(items) {
-  return window.ExecutionUI.renderEventList(items, {
-    esc, fmtTime: fmtDate, eventLabel: labelCosEvent, metaClassName: 'group-head-note',
-    transitionLine: (ev) => `${esc(labelCosStatus(ev.from_status) || '—')} → ${esc(labelCosStatus(ev.to_status) || '—')} · ${fmtDate(ev.created_at)}`,
-    detailLine: (ev) => ev.payload_json && ev.payload_json.prefect_flow_run_id ? `<span class="runtime-link">Prefect ${esc(ev.payload_json.prefect_flow_run_id)}</span>` : '—',
-    emptyHtml: '<div class="group-head-note">暂无 event 记录</div>',
-  });
+  document.getElementById('upload-stats').innerHTML = [
+    statCard(_uploadDone - _uploadFailed, '成功', '#dcfce7', '#166534'),
+    statCard(_uploadFailed, '失败', '#fee2e2', '#991b1b'),
+    statCard(Math.max(0, _uploadTotal - _uploadDone), '待处理', '#f3f4f6', '#6b7280'),
+  ].join('');
 }
 
 async function loadUploadItems() {
   let d;
   try {
-    d = await PortalApi.getJson(`${API}/tasks/${currentTaskId}/items`);
-  } catch (_) {
-    return;
-  }
+    d = await PortalApi.getJson(`${API}/tasks/${currentTaskId}/preview`);
+  } catch (_) { return; }
+
   const container = document.getElementById('upload-items');
-  let html = '<table class="item-table"><tr><th>文件名</th><th>团队</th><th>路径</th><th>投递状态</th><th>错误码</th><th>错误</th></tr>';
+  let html = '<table class="item-table"><tr><th>文件名</th><th>接收方</th><th>路径</th><th>投递状态</th><th>错误</th></tr>';
   (d.items || []).forEach(i => {
-    const deliveryStatus = i.delivery_status || i.upload_status || 'pending';
-    const statusCls = deliveryStatus === 'uploaded' || deliveryStatus === 'delivered' ? 'upload-status-ok' :
-                      deliveryStatus === 'failed' ? 'upload-status-error' : 'upload-status-muted';
+    const st = i.upload_status || 'pending';
+    const stCls = (st === 'uploaded') ? 'upload-status-ok' :
+                  (st === 'failed') ? 'upload-status-error' : 'upload-status-muted';
     html += `<tr>
       <td>${esc(i.filename)}</td>
-      <td>${esc(i.team_name_matched)}</td>
-      <td class="table-path">${esc(i.drive_path)}</td>
-      <td class="${statusCls} font-medium">${esc(deliveryStatus)}</td>
-      <td class="group-head-note">${esc(i.error_code || '')}</td>
-      <td class="status-note-error">${esc(i.upload_error || i.error_message || '')}</td>
+      <td>${esc(i.target_name_matched || '')}</td>
+      <td class="table-path">${esc(i.dst_path || '')}</td>
+      <td class="${stCls}">${esc(st)}</td>
+      <td class="status-note-error">${esc(i.upload_error || '')}</td>
     </tr>`;
   });
   html += '</table>';
@@ -1052,13 +463,13 @@ async function loadUploadItems() {
 async function retryFailed() {
   if (!currentTaskId) return;
   try {
-    await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/retry`, {
-      method: 'POST',
-      body: { item_ids: [] }
-    });
-    await loadTaskDetail(); const detail=document.getElementById('task-detail'); if(detail)detail.scrollIntoView({behavior:'smooth',block:'start'}); pollProgress();
+    await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/retry`, { method: 'POST' });
+    await PortalApi.sendJson(`${API}/tasks/${currentTaskId}/upload`, { method: 'POST' });
+    _uploadDone = 0; _uploadFailed = 0;
+    document.getElementById('btn-retry').style.display = 'none';
+    startSSE();
   } catch (e) {
-    showMsg('reg-msg', PortalApi.errorMessage(e, '重试失败'), 'text-red-600');
+    showToast(PortalApi.errorMessage(e, '重试失败'), 'err');
   }
 }
 
@@ -1069,25 +480,6 @@ async function retryFailed() {
 function statCard(num, label, bg, color) {
   return `<div class="stat-card" style="background:${bg}"><div class="num" style="color:${color}">${num}</div><div class="label">${label}</div></div>`;
 }
-
-function showMsg(id, msg, cls) {
-  const type = cls.includes('red')
-    ? 'err'
-    : cls.includes('blue')
-      ? 'warn'
-      : 'ok';
-  showToast(msg, type);
-}
-
-function labelCosStatus(s) { return COS_STATUS_LABELS[s] || s || ''; }
-function labelCosEvent(s) { return COS_EVENT_LABELS[s] || s || ''; }
-function cosStatusChipStyle(s) { return COS_STATUS_CHIPS[s] || 'background:#f3f4f6;color:#4b5563'; }
-
-// ═══════════════════════════════════════════════════════════
-// 启动
-// ═══════════════════════════════════════════════════════════
-loadRuntimeStatus();
-loadRegistry();
 </script>
 </body>
 </html>

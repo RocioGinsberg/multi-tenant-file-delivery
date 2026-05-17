@@ -1,20 +1,52 @@
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from app.core.db import async_engine
+from app.core.settings import get_settings
+from app.models.base import Base
+from app.services.progress_bus import ProgressBus
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI):  # noqa: ARG001
-    # startup — nothing to initialise yet (DB / settings wired in 1.2/1.3)
+async def lifespan(application: FastAPI):
+    from app.api.tasks import init_progress_bus
+
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    bus = ProgressBus()
+    init_progress_bus(bus)
+
     yield
-    # shutdown
+
+    await async_engine.dispose()
 
 
 app = FastAPI(title="Auto Upload Control Plane", lifespan=lifespan)
+
+_settings = get_settings()
+_cors_origins = (
+    ["*"]
+    if _settings.cors_origins.strip() == "*"
+    else [o.strip() for o in _settings.cors_origins.split(",")]
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from app.api import tasks as tasks_module  # noqa: E402
+
+app.include_router(tasks_module.router, prefix="/api/v1")
 
 
 @app.get("/healthz", response_class=JSONResponse)
@@ -22,5 +54,5 @@ async def healthz() -> dict:
     return {
         "ok": True,
         "service": "control-plane",
-        "env": os.getenv("ENV", "development"),
+        "env": get_settings().env,
     }

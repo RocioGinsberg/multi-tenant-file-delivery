@@ -16,7 +16,7 @@ import (
 
 func TestKafkaTransportRoundTripWithDockerBroker(t *testing.T) {
 	if os.Getenv("RUN_DOCKER_TESTS") != "1" {
-		t.Skip("set RUN_DOCKER_TESTS=1 with docker-compose.phase2.yml running")
+		t.Skip("set RUN_DOCKER_TESTS=1 with deploy/docker-compose.yml kafka running")
 	}
 
 	brokers := ParseBrokerList(os.Getenv("KAFKA_BROKERS"))

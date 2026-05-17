@@ -43,7 +43,7 @@
 ## Verification
 - `GOCACHE=/tmp/smh_go_cache go test ./...`
 - `cd control-plane && uv run pytest tests/integration/test_phase2_bridge.py`
-- `docker compose -f docker-compose.phase2.yml up -d`
+- `cd deploy && docker compose up -d kafka minio minio-init`
 - `cd data-plane && RUN_DOCKER_TESTS=1 KAFKA_BROKERS=localhost:9092 go test ./internal/transport`
 
 ## Assumptions

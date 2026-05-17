@@ -2,7 +2,7 @@
 
 docker-compose、可观测组件配置、SQL 初始化脚本。
 
-## MinIO 本地开发
+## 本地依赖
 
 ### 启动
 
@@ -12,12 +12,25 @@ docker compose up -d minio minio-init
 
 约 10 秒后 `minio-init` 自动创建 bucket `auto-upload-dev`，无需手动操作。
 
+Phase 2 Kafka 验证：
+
+```bash
+docker compose up -d kafka
+```
+
+同时启动 Kafka 和 MinIO：
+
+```bash
+docker compose up -d kafka minio minio-init
+```
+
 ### 访问
 
 | 用途 | 地址 | 账号/密码 |
 |---|---|---|
 | Console 管理界面 | http://localhost:9001 | minioadmin / minioadmin |
 | API endpoint | http://localhost:9000 | minioadmin / minioadmin |
+| Kafka broker | localhost:9092 | PLAINTEXT 本地开发 |
 
 ### 停止
 
@@ -43,7 +56,7 @@ S3_BUCKET=auto-upload-dev
 
 ```
 deploy/
-├── docker-compose.yml        # MinIO 本地开发（当前）
+├── docker-compose.yml        # MinIO / Kafka 本地开发
 ├── grafana/                  # Phase 5 填充：Grafana dashboard
 ├── otel/                     # Phase 5 填充：OpenTelemetry Collector 配置
 └── prometheus/               # Phase 5 填充：Prometheus 抓取配置

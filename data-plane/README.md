@@ -69,7 +69,8 @@ go run ./cmd/worker \
 
 本地 Kafka / MinIO：
 ```bash
-docker compose -f ../docker-compose.phase2.yml up -d
+cd ../deploy
+docker compose up -d kafka minio minio-init
 ```
 
 Kafka 真 broker 集成测试默认跳过；启动 Compose 后可手动开启：

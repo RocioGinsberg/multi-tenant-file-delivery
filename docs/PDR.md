@@ -43,6 +43,18 @@
 4. 下载时由控制面鉴权并签发短 TTL 临时凭证或 presigned URL。
 5. 审计读操作。
 
+### Worker 集群业务场景
+
+后续 data-plane 需要支持 worker 集群，不是为了增加架构复杂度，而是为了覆盖真实批量分发压力：
+
+- 月末 / 季末 HQ 集中上传大量报表，一个任务可能包含数千到数万份文件，需要多个 worker 分摊上传。
+- 财务、人事、法务、运营等部门可能同时发起分发任务，控制面应保持响应，上传执行由数据面异步消化。
+- 部分 sink 可能很慢，例如跨区域对象存储、SFTP、Webhook 或限流的第三方接口，需要避免慢任务阻塞整个队列。
+- 不同租户可能使用不同 sink、region 或凭证，后续可按 sink 类型、tenant、region 拆分 worker pool。
+- worker 实例宕机或重启时，未完成任务应能由其他 worker 接管，前提是源文件不依赖某台机器的本地临时目录。
+
+产品层面的目标是：control-plane 继续负责业务状态和用户体验，data-plane worker 集群负责可恢复、可扩容的大文件和批量文件投递。
+
 ## 4. 产品范围
 
 ### MVP 范围
@@ -60,6 +72,9 @@
 
 - 多租户鉴权和子公司只读视图。
 - Workspace / workspace_object 元数据模型。
+- 可横向扩展的 data-plane worker 集群。
+- 去除 data-plane 对 control-plane 本地临时目录的运行时依赖。
+- 源文件暂存到 durable object storage，再由 worker 按 source reference 拉取。
 - 平台层 dedup。
 - S3 multipart / resume。
 - Redis 进度广播、限流和幂等。
@@ -81,3 +96,15 @@
 - 本地可通过 Docker 启动 Kafka / MinIO 进行集成验证。
 - 关键设计有 RFC / ADR 可追溯。
 - 每个 Phase 有明确完成定义和测试记录。
+
+## 7. 下一阶段草案：可扩展 data-plane
+
+Phase 2 已经完成 control-plane / data-plane 分离，但当前任务消息仍携带 `temp_dir` 和 `src_path`，worker 需要访问 control-plane 解压后的本地目录。这个模型适合本地闭环，不适合多实例 worker 集群。
+
+下一阶段目标：
+
+- worker 进程保持 stateless，不依赖 control-plane 本地磁盘。
+- control-plane 把上传原始包或拆分后的源文件暂存到 durable object storage。
+- `delivery.tasks.v1` 从本地路径模型演进为 source reference 模型。
+- 多个 data-plane worker 可通过 Kafka consumer group 横向扩展。
+- file-spool 继续作为本地开发 transport，但不再代表生产输入模型。

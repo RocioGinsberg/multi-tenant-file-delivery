@@ -18,7 +18,8 @@
 | Phase 0 | Done | 清理半成品脚手架，建立 monorepo | 目录骨架和基础文档完成 |
 | Phase 1 | Done | Python 控制面 MVP | 上传 zip -> 分类 -> 确认 -> Python 上传 -> 前端进度闭环 |
 | Phase 2 | Done | Go 数据面 + Kafka bridge | Go worker 接管上传执行；file-spool 和 Kafka transport 都可验证 |
-| Phase 3 | Planned | 换上真实数据层 | SQLite -> MySQL/PostgreSQL 决策落地；本地全栈 compose 跑通 |
+| Phase 3 | Planned | MySQL 数据层 | SQLite -> MySQL 主数据库；本地全栈 compose 跑通 |
+| Phase 3.x | Planned | 去本地文件依赖 | source reference 消息模型；worker 从 staging object storage 读取源文件 |
 | Phase 4 | Planned | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Planned | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标 |
 | Phase 6 | Planned | 多租户 + 鉴权 | HQ / 子公司用户隔离，RBAC 覆盖 |
@@ -50,14 +51,15 @@
 |---|---|---|
 | S3 multipart / resume | Phase 7 或独立 Phase 3.x | 需要 session 表、part 状态和恢复语义 |
 | 平台层 dedup | Phase 6.5 / Phase 7 | 依赖 physical_object / workspace_object 模型 |
+| 去除 data-plane 本地文件依赖 | Phase 3.x | worker 集群化前需要 source reference 和 staging object storage |
 | worker 并发调度 / backpressure | Phase 4 / Phase 7 | 依赖 Redis 限流和压测数据 |
 | trace context 透传 | Phase 5 | 依赖 OTel 统一接入 |
 
 ## 当前下一步建议
 
-Phase 3 启动前需要先拍板：
+Phase 3 启动输入：
 
-- 主数据库选 MySQL 还是 PostgreSQL。
-- 是否保留 SQLite 作为测试数据库。
-- zip 暂存是否从本地磁盘切到 MinIO staged source。
+- 主数据库使用 MySQL。
+- SQLite 保留为轻量测试数据库。
+- zip 暂存按 RFC 0002 从本地磁盘迁移到 MinIO / S3 staged source。
 - alembic 迁移策略和本地 compose 服务清单。

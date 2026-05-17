@@ -31,6 +31,7 @@ from app.services.delivery import (
     build_delivery_task_message,
 )
 from app.services.progress_bus import ProgressBus
+from app.services.staging_source import stage_task_archive
 from app.services.task_runner import run_task, set_progress_bus
 
 router = APIRouter()
@@ -332,10 +333,18 @@ async def upload_task(
             for item in items
             if item.severity in ("ok", "warning") and item.upload_status == "pending"
         ]
+        source_ref = None
+        if getattr(settings, "delivery_source_mode", "file") == "object":
+            source_ref = await stage_task_archive(
+                task,
+                bucket_name=getattr(settings, "staging_bucket_name", None),
+            )
+
         message = build_delivery_task_message(
             task=task,
             upload_items=upload_items,
             bucket_name=settings.s3_bucket_name,
+            source=source_ref,
         )
         delivery_transport = getattr(settings, "delivery_transport", "file")
         if delivery_transport == "file":

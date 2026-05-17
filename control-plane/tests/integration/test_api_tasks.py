@@ -334,6 +334,65 @@ async def test_upload_task_publishes_to_kafka_when_configured(async_client):
     assert mock_event_repo.append.await_args.args[3]["transport"] == "kafka"
 
 
+async def test_upload_task_can_publish_object_source_reference(async_client, tmp_path):
+    from app.core.db import get_session
+    from app.services.delivery import DeliverySourceReference
+
+    task = _mock_task(status="confirmed", temp_dir=str(tmp_path / "abc123"))
+    item = _mock_item()
+
+    with (
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+        patch("app.api.tasks.stage_task_archive") as stage_task_archive,
+        patch("app.api.tasks._task_repo") as mock_task_repo,
+        patch("app.api.tasks._item_repo") as mock_item_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
+    ):
+        mock_settings = MagicMock()
+        mock_settings.delivery_backend = "go-worker"
+        mock_settings.delivery_transport = "file"
+        mock_settings.delivery_source_mode = "object"
+        mock_settings.delivery_outbox_base = str(tmp_path)
+        mock_settings.task_dir_base = str(tmp_path)
+        mock_settings.s3_bucket_name = "auto-upload-dev"
+        mock_settings.staging_bucket_name = "auto-upload-staging"
+        mock_settings_fn.return_value = mock_settings
+
+        stage_task_archive.return_value = DeliverySourceReference(
+            bucket="auto-upload-staging",
+            key="staged/tasks/abc123/archive.zip",
+            sha256="abc",
+            size=123,
+        )
+        mock_task_repo.get = AsyncMock(return_value=task)
+        mock_task_repo.update_status = AsyncMock(return_value=task)
+        mock_item_repo.list_by_task = AsyncMock(return_value=[item])
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/upload")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    stage_task_archive.assert_awaited_once_with(
+        task,
+        bucket_name="auto-upload-staging",
+    )
+    payload = json.loads(
+        (tmp_path / "delivery.tasks.v1" / "abc123.json").read_text(encoding="utf-8")
+    )
+    assert payload["schema_version"] == 2
+    assert payload["source"]["bucket"] == "auto-upload-staging"
+    assert payload["source"]["key"] == "staged/tasks/abc123/archive.zip"
+    assert payload["items"][0]["source_path"] == "test.txt"
+
+
 # ── Test 7: POST /api/v1/tasks — new task created ────────────────────────────
 
 async def test_create_task_new(async_client, tmp_path):

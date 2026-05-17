@@ -64,6 +64,7 @@ services:
         echo 'Waiting for MinIO...'; sleep 2;
       done;
       mc mb --ignore-existing local/auto-upload-dev;
+      mc mb --ignore-existing local/auto-upload-staging;
       mc anonymous set download local/auto-upload-dev;
       "
     restart: on-failure

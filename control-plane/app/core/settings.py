@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     s3_access_key_id: str = "minioadmin"
     s3_secret_access_key: str = "minioadmin"
+    staging_bucket_name: str = "auto-upload-staging"
 
     # ── Worker concurrency (used by 1.8 task_runner) ──
     worker_max_target_concurrent: int = 3
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     delivery_backend: str = "python"
     delivery_outbox_base: str = "/tmp/auto_upload_outbox"
     delivery_transport: str = "file"
+    delivery_source_mode: str = "file"
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_task_topic: str = "delivery.tasks.v1"
     kafka_result_topic: str = "delivery.results.v1"

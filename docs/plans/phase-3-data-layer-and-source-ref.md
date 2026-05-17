@@ -93,7 +93,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 
 ### 3.3 数据层测试矩阵
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 标记 MySQL 集成测试，例如 `RUN_MYSQL_TESTS=1`。
@@ -102,6 +102,12 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - 默认 `uv run pytest` 不依赖 MySQL。
   - `RUN_MYSQL_TESTS=1` 时可验证 MySQL 连接和核心 repo 行为。
+- **实际变更**：
+  - `control-plane/tests/integration/test_mysql_docker.py`：新增 MySQL Docker smoke test，默认跳过。
+  - `control-plane/pyproject.toml`：新增 `mysql` pytest marker。
+- **验证**：
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_mysql_docker.py`
+  - `cd control-plane && RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker.py`
 
 ### 3.4 Source reference 消息模型
 

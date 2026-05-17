@@ -43,4 +43,5 @@ markers = [
     "e2e: end-to-end integration tests that use real SQLite and mocked S3",
     "integration: integration tests that cross process or language boundaries",
     "docker: tests that require local docker compose services",
+    "mysql: tests that require local MySQL service",
 ]

@@ -2,16 +2,12 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/pipeline"
 	"smh_auto_upload/data-plane/internal/sink"
+	"smh_auto_upload/data-plane/internal/transport"
 )
 
 type Config struct {
@@ -22,48 +18,43 @@ type Config struct {
 }
 
 type Worker struct {
-	cfg  Config
-	sink sink.Sink
+	cfg     Config
+	sink    sink.Sink
+	tasks   transport.TaskConsumer
+	results transport.ResultProducer
 }
 
 func New(cfg Config, sinkImpl sink.Sink) *Worker {
-	return &Worker{cfg: cfg, sink: sinkImpl}
+	spool := transport.NewFileSpool(cfg.InboxDir, cfg.ResultsDir)
+	return NewWithTransport(cfg, sinkImpl, spool, spool)
 }
 
-// Run processes the current local outbox once. Kafka consumption will replace
-// this directory scan without changing pipeline.ProcessTask.
-func (w *Worker) Run(ctx context.Context) error {
-	if err := os.MkdirAll(w.cfg.ResultsDir, 0o755); err != nil {
-		return err
-	}
+func NewWithTransport(
+	cfg Config,
+	sinkImpl sink.Sink,
+	tasks transport.TaskConsumer,
+	results transport.ResultProducer,
+) *Worker {
+	return &Worker{cfg: cfg, sink: sinkImpl, tasks: tasks, results: results}
+}
 
-	files, err := os.ReadDir(w.cfg.InboxDir)
+// Run processes tasks from the configured transport. Kafka can replace the
+// file-spool transport without changing pipeline.ProcessTask.
+func (w *Worker) Run(ctx context.Context) error {
+	tasks, err := w.tasks.Consume(ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, entry := range files {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		if err := w.processFile(ctx, filepath.Join(w.cfg.InboxDir, entry.Name())); err != nil {
+	for _, task := range tasks {
+		if err := w.processTask(ctx, task); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (w *Worker) processFile(ctx context.Context, path string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	var task message.DeliveryTask
-	if err := json.Unmarshal(raw, &task); err != nil {
-		return fmt.Errorf("decode %s: %w", path, err)
-	}
-
+func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) error {
 	started := time.Now().UTC()
 	result := message.DeliveryResult{
 		Topic:     "delivery.results.v1",
@@ -82,9 +73,5 @@ func (w *Worker) processFile(ctx context.Context, path string) error {
 		result.Error = err.Error()
 	}
 
-	out, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(w.cfg.ResultsDir, task.TaskID+".json"), out, 0o644)
+	return w.results.Produce(ctx, result)
 }

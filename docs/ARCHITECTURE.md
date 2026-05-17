@@ -36,15 +36,15 @@ control-plane FastAPI
 
 Go data-plane worker
   │
-  ├─ 扫描 delivery.tasks.v1 inbox
-  ├─ json.Unmarshal -> DeliveryTask
+  ├─ file-spool transport 扫描 delivery.tasks.v1 inbox
+  ├─ transport decode -> DeliveryTask
   ├─ pipeline.ProcessTask
   │    ├─ FileSource(temp_dir, src_path)
   │    └─ Sink.Upload（mock 或 S3/MinIO 单段 PUT）
-  └─ 写入 delivery.results.v1/{task_id}.json
+  └─ file-spool transport 写入 delivery.results.v1/{task_id}.json
 ```
 
 后续目标：
-- 用 Kafka 替换本地目录扫描。
+- 用 Kafka transport 替换当前 file-spool transport。
 - 为 S3 / MinIO sink 补 multipart、resume、checksum 和平台层 dedup。
 - 控制面消费 `delivery.results.v1` 后统一更新 task / item 状态。

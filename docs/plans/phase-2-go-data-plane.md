@@ -15,12 +15,13 @@
   - `go-worker`：写入 outbox，交给 Go worker 消费。
 - [x] 本地 bridge 覆盖：worker/CLI 读取 inbox JSON、执行 mock sink、写出 result JSON。
 - [x] 首个真实 sink adapter：S3 / MinIO 单段 `PutObject`。
+- [x] 抽象 task/result transport：当前实现 file-spool，Kafka 可替换此层。
 - [ ] Kafka transport 替换目录扫描。
 - [ ] S3 multipart / resume / checksum / dedup。
 
 ## Test Plan
 - [x] 控制面单测：消息构建、outbox 写入、go-worker 模式路由。
-- [x] Go 单测：消息 JSON round-trip、file source、mock sink pipeline、S3 sink 单段上传、worker/CLI 本地 bridge。
+- [x] Go 单测：消息 JSON round-trip、file source、file transport、mock sink pipeline、S3 sink 单段上传、worker/CLI 本地 bridge。
 - [ ] 集成验证：上传 zip -> 分类 -> 确认 -> outbox 生成 -> worker 消费 -> result 输出。
 
 ## Current Implementation
@@ -28,6 +29,7 @@
 - `control-plane/app/api/tasks.py`：`DELIVERY_BACKEND=go-worker` 时发布任务消息并把 task 状态更新为 `queued`。
 - `data-plane/cmd/worker`：本地 worker CLI，默认读取 `/tmp/auto_upload_outbox/delivery.tasks.v1`。
 - `data-plane/internal/worker`：目录扫描、JSON decode、调用 pipeline、写 `delivery.results.v1` result。
+- `data-plane/internal/transport`：定义 task/result transport 接口，当前 file-spool 实现负责目录扫描和 result JSON 写出。
 - `data-plane/internal/pipeline`：只上传 pending 且 severity 为 ok/warning 的 item。
 - `data-plane/internal/source`：从控制面解压目录读取源文件。
 - `data-plane/internal/sink`：定义 `Sink` / `Source` 接口，当前实现 `MockSink` 和 S3 / MinIO 单段 PUT sink。

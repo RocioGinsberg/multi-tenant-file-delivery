@@ -3,7 +3,7 @@
 高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
 
 ## 当前状态
-**Phase 2 scaffolded + local bridge covered**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
+**Phase 2 completed**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
 
 当前 worker 的本地闭环：
 1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
@@ -94,7 +94,6 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 - `internal/worker`：本地 inbox -> mock sink -> result JSON 闭环。
 - `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
 
-## 尚未实现
-- 控制面 Kafka producer / consumer 的 Docker broker 集成测试。
+## 后续阶段
 - S3 multipart、断点续传、平台层 dedup。
 - 并发调度和 backpressure。

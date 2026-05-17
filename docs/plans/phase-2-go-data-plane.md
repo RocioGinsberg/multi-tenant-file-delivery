@@ -1,11 +1,11 @@
 # Phase 2 — Go 数据面
 
-> 当前状态：实现中，本地 outbox bridge scaffold 已落地，S3 / MinIO 单段 PUT sink 已接入并补齐 Go 单测。Phase 1 的分类逻辑继续以 control plane 为准；Phase 2 只接管分类后的上传执行。
+> 当前状态：完成。Phase 2 已完成 Go 数据面 worker、file-spool 本地桥接、Kafka transport adapter、S3 / MinIO 单段 PUT sink、结果回写，以及跨语言集成验证。Phase 1 的分类逻辑继续以 control plane 为准；Phase 2 只接管分类后的上传执行。
 
 ## Summary
 - 控制面维持分类、确认、状态机和事件写入。
 - 数据面负责消费 Phase 1 产出的任务消息，完成文件读取、sink 上传和结果回传。
-- 本地开发先使用 outbox bridge 作为 Kafka 之前的可运行过渡层。
+- 本地开发默认使用 file-spool bridge；Kafka transport 已实现并通过 Docker broker 集成测试。
 
 ## Key Changes
 - [x] 新增任务消息模型：`delivery.tasks.v1` / `delivery.results.v1`。
@@ -23,7 +23,11 @@
 - [x] S3 / mock sink receipt 返回 SHA-256。
 - [x] `delivery.results.v1` 返回 item 级上传 receipt / error。
 - [x] 控制面本地 result consumer 可应用 `delivery.results.v1`，回写 task / item 状态。
-- [ ] S3 multipart / resume / dedup。
+
+## Deferred
+- S3 multipart / resume：进入后续高性能上传阶段实现。
+- 平台层 dedup：依赖 physical object / metadata 表设计，进入后续存储治理阶段实现。
+- worker 并发调度 / backpressure：依赖真实负载和限流策略，进入后续性能阶段实现。
 
 ## Test Plan
 - [x] 控制面单测：消息构建、outbox 写入、go-worker 模式路由。

@@ -10,11 +10,11 @@
 - [失败模式与恢复策略](#失败模式与恢复策略) — Phase 4 后写
 
 ## 当前状态
-**v1**：Phase 2 本地 outbox bridge 已落地。当前写路径还不是 Kafka；Go 数据面先通过本地 JSON 文件完成控制面到 worker 的可运行闭环，并已支持 S3 / MinIO 单段 PUT sink。
+**v1**：Phase 2 已完成。Go 数据面通过统一 transport 接口支持 file-spool 和 Kafka；本地默认 file-spool，Kafka adapter 已通过 Docker broker 集成测试。当前 sink 支持 mock 与 S3 / MinIO 单段 PUT，结果事件可回写控制面 task / item 状态。
 
 ## 写路径详细时序图
 
-当前 Phase 2 本地 bridge：
+当前 Phase 2 写路径：
 
 ```text
 HQ user
@@ -31,20 +31,28 @@ control-plane FastAPI
        ├─ 查询 task / task_item
        ├─ 过滤 upload_status=pending 且 severity=ok/warning 的 item
        ├─ 构建 DeliveryTaskMessage
-       ├─ 写入 /tmp/auto_upload_outbox/delivery.tasks.v1/{task_id}.json
+       ├─ delivery_transport=file:
+       │    └─ 写入 /tmp/auto_upload_outbox/delivery.tasks.v1/{task_id}.json
+       ├─ delivery_transport=kafka:
+       │    └─ publish delivery.tasks.v1
        └─ task.status -> queued
 
 Go data-plane worker
   │
-  ├─ file-spool transport 扫描 delivery.tasks.v1 inbox
+  ├─ file-spool / Kafka transport 读取 delivery.tasks.v1
   ├─ transport decode -> DeliveryTask
   ├─ pipeline.ProcessTask
   │    ├─ FileSource(temp_dir, src_path)
   │    └─ Sink.Upload（mock 或 S3/MinIO 单段 PUT）
-  └─ file-spool transport 写入 delivery.results.v1/{task_id}.json
+  └─ file-spool / Kafka transport 写入 delivery.results.v1
+
+control-plane result consumer
+  │
+  ├─ 读取 delivery.results.v1
+  ├─ apply_delivery_result()
+  └─ 回写 task / task_item 状态
 ```
 
 后续目标：
-- 用 Kafka transport 替换当前 file-spool transport。
-- 为 S3 / MinIO sink 补 multipart、resume、checksum 和平台层 dedup。
-- 控制面消费 `delivery.results.v1` 后统一更新 task / item 状态。
+- 为 S3 / MinIO sink 补 multipart、resume 和平台层 dedup。
+- 在真实负载下补 worker 并发调度、backpressure 和重试策略。

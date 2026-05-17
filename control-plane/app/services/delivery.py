@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +104,12 @@ class DeliveryResultApplySummary:
     processed: int
     applied_items: int
     missing_items: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryResultRecord:
+    message: DeliveryResultMessage
+    ack: Any
 
 
 def build_delivery_task_message(
@@ -261,6 +268,32 @@ class FileSpoolDeliveryPublisher:
 
 
 @dataclass(slots=True)
+class KafkaDeliveryPublisher:
+    """Kafka producer for ``delivery.tasks.v1`` task events."""
+
+    bootstrap_servers: str
+    topic: str = "delivery.tasks.v1"
+    producer: Any | None = None
+
+    async def publish(self, message: DeliveryTaskMessage) -> None:
+        producer = self.producer or AIOKafkaProducer(
+            bootstrap_servers=self.bootstrap_servers,
+        )
+        should_manage_lifecycle = self.producer is None
+        if should_manage_lifecycle:
+            await producer.start()
+        try:
+            await producer.send_and_wait(
+                self.topic,
+                message.model_dump_json(exclude_none=True).encode("utf-8"),
+                key=message.task_id.encode("utf-8"),
+            )
+        finally:
+            if should_manage_lifecycle:
+                await producer.stop()
+
+
+@dataclass(slots=True)
 class FileSpoolDeliveryResultConsumer:
     """Local file-spool reader for ``delivery.results.v1`` result events."""
 
@@ -270,6 +303,12 @@ class FileSpoolDeliveryResultConsumer:
 
     def __post_init__(self) -> None:
         self._result_dir = Path(self.base_dir) / self.result_topic
+
+    async def consume_records(self) -> list[DeliveryResultRecord]:
+        return [
+            DeliveryResultRecord(message=message, ack=_noop_ack)
+            for message in await self.consume()
+        ]
 
     async def consume(self) -> list[DeliveryResultMessage]:
         if not self._result_dir.exists():
@@ -283,12 +322,71 @@ class FileSpoolDeliveryResultConsumer:
         return messages
 
 
+@dataclass(slots=True)
+class KafkaDeliveryResultConsumer:
+    """Kafka consumer for ``delivery.results.v1`` result events."""
+
+    bootstrap_servers: str
+    topic: str = "delivery.results.v1"
+    group_id: str = "control-plane-results"
+    max_records: int = 100
+    timeout_ms: int = 1000
+    consumer: Any | None = None
+    _owned_consumer: Any | None = field(default=None, init=False, repr=False)
+
+    async def consume_records(self) -> list[DeliveryResultRecord]:
+        consumer = self.consumer or AIOKafkaConsumer(
+            self.topic,
+            bootstrap_servers=self.bootstrap_servers,
+            group_id=self.group_id,
+            enable_auto_commit=False,
+            auto_offset_reset="earliest",
+        )
+        should_manage_lifecycle = self.consumer is None
+        if should_manage_lifecycle:
+            await consumer.start()
+            self._owned_consumer = consumer
+        batches = await consumer.getmany(
+            timeout_ms=self.timeout_ms,
+            max_records=self.max_records,
+        )
+        records: list[DeliveryResultRecord] = []
+        for messages in batches.values():
+            for kafka_message in messages:
+                result = DeliveryResultMessage.model_validate_json(
+                    kafka_message.value.decode("utf-8")
+                )
+                records.append(DeliveryResultRecord(message=result, ack=consumer.commit))
+        return records
+
+    async def close(self) -> None:
+        if self._owned_consumer is not None:
+            await self._owned_consumer.stop()
+            self._owned_consumer = None
+
+
+async def _noop_ack() -> None:
+    return None
+
+
 async def consume_delivery_results(
     session: AsyncSession,
-    consumer: FileSpoolDeliveryResultConsumer,
+    consumer: Any,
 ) -> list[DeliveryResultApplySummary]:
     """Read pending local result messages and apply them in order."""
     summaries: list[DeliveryResultApplySummary] = []
-    for message in await consumer.consume():
-        summaries.append(await apply_delivery_result(session, message))
-    return summaries
+    try:
+        if hasattr(consumer, "consume_records"):
+            records = await consumer.consume_records()
+        else:
+            records = [
+                DeliveryResultRecord(message=message, ack=_noop_ack)
+                for message in await consumer.consume()
+            ]
+        for record in records:
+            summaries.append(await apply_delivery_result(session, record.message))
+            await record.ack()
+        return summaries
+    finally:
+        if hasattr(consumer, "close"):
+            await consumer.close()

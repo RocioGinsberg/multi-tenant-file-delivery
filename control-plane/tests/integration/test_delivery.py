@@ -15,6 +15,8 @@ from app.services.delivery import (
     DeliveryResultMessage,
     FileSpoolDeliveryPublisher,
     FileSpoolDeliveryResultConsumer,
+    KafkaDeliveryPublisher,
+    KafkaDeliveryResultConsumer,
     apply_delivery_result,
     build_delivery_task_message,
     consume_delivery_results,
@@ -113,6 +115,45 @@ async def test_file_spool_delivery_publisher_writes_json(tmp_path):
 
     assert out.exists()
     assert out.read_text(encoding="utf-8").startswith("{")
+
+
+@pytest.mark.asyncio
+async def test_kafka_delivery_publisher_sends_json_payload():
+    class FakeProducer:
+        def __init__(self):
+            self.sent = []
+
+        async def send_and_wait(self, topic, value, key):
+            self.sent.append((topic, value, key))
+
+    task = SimpleNamespace(
+        id="task-kafka",
+        idempotency_key="idem-kafka",
+        submission_label="upload.zip",
+        temp_dir="/tmp/task-kafka",
+        status="confirmed",
+        created_by="local-user",
+        created_at=None,
+        confirmed_at=None,
+    )
+    message = build_delivery_task_message(
+        task=task,
+        upload_items=[],
+        bucket_name="auto-upload-dev",
+    )
+    producer = FakeProducer()
+
+    await KafkaDeliveryPublisher(
+        bootstrap_servers="localhost:9092",
+        producer=producer,
+    ).publish(message)
+
+    assert len(producer.sent) == 1
+    topic, value, key = producer.sent[0]
+    payload = json.loads(value.decode("utf-8"))
+    assert topic == "delivery.tasks.v1"
+    assert key == b"task-kafka"
+    assert payload["task_id"] == "task-kafka"
 
 
 @pytest.mark.asyncio
@@ -256,3 +297,67 @@ async def test_consume_delivery_results_applies_file_spool_messages(
     assert summaries[0].status == "uploaded"
     assert task.status == "uploaded"
     assert updated_items[0].upload_status == "uploaded"
+
+
+@pytest.mark.asyncio
+async def test_consume_delivery_results_applies_kafka_messages_and_commits(
+    session: AsyncSession,
+):
+    class FakeKafkaMessage:
+        def __init__(self, value: bytes):
+            self.value = value
+
+    class FakeConsumer:
+        def __init__(self, value: bytes):
+            self.value = value
+            self.commits = 0
+            self.stopped = False
+
+        async def getmany(self, *, timeout_ms, max_records):
+            assert timeout_ms == 1000
+            assert max_records == 100
+            return {object(): [FakeKafkaMessage(self.value)]}
+
+        async def commit(self):
+            self.commits += 1
+
+        async def stop(self):
+            self.stopped = True
+
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-kafka-consume", status="queued")
+    session.add(task)
+    await session.flush()
+    item = (
+        await item_repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "ok.xlsx", "filename": "ok.xlsx"}],
+        )
+    )[0]
+
+    payload = {
+        "topic": "delivery.results.v1",
+        "task_id": task.id,
+        "status": "uploaded",
+        "uploaded": 1,
+        "failed": 0,
+        "processed": 1,
+        "started_at": "2026-05-17T11:59:00Z",
+        "ended_at": "2026-05-17T12:00:00Z",
+        "items": [{"item_id": item.id, "status": "uploaded"}],
+    }
+    consumer = FakeConsumer(json.dumps(payload).encode("utf-8"))
+
+    summaries = await consume_delivery_results(
+        session,
+        KafkaDeliveryResultConsumer(
+            bootstrap_servers="localhost:9092",
+            consumer=consumer,
+        ),
+    )
+
+    assert len(summaries) == 1
+    assert consumer.commits == 1
+    assert consumer.stopped is False
+    assert task.status == "uploaded"

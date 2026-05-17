@@ -25,7 +25,11 @@ from app.services.classification_profile import (
     TargetExtractionConfig,
 )
 from app.services.classifier import classify_zip
-from app.services.delivery import FileSpoolDeliveryPublisher, build_delivery_task_message
+from app.services.delivery import (
+    FileSpoolDeliveryPublisher,
+    KafkaDeliveryPublisher,
+    build_delivery_task_message,
+)
 from app.services.progress_bus import ProgressBus
 from app.services.task_runner import run_task, set_progress_bus
 
@@ -328,19 +332,32 @@ async def upload_task(
             for item in items
             if item.severity in ("ok", "warning") and item.upload_status == "pending"
         ]
-        publisher = FileSpoolDeliveryPublisher(
-            getattr(settings, "delivery_outbox_base", settings.task_dir_base),
-        )
         message = build_delivery_task_message(
             task=task,
             upload_items=upload_items,
             bucket_name=settings.s3_bucket_name,
         )
+        delivery_transport = getattr(settings, "delivery_transport", "file")
+        if delivery_transport == "file":
+            publisher = FileSpoolDeliveryPublisher(
+                getattr(settings, "delivery_outbox_base", settings.task_dir_base),
+            )
+        elif delivery_transport == "kafka":
+            publisher = KafkaDeliveryPublisher(
+                bootstrap_servers=settings.kafka_bootstrap_servers,
+                topic=settings.kafka_task_topic,
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unsupported delivery transport: {delivery_transport!r}",
+            )
         await publisher.publish(message)
 
         await _task_repo.update_status(session, task_id, "queued")
         await _event_repo.append(session, task_id, "task_queued", {
             "topic": message.topic,
+            "transport": delivery_transport,
             "upload_items": len(upload_items),
         })
         await session.commit()

@@ -45,15 +45,33 @@ cp .env.example .env
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
 | `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
+| `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
 | `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker 地址 |
+| `KAFKA_TASK_TOPIC` | `delivery.tasks.v1` | 控制面发布任务 topic |
+| `KAFKA_RESULT_TOPIC` | `delivery.results.v1` | 控制面消费结果 topic |
+| `KAFKA_RESULT_GROUP_ID` | `control-plane-results` | 控制面 result consumer group |
 
-### 3. 起 MinIO（需要 Docker）
+### 3. 起本地依赖（需要 Docker）
 
 ```bash
 cd ../deploy
 docker compose up -d minio minio-init
 # minio-init 自动创建 auto-upload-dev bucket，约 10 秒完成
 # Console: http://localhost:9001  用户名/密码: minioadmin/minioadmin
+```
+
+Phase 2 Kafka transport 验证时额外启动：
+
+```bash
+docker compose up -d kafka
+```
+
+Kafka Docker 集成测试：
+
+```bash
+RUN_DOCKER_TESTS=1 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+  uv run pytest tests/integration/test_delivery_kafka_docker.py
 ```
 
 ### 4. 执行数据库迁移

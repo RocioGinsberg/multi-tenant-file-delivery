@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # "go-worker" writes a task message into a durable outbox for the Go worker.
     delivery_backend: str = "python"
     delivery_outbox_base: str = "/tmp/auto_upload_outbox"
+    delivery_transport: str = "file"
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_task_topic: str = "delivery.tasks.v1"
+    kafka_result_topic: str = "delivery.results.v1"
+    kafka_result_group_id: str = "control-plane-results"
 
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"

@@ -95,6 +95,6 @@ GOCACHE=/tmp/smh_go_cache go test ./...
 - `control-plane/tests/integration/test_phase2_bridge.py`：Python outbox -> Go worker -> Python result consumer 的跨语言本地闭环。
 
 ## 尚未实现
-- 控制面 Kafka producer / consumer。
+- 控制面 Kafka producer / consumer 的 Docker broker 集成测试。
 - S3 multipart、断点续传、平台层 dedup。
 - 并发调度和 backpressure。

@@ -3,11 +3,14 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import uuid
 import zipfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
+from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+from aiokafka.errors import TopicAlreadyExistsError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models import Base, Task
@@ -15,6 +18,8 @@ from app.repos.item_repo import ItemRepo
 from app.services.delivery import (
     FileSpoolDeliveryPublisher,
     FileSpoolDeliveryResultConsumer,
+    KafkaDeliveryPublisher,
+    KafkaDeliveryResultConsumer,
     build_delivery_task_message,
     consume_delivery_results,
 )
@@ -265,3 +270,168 @@ async def test_source_reference_file_spool_bridge_round_trip(
     assert summaries[0].applied_items == 1
     assert task.status == "uploaded"
     assert updated_items[0].upload_status == "uploaded"
+
+
+@pytest.mark.docker
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_source_reference_kafka_bridge_round_trip(
+    session: AsyncSession,
+    tmp_path: Path,
+):
+    if os.getenv("RUN_DOCKER_TESTS") != "1":
+        pytest.skip("set RUN_DOCKER_TESTS=1 with deploy/docker-compose.yml kafka/minio running")
+    if shutil.which("go") is None:
+        pytest.skip("go command is required for source reference Kafka bridge test")
+
+    from app.core.settings import get_settings
+
+    repo_root = Path(__file__).resolve().parents[3]
+    data_plane_dir = repo_root / "data-plane"
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    with zipfile.ZipFile(task_dir / "original.zip", "w") as zf:
+        zf.writestr("report.txt", "hello")
+
+    suffix = uuid.uuid4().hex
+    task_topic = f"delivery.tasks.source.pytest.{suffix}"
+    result_topic = f"delivery.results.source.pytest.{suffix}"
+    brokers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    await _create_kafka_topics(brokers, task_topic, result_topic)
+
+    env_overrides = {
+        "S3_ENDPOINT_URL": "http://localhost:9000",
+        "S3_ACCESS_KEY_ID": "minioadmin",
+        "S3_SECRET_ACCESS_KEY": "minioadmin",
+        "S3_REGION": "us-east-1",
+        "STAGING_BUCKET_NAME": "auto-upload-staging",
+    }
+    old_env = {key: os.environ.get(key) for key in env_overrides}
+    os.environ.update(env_overrides)
+    get_settings.cache_clear()
+
+    item_repo = ItemRepo()
+    task = Task(
+        idempotency_key=f"idem-source-kafka-{suffix}",
+        submission_label="upload.zip",
+        temp_dir=str(task_dir),
+        status="confirmed",
+    )
+    session.add(task)
+    await session.flush()
+    items = await item_repo.bulk_insert(
+        session,
+        task.id,
+        [
+            {
+                "src_path": "report.txt",
+                "filename": "report.txt",
+                "ext": ".txt",
+                "file_size": 5,
+                "target_name_raw": "acme",
+                "target_name_matched": "acme",
+                "document_type": "report",
+                "category_name": "reports",
+                "dst_dir": "reports",
+                "dst_path": "reports/report.txt",
+                "severity": "ok",
+                "upload_status": "pending",
+            },
+        ],
+    )
+
+    try:
+        source_ref = await stage_task_archive(task)
+        message = build_delivery_task_message(
+            task=task,
+            upload_items=items,
+            bucket_name="auto-upload-dev",
+            source=source_ref,
+        )
+        await KafkaDeliveryPublisher(
+            bootstrap_servers=brokers,
+            topic=task_topic,
+        ).publish(message)
+    finally:
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        get_settings.cache_clear()
+
+    env = os.environ.copy()
+    env.update({
+        "GOPATH": "/tmp/smh_go_path",
+        "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
+        "GOCACHE": "/tmp/smh_go_cache",
+    })
+    run_result = subprocess.run(
+        [
+            "go",
+            "run",
+            "./cmd/worker",
+            "-transport",
+            "kafka",
+            "-kafka-brokers",
+            brokers,
+            "-kafka-task-topic",
+            task_topic,
+            "-kafka-result-topic",
+            result_topic,
+            "-kafka-group-id",
+            f"data-plane-source-test-{suffix}",
+            "-sink",
+            "mock",
+            "-source-mode",
+            "object",
+            "-s3-endpoint",
+            "http://localhost:9000",
+            "-s3-region",
+            "us-east-1",
+            "-s3-access-key-id",
+            "minioadmin",
+            "-s3-secret-access-key",
+            "minioadmin",
+            "-s3-path-style=true",
+        ],
+        cwd=data_plane_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    assert run_result.returncode == 0, run_result.stderr
+
+    summaries = await consume_delivery_results(
+        session,
+        KafkaDeliveryResultConsumer(
+            bootstrap_servers=brokers,
+            topic=result_topic,
+            group_id=f"control-plane-source-result-test-{suffix}",
+            timeout_ms=10_000,
+        ),
+    )
+    await session.commit()
+
+    updated_items = await item_repo.list_by_task(session, task.id)
+    assert len(summaries) == 1
+    assert summaries[0].status == "uploaded"
+    assert summaries[0].applied_items == 1
+    assert task.status == "uploaded"
+    assert updated_items[0].upload_status == "uploaded"
+
+
+async def _create_kafka_topics(bootstrap_servers: str, *topics: str) -> None:
+    admin = AIOKafkaAdminClient(bootstrap_servers=bootstrap_servers)
+    await admin.start()
+    try:
+        await admin.create_topics([
+            NewTopic(name=topic, num_partitions=1, replication_factor=1)
+            for topic in topics
+        ])
+    except TopicAlreadyExistsError:
+        return
+    finally:
+        await admin.close()

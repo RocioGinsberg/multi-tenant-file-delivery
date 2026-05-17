@@ -19,7 +19,7 @@
 | Phase 1 | Done | Python 控制面 MVP | 上传 zip -> 分类 -> 确认 -> Python 上传 -> 前端进度闭环 |
 | Phase 2 | Done | Go 数据面 + Kafka bridge | Go worker 接管上传执行；file-spool 和 Kafka transport 都可验证 |
 | Phase 3 | Current | MySQL 数据层 | SQLite -> MySQL 主数据库；本地全栈 compose 跑通 |
-| Phase 3.x | Planned | 去本地文件依赖 | source reference 消息模型；worker 从 staging object storage 读取源文件 |
+| Phase 3.x | Current | 去本地文件依赖 | source reference 消息模型；Kafka worker 从 staging object storage 读取源文件 |
 | Phase 4 | Planned | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Planned | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标 |
 | Phase 6 | Planned | 多租户 + 鉴权 | HQ / 子公司用户隔离，RBAC 覆盖 |

@@ -1,6 +1,6 @@
 # Phase 3 — MySQL 数据层与 source reference 迁移
 
-> **状态**：Current（3.1-3.8 已完成；后续可继续拆分性能、GC 和生产化任务）
+> **状态**：Current（3.1-3.9 已完成；后续可继续拆分性能、GC 和生产化任务）
 > **目标**：把控制面数据层切到 MySQL，并按 RFC 0002 开始去除 data-plane 对本地临时目录的运行时依赖。
 > **完成定义**：本地 compose 可启动 MySQL / Kafka / MinIO；control-plane 使用 MySQL 跑通核心测试；任务发布支持 object source reference；Go worker 可从 staged object storage 读取源文件并完成上传结果回写。
 > **关联 RFC**：[0001 控制面 / 数据面分离与消息桥接](../RFC/0001-control-data-plane-bridge.md)、[0002 Stateless data-plane 与 source reference 迁移](../RFC/0002-stateless-data-plane-source-ref.md)
@@ -207,6 +207,24 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
   - `control-plane/README.md`：补 MySQL、staging bucket、source mode 和测试命令。
   - `data-plane/README.md`：补 `-source-mode object` worker 示例。
   - `docs/ARCHITECTURE.md`：补 source reference 写路径。
+
+### 3.9 Kafka source reference 端到端验证
+
+- **状态**：`[x]`
+- **L 等级**：L2
+- **范围**：
+  - control-plane 将 schema_version=2 source reference task 发布到 Kafka。
+  - Go worker 使用 Kafka transport 和 object source mode 消费任务。
+  - Go worker 将 result 写回 Kafka。
+  - control-plane Kafka result consumer 回写 task / item 状态。
+- **验收**：
+  - 测试不依赖 control-plane 与 data-plane 共享本地解压目录。
+  - Kafka topic 使用测试唯一名，避免重跑时读取历史消息。
+- **实际变更**：
+  - `control-plane/tests/integration/test_phase2_bridge.py`：新增 source reference Kafka bridge round-trip。
+- **验证**：
+  - `cd deploy && docker compose up -d kafka minio minio-init`
+  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_source_reference_kafka_bridge_round_trip`
 
 ## 四、执行顺序建议
 

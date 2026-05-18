@@ -92,6 +92,14 @@ func TestRunRejectsUnsupportedSourceMode(t *testing.T) {
 	}
 }
 
+func TestRunRejectsNonPositiveItemConcurrency(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"-item-concurrency", "0"}, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestRunRejectsKafkaTransportWithoutBrokers(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run(context.Background(), []string{

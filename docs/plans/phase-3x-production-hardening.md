@@ -96,7 +96,7 @@ control-plane
 
 ### 3.11 Worker batch / concurrency tuning
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 明确 worker 单次 Kafka batch、item 并发、sink 并发边界。
@@ -104,6 +104,13 @@ control-plane
 - **验收**：
   - Go 单测覆盖并发上限。
   - 现有 Kafka / file-spool bridge 不回归。
+- **实际变更**：
+  - `data-plane/internal/pipeline`：新增 `Options{MaxItemConcurrency}` 和并发 item 处理。
+  - `data-plane/internal/worker`：worker config 传递 item concurrency 到 pipeline。
+  - `data-plane/cmd/worker`：新增 `-item-concurrency` CLI 参数，默认 1。
+  - `data-plane/README.md`：记录 item 并发配置示例。
+- **验证**：
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/pipeline ./cmd/worker ./internal/worker`
 
 ### 3.12 Benchmark baseline
 
@@ -172,16 +179,19 @@ control-plane
 
 ### 3.17 Idempotency hardening
 
-- **状态**：`[~]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 当前阶段先覆盖 duplicate result apply 的 DB 最终状态稳定性。
   - 后续继续补重复 task execution / sink 幂等 key 的端到端验证。
 - **实际变更**：
   - `control-plane/tests/integration/test_delivery.py`：新增重复 result apply 回归测试。
-- **剩余验收**：
-  - Kafka 重复投递同一 task 的端到端测试。
-  - 明确 mock / S3 sink 的 deterministic key 约束。
+- **补充变更**：
+  - `control-plane/tests/integration/test_phase2_bridge.py`：新增重复 source reference Kafka task 端到端测试。
+  - mock sink 以 `dst_path` 作为稳定 object key，重复执行同一 task 时最终 object key 不漂移。
+- **验证**：
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_delivery.py::test_apply_delivery_result_is_stable_for_duplicate_result`
+  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_duplicate_source_reference_kafka_task_keeps_final_state_stable`
 
 ### 3.18 Config profiles
 
@@ -206,12 +216,10 @@ control-plane
 
 ## 四、建议执行顺序
 
-1. 完成 `3.17` duplicate task execution e2e。
-2. 做 `3.11` worker batch / concurrency tuning。
-3. 做 `3.12` benchmark baseline，避免性能讨论停留在推测。
-4. 做 `3.18` config profiles，把当前本地命令整理成生产形态配置表。
-5. 做 `3.19` worker health / readiness。
-6. 评审 RFC 0003 后，再决定是否进入 DLQ topic 实现。
+1. 做 `3.12` benchmark baseline，避免性能讨论停留在推测。
+2. 做 `3.18` config profiles，把当前本地命令整理成生产形态配置表。
+3. 做 `3.19` worker health / readiness。
+4. 评审 RFC 0003 后，再决定是否进入 DLQ topic 实现。
 
 ## 五、验证矩阵
 

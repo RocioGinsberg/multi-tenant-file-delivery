@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/sink"
@@ -14,6 +15,10 @@ type Result struct {
 	Uploaded int
 	Failed   int
 	Items    []message.DeliveryResultItem
+}
+
+type Options struct {
+	MaxItemConcurrency int
 }
 
 // ProcessTask is deliberately narrow: it trusts the control plane's
@@ -28,8 +33,23 @@ func ProcessTaskWithResolver(
 	sinkImpl sink.Sink,
 	resolver source.Resolver,
 ) (Result, error) {
-	result := Result{TaskID: task.TaskID}
+	return ProcessTaskWithResolverOptions(ctx, task, sinkImpl, resolver, Options{MaxItemConcurrency: 1})
+}
 
+func ProcessTaskWithResolverOptions(
+	ctx context.Context,
+	task message.DeliveryTask,
+	sinkImpl sink.Sink,
+	resolver source.Resolver,
+	opts Options,
+) (Result, error) {
+	result := Result{TaskID: task.TaskID}
+	maxConcurrency := opts.MaxItemConcurrency
+	if maxConcurrency <= 0 {
+		maxConcurrency = 1
+	}
+
+	uploadItems := make([]message.DeliveryItem, 0, len(task.Items))
 	for _, item := range task.Items {
 		if item.UploadStatus != "pending" {
 			continue
@@ -37,43 +57,70 @@ func ProcessTaskWithResolver(
 		if item.Severity != "ok" && item.Severity != "warning" {
 			continue
 		}
+		uploadItems = append(uploadItems, item)
+	}
 
-		src, err := resolver.Resolve(ctx, task, item)
-		if err != nil {
+	itemResults := make([]message.DeliveryResultItem, len(uploadItems))
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	for i, item := range uploadItems {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, uploadItem message.DeliveryItem) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			itemResults[index] = processItem(ctx, task, uploadItem, sinkImpl, resolver)
+		}(i, item)
+	}
+	wg.Wait()
+
+	for _, itemResult := range itemResults {
+		if itemResult.Status == "failed" {
 			result.Failed++
-			result.Items = append(result.Items, message.DeliveryResultItem{
-				ItemID: item.ItemID,
-				Status: "failed",
-				Error:  err.Error(),
-			})
-			continue
+		} else if itemResult.Status == "uploaded" {
+			result.Uploaded++
 		}
-		receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{
-			TaskID:  task.TaskID,
-			ItemID:  item.ItemID,
-			DstPath: item.DstPath,
-		})
-		if err != nil {
-			result.Failed++
-			result.Items = append(result.Items, message.DeliveryResultItem{
-				ItemID: item.ItemID,
-				Status: "failed",
-				Error:  err.Error(),
-			})
-			continue
-		}
-		result.Uploaded++
-		result.Items = append(result.Items, message.DeliveryResultItem{
-			ItemID: item.ItemID,
-			Status: "uploaded",
-			Key:    receipt.Key,
-			Size:   receipt.Size,
-			SHA256: receipt.SHA256,
-		})
+		result.Items = append(result.Items, itemResult)
 	}
 
 	if result.Failed > 0 {
 		return result, fmt.Errorf("task %s finished with %d failed items", task.TaskID, result.Failed)
 	}
 	return result, nil
+}
+
+func processItem(
+	ctx context.Context,
+	task message.DeliveryTask,
+	item message.DeliveryItem,
+	sinkImpl sink.Sink,
+	resolver source.Resolver,
+) message.DeliveryResultItem {
+	src, err := resolver.Resolve(ctx, task, item)
+	if err != nil {
+		return message.DeliveryResultItem{
+			ItemID: item.ItemID,
+			Status: "failed",
+			Error:  err.Error(),
+		}
+	}
+	receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{
+		TaskID:  task.TaskID,
+		ItemID:  item.ItemID,
+		DstPath: item.DstPath,
+	})
+	if err != nil {
+		return message.DeliveryResultItem{
+			ItemID: item.ItemID,
+			Status: "failed",
+			Error:  err.Error(),
+		}
+	}
+	return message.DeliveryResultItem{
+		ItemID: item.ItemID,
+		Status: "uploaded",
+		Key:    receipt.Key,
+		Size:   receipt.Size,
+		SHA256: receipt.SHA256,
+	}
 }

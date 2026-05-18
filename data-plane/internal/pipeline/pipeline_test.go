@@ -2,9 +2,12 @@ package pipeline
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/sink"
@@ -137,6 +140,71 @@ func TestProcessTaskWithResolverUploadsWithoutTempDir(t *testing.T) {
 	}
 }
 
+func TestProcessTaskWithResolverOptionsLimitsItemConcurrency(t *testing.T) {
+	task := message.DeliveryTask{
+		TaskID: "task-concurrency",
+		Items: []message.DeliveryItem{
+			{
+				ItemID:       "item-1",
+				SourcePath:   "one.txt",
+				DstPath:      "reports/one.txt",
+				Severity:     "ok",
+				UploadStatus: "pending",
+			},
+			{
+				ItemID:       "item-2",
+				SourcePath:   "two.txt",
+				DstPath:      "reports/two.txt",
+				Severity:     "ok",
+				UploadStatus: "pending",
+			},
+			{
+				ItemID:       "item-3",
+				SourcePath:   "three.txt",
+				DstPath:      "reports/three.txt",
+				Severity:     "ok",
+				UploadStatus: "pending",
+			},
+		},
+	}
+	sinkImpl := &trackingSink{
+		reachedTwo: make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+
+	done := make(chan struct{})
+	var result Result
+	var err error
+	go func() {
+		defer close(done)
+		result, err = ProcessTaskWithResolverOptions(
+			context.Background(),
+			task,
+			sinkImpl,
+			staticResolver{src: source.NewMemorySource("memory://report.txt", []byte("hello"))},
+			Options{MaxItemConcurrency: 2},
+		)
+	}()
+
+	select {
+	case <-sinkImpl.reachedTwo:
+	case <-time.After(time.Second):
+		t.Fatal("expected two concurrent uploads")
+	}
+	close(sinkImpl.release)
+
+	<-done
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Uploaded != 3 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if sinkImpl.maxActive != 2 {
+		t.Fatalf("unexpected max concurrency: got %d want 2", sinkImpl.maxActive)
+	}
+}
+
 type staticResolver struct {
 	src source.Source
 }
@@ -144,3 +212,61 @@ type staticResolver struct {
 func (r staticResolver) Resolve(context.Context, message.DeliveryTask, message.DeliveryItem) (source.Source, error) {
 	return r.src, nil
 }
+
+type trackingSink struct {
+	mu         sync.Mutex
+	active     int
+	maxActive  int
+	reachedTwo chan struct{}
+	release    chan struct{}
+	closed     bool
+}
+
+func (s *trackingSink) init() {
+	if s.reachedTwo == nil {
+		s.reachedTwo = make(chan struct{})
+	}
+	if s.release == nil {
+		s.release = make(chan struct{})
+	}
+}
+
+func (s *trackingSink) Name() string { return "tracking" }
+
+func (s *trackingSink) Upload(_ context.Context, src sink.Source, meta sink.Meta) (sink.Receipt, error) {
+	s.mu.Lock()
+	s.init()
+	s.active++
+	if s.active > s.maxActive {
+		s.maxActive = s.active
+	}
+	if s.active == 2 && !s.closed {
+		close(s.reachedTwo)
+		s.closed = true
+	}
+	release := s.release
+	s.mu.Unlock()
+
+	<-release
+
+	reader, err := src.Open()
+	if err != nil {
+		return sink.Receipt{}, err
+	}
+	_, err = io.ReadAll(reader)
+	closeErr := reader.Close()
+
+	s.mu.Lock()
+	s.active--
+	s.mu.Unlock()
+
+	if err != nil {
+		return sink.Receipt{}, err
+	}
+	if closeErr != nil {
+		return sink.Receipt{}, closeErr
+	}
+	return sink.Receipt{Key: meta.DstPath, Size: 5, SHA256: "sha256"}, nil
+}
+
+func (s *trackingSink) Close() error { return nil }

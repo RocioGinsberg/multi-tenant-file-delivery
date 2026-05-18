@@ -12,10 +12,11 @@ import (
 )
 
 type Config struct {
-	InboxDir   string
-	ResultsDir string
-	SinkName   string
-	Once       bool
+	InboxDir           string
+	ResultsDir         string
+	SinkName           string
+	Once               bool
+	MaxItemConcurrency int
 }
 
 type Worker struct {
@@ -78,7 +79,13 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 		StartedAt: started,
 	}
 
-	pipelineResult, err := pipeline.ProcessTaskWithResolver(ctx, task, w.sink, w.source)
+	pipelineResult, err := pipeline.ProcessTaskWithResolverOptions(
+		ctx,
+		task,
+		w.sink,
+		w.source,
+		pipeline.Options{MaxItemConcurrency: w.cfg.MaxItemConcurrency},
+	)
 	result.Uploaded = pipelineResult.Uploaded
 	result.Failed = pipelineResult.Failed
 	result.Processed = len(task.Items)

@@ -67,6 +67,15 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+Worker item 并发默认是 1，可按单个 task 内 item 数量和 sink 能力调高：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -item-concurrency 4 \
+  -sink mock
+```
+
 Object source reference（从 MinIO / S3 staged archive 读取源文件）：
 ```bash
 go run ./cmd/worker \

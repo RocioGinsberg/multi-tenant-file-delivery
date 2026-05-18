@@ -67,6 +67,14 @@ docker compose up -d mysql kafka minio minio-init
 - `data-plane/` owns Go worker execution, source resolvers, transports, sinks, and upload pipeline behavior.
 - Runtime behavior changes should update code, tests, and the relevant plan or architecture docs when phase status changes.
 
+## Study Notes
+
+- When a task involves non-obvious debugging, cross-component reasoning, failed attempts, or operational lessons, add a short note under `study/`.
+- Prefer updating an existing focused note, for example `study/phase3-sql-kafka-debug.md`, instead of creating many small files.
+- Capture what was confusing, how it was diagnosed, what command or test proved the fix, and the reusable rule for next time.
+- Do not add `study/` files to git. The directory is intentionally ignored and should stay local.
+- Mention in the final response when a study note was updated.
+
 ## Phase 3.x Current Queue
 
 Continue remaining Phase 3.x work in this order unless the user redirects:

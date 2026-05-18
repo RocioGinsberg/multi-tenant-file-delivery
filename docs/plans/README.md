@@ -36,3 +36,11 @@
 ## 跨 Phase 决策记录
 
 如果某个 Phase 启动时改变了未来 Phase 的设计（比如 Phase 1 提前做了 Phase 6.5 的某件事），应在受影响 Phase 的计划文档里加一条 "**Phase X 已提前完成**"。
+
+## 提交要求
+
+完成 Phase 子任务的 commit 应使用 [COMMIT_TEMPLATE](../COMMIT_TEMPLATE.md) 的 body 结构，至少写清：
+
+- `Summary`：本次改动解决什么问题。
+- `Changed`：主要改动文件或模块。
+- `Tests`：实际运行过的验证命令；如果未运行，需要写明原因。

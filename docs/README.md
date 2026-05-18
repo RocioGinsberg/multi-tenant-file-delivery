@@ -11,6 +11,7 @@
 | [ARCHITECTURE](./ARCHITECTURE.md) | 当前实现架构与写路径细节 |
 | [DATA_MODEL](./DATA_MODEL.md) | 当前和目标态数据库模型、约束、迁移关注点 |
 | [TECHNICAL_NOTES](./TECHNICAL_NOTES.md) | 技术亮点、工程解释点、开发自检清单 |
+| [COMMIT_TEMPLATE](./COMMIT_TEMPLATE.md) | 提交说明模板，要求记录改动内容和测试 |
 | [RFC](./RFC/) | 重要技术方案评审，记录问题、方案、取舍、状态 |
 | [ADR](./ADR/) | 已确定的架构决策记录 |
 | [plans](./plans/) | 每个 Phase 的执行计划和验收记录 |

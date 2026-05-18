@@ -39,8 +39,4 @@
 
 ## 提交要求
 
-完成 Phase 子任务的 commit 应使用 [COMMIT_TEMPLATE](../COMMIT_TEMPLATE.md) 的 body 结构，至少写清：
-
-- `Summary`：本次改动解决什么问题。
-- `Changed`：主要改动文件或模块。
-- `Tests`：实际运行过的验证命令；如果未运行，需要写明原因。
+完成 Phase 子任务的 commit 应按根目录 `AGENTS.md` 的项目执行规则组织，并使用 [COMMIT_TEMPLATE](../COMMIT_TEMPLATE.md) 作为提交正文参考。

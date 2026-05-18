@@ -31,6 +31,22 @@ Use `docs/COMMIT_TEMPLATE.md` as the reference format.
 
 For documentation-only changes, `Tests:` may say `Not run; documentation-only change.`
 
+## PR Policy
+
+Pull requests that change behavior, architecture, phase status, or operational workflow must include:
+
+- `Summary`: problem solved and main approach.
+- `Changes`: main files/modules, schema/message/config changes, and phase-plan updates.
+- `Tests`: exact commands run, Docker dependencies, and skipped tests with reasons.
+- `Risks / Rollback`: compatibility concerns, known gaps, or fallback path.
+- `Docs / Plans`: docs, RFCs, ADRs, READMEs, or phase plans updated.
+
+Use `.github/pull_request_template.md` as the reference format.
+
+For Phase work, PRs should mention the Phase task IDs covered, for example `3.11` or `3.17`.
+
+For cross-component work, PRs should name the verified path, for example `control-plane -> Kafka -> data-plane -> result apply`.
+
 ## Verification Commands
 
 Python control-plane:

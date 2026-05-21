@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -44,6 +45,11 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	kafkaBatchSize := flags.Int("kafka-batch-size", 1, "number of Kafka task messages to process per run")
 	startupCheck := flags.Bool("startup-check", true, "check external Kafka/S3 dependencies before processing tasks")
 	startupCheckTimeout := flags.Duration("startup-check-timeout", 3*time.Second, "timeout for startup dependency checks")
+	metricsEnabled := flags.Bool("metrics-enabled", false, "enable Prometheus metrics endpoint (placeholder; no-op in Phase 5.1)")
+	metricsListenAddr := flags.String("metrics-listen-addr", ":8081", "listen address for Prometheus metrics endpoint")
+	tracingEnabled := flags.Bool("tracing-enabled", false, "enable OpenTelemetry tracing (placeholder; no-op in Phase 5.1)")
+	tracingServiceName := flags.String("tracing-service-name", "data-plane-worker", "OpenTelemetry service name")
+	tracingOTLPEndpoint := flags.String("tracing-otlp-endpoint", "http://localhost:4318", "OpenTelemetry OTLP endpoint")
 	sinkName := flags.String("sink", "mock", "sink implementation: mock, s3")
 	s3Endpoint := flags.String("s3-endpoint", "http://localhost:9000", "S3-compatible endpoint for s3 sink")
 	s3Region := flags.String("s3-region", "us-east-1", "S3 region for s3 sink")
@@ -77,6 +83,23 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	if *redisLimiterWindow <= 0 {
 		return fmt.Errorf("redis limiter window must be positive")
 	}
+	if *metricsEnabled {
+		if _, _, err := net.SplitHostPort(*metricsListenAddr); err != nil {
+			return fmt.Errorf("invalid metrics listen addr %q: %w", *metricsListenAddr, err)
+		}
+	}
+	if *tracingEnabled {
+		if *tracingServiceName == "" {
+			return fmt.Errorf("tracing service name must not be empty")
+		}
+		parsedOTLPEndpoint, err := url.Parse(*tracingOTLPEndpoint)
+		if err != nil {
+			return fmt.Errorf("invalid tracing otlp endpoint %q: %w", *tracingOTLPEndpoint, err)
+		}
+		if parsedOTLPEndpoint.Scheme == "" || parsedOTLPEndpoint.Host == "" {
+			return fmt.Errorf("invalid tracing otlp endpoint %q: missing scheme or host", *tracingOTLPEndpoint)
+		}
+	}
 	log.Printf(
 		"redis-limiter-enabled=%t redis-url=%s redis-limiter-key=%s redis-limiter-limit=%d redis-limiter-window=%s",
 		*redisLimiterEnabled,
@@ -84,6 +107,14 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		*redisLimiterKey,
 		*redisLimiterLimit,
 		*redisLimiterWindow,
+	)
+	log.Printf(
+		"observability metrics-enabled=%t metrics-listen-addr=%s tracing-enabled=%t tracing-service-name=%s tracing-otlp-endpoint=%s",
+		*metricsEnabled,
+		*metricsListenAddr,
+		*tracingEnabled,
+		*tracingServiceName,
+		redactURL(*tracingOTLPEndpoint),
 	)
 	checkCtx := ctx
 	var cancelCheck context.CancelFunc
@@ -213,4 +244,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	w := worker.NewWithTransportAndResolver(cfg, sinkImpl, sourceResolver, taskConsumer, resultProducer)
 
 	return w.Run(ctx)
+}
+
+func redactURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	return parsed.Redacted()
 }

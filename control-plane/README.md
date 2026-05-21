@@ -61,6 +61,11 @@ cp .env.example .env
 | `REDIS_IDEMPOTENCY_TTL_SECONDS` | `60` | create/upload guard claim TTL |
 | `REDIS_LEASE_ENABLED` | `false` | 是否启用 Redis lease；当前用于 result apply 临界区 |
 | `REDIS_LEASE_TTL_SECONDS` | `30` | Redis lease claim TTL |
+| `OBSERVABILITY_ENABLED` | `false` | Phase 5 可观测总开关；5.1 仅作为配置基线 |
+| `SERVICE_NAME` | `control-plane` | OTel service name |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTel Collector OTLP endpoint |
+| `METRICS_ENABLED` | `false` | 是否启用 Prometheus metrics endpoint |
+| `METRICS_PATH` | `/metrics` | control-plane metrics path |
 
 ### 3. 起本地依赖（需要 Docker）
 

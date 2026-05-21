@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1-5.7 待实现）
+> **状态**：Current（5.1 已完成；5.2-5.7 待实现）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -56,7 +56,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.1 Observability compose 与配置基线
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - `deploy/docker-compose.yml` 增加 `otel-collector`、`prometheus`、`grafana`。
@@ -69,6 +69,17 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - `cd deploy && docker compose up -d otel-collector prometheus grafana` 可启动。
   - 默认应用测试不要求这些服务存在。
 - **建议执行方**：L1 worker 或主 Agent。
+- **实际执行**：
+  - deploy 配置由 worker（medium）实现，主 Agent 审计。
+  - data-plane CLI placeholder flags 由 worker（medium）实现，主 Agent 审计。
+  - control-plane settings / env / docs 由主 Agent 实现。
+- **实际变更**：
+  - `deploy/docker-compose.yml`：新增 `otel-collector`、`prometheus`、`grafana` 和 `grafana_data`。
+  - `deploy/otel/collector.yml`：新增 OTLP gRPC / HTTP receiver、debug trace exporter、Prometheus metrics exporter。
+  - `deploy/prometheus/prometheus.yml`：新增 Prometheus / OTel Collector / control-plane / data-plane 最小 scrape config。
+  - `deploy/grafana/provisioning` 和 `deploy/grafana/dashboards/phase5-overview.json`：新增 Prometheus datasource 和最小 scrape-status dashboard。
+  - `control-plane/app/core/settings.py`、`.env.example`、`README.md`：新增 observability no-op settings，并修正 folder/internal archive limit env 名称。
+  - `data-plane/cmd/worker`、`data-plane/README.md`：新增 metrics/tracing placeholder flags，默认关闭，只 parse / validate / log。
 - **验证**：
   - `cd deploy && docker compose config`
   - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_settings.py`

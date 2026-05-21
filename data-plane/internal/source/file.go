@@ -12,7 +12,7 @@ type FileSource struct {
 	relPath string
 }
 
-// NewFileSource opens paths produced by the control plane's zip extraction.
+// NewFileSource opens paths produced by the control plane's folder extraction.
 // relPath is the classifier src_path, so it must stay relative to baseDir.
 func NewFileSource(baseDir, relPath string) *FileSource {
 	return &FileSource{baseDir: baseDir, relPath: relPath}

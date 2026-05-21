@@ -128,6 +128,17 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+Phase 5.1 observability flags are placeholders and default disabled. They are parsed, validated when enabled, and logged, but they do not start metrics or tracing yet:
+```bash
+go run ./cmd/worker \
+  -metrics-enabled \
+  -metrics-listen-addr :8081 \
+  -tracing-enabled \
+  -tracing-service-name data-plane-worker \
+  -tracing-otlp-endpoint http://localhost:4318 \
+  -sink mock
+```
+
 Docker Redis limiter smoke：
 ```bash
 RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \

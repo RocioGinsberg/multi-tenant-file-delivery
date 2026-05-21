@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     worker_max_file_concurrent: int = 5
     worker_auto_adjust_concurrent: bool = True
 
-    # ── Task working directory (zip extraction; used by 1.5 / 1.8) ──
+    # ── Task working directory (folder extraction and internal archive staging) ──
     task_dir_base: str = "/tmp/auto_upload_tasks"
 
     # ── Delivery backend (Phase 2 bridge) ──
@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     redis_idempotency_ttl_seconds: int = 60
     redis_lease_enabled: bool = False
     redis_lease_ttl_seconds: int = 30
+
+    # ── Observability (Phase 5) ──
+    observability_enabled: bool = False
+    service_name: str = "control-plane"
+    otel_exporter_otlp_endpoint: str = "http://localhost:4318"
+    metrics_enabled: bool = False
+    metrics_path: str = "/metrics"
 
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"

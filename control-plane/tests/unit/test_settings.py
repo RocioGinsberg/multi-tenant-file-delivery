@@ -45,6 +45,11 @@ class TestDefaultValues:
             "REDIS_IDEMPOTENCY_TTL_SECONDS",
             "REDIS_LEASE_ENABLED",
             "REDIS_LEASE_TTL_SECONDS",
+            "OBSERVABILITY_ENABLED",
+            "SERVICE_NAME",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "METRICS_ENABLED",
+            "METRICS_PATH",
             "CLASSIFICATION_PROFILE_PATH",
             "MAX_INTERNAL_ARCHIVE_BYTES",
             "MAX_FOLDER_PAYLOAD_BYTES",
@@ -79,6 +84,11 @@ class TestDefaultValues:
         assert s.redis_idempotency_ttl_seconds == 60
         assert s.redis_lease_enabled is False
         assert s.redis_lease_ttl_seconds == 30
+        assert s.observability_enabled is False
+        assert s.service_name == "control-plane"
+        assert s.otel_exporter_otlp_endpoint == "http://localhost:4318"
+        assert s.metrics_enabled is False
+        assert s.metrics_path == "/metrics"
 
 
 class TestDotEnvOverride:
@@ -98,6 +108,11 @@ class TestDotEnvOverride:
             "REDIS_IDEMPOTENCY_TTL_SECONDS",
             "REDIS_LEASE_ENABLED",
             "REDIS_LEASE_TTL_SECONDS",
+            "OBSERVABILITY_ENABLED",
+            "SERVICE_NAME",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "METRICS_ENABLED",
+            "METRICS_PATH",
             "CLASSIFICATION_PROFILE_PATH",
             "CORS_ORIGINS",
         ):
@@ -116,6 +131,11 @@ class TestDotEnvOverride:
             "REDIS_IDEMPOTENCY_TTL_SECONDS=30\n"
             "REDIS_LEASE_ENABLED=true\n"
             "REDIS_LEASE_TTL_SECONDS=45\n"
+            "OBSERVABILITY_ENABLED=true\n"
+            "SERVICE_NAME=control-plane-test\n"
+            "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318\n"
+            "METRICS_ENABLED=true\n"
+            "METRICS_PATH=/internal/metrics\n"
             "CLASSIFICATION_PROFILE_PATH=../profiles/custom/profile.json\n"
             "CORS_ORIGINS=http://example.com,http://app.example.com\n"
         )
@@ -134,6 +154,11 @@ class TestDotEnvOverride:
         assert s.redis_idempotency_ttl_seconds == 30
         assert s.redis_lease_enabled is True
         assert s.redis_lease_ttl_seconds == 45
+        assert s.observability_enabled is True
+        assert s.service_name == "control-plane-test"
+        assert s.otel_exporter_otlp_endpoint == "http://otel:4318"
+        assert s.metrics_enabled is True
+        assert s.metrics_path == "/internal/metrics"
         assert s.classification_profile_path == "../profiles/custom/profile.json"
         assert s.cors_origins == "http://example.com,http://app.example.com"
 

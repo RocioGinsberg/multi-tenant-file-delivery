@@ -110,6 +110,41 @@ func TestRunAcceptsRedisLimiterFlags(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsDefaultObservabilityFlags(t *testing.T) {
+	dir := t.TempDir()
+	inboxDir := filepath.Join(dir, "delivery.tasks.v1")
+	resultsDir := filepath.Join(dir, "delivery.results.v1")
+
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-inbox", inboxDir,
+		"-results", resultsDir,
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("run worker: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
+func TestRunAcceptsEnabledObservabilityPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	inboxDir := filepath.Join(dir, "delivery.tasks.v1")
+	resultsDir := filepath.Join(dir, "delivery.results.v1")
+
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-inbox", inboxDir,
+		"-results", resultsDir,
+		"-metrics-enabled",
+		"-metrics-listen-addr", "127.0.0.1:8081",
+		"-tracing-enabled",
+		"-tracing-service-name", "data-plane-test",
+		"-tracing-otlp-endpoint", "http://otel-collector:4318",
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("run worker: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
 func TestRunRejectsInvalidRedisURL(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run(context.Background(), []string{"-redis-url", "localhost:6379"}, &stderr)
@@ -144,6 +179,42 @@ func TestRunRejectsInvalidRedisLimiterConfig(t *testing.T) {
 		t.Fatal("expected window error")
 	}
 	if !strings.Contains(err.Error(), "redis limiter window") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunRejectsInvalidObservabilityConfigWhenEnabled(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-metrics-enabled",
+		"-metrics-listen-addr", "localhost",
+	}, &stderr)
+	if err == nil {
+		t.Fatal("expected metrics listen addr error")
+	}
+	if !strings.Contains(err.Error(), "invalid metrics listen addr") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = run(context.Background(), []string{
+		"-tracing-enabled",
+		"-tracing-service-name", "",
+	}, &stderr)
+	if err == nil {
+		t.Fatal("expected tracing service name error")
+	}
+	if !strings.Contains(err.Error(), "tracing service name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = run(context.Background(), []string{
+		"-tracing-enabled",
+		"-tracing-otlp-endpoint", "localhost:4318",
+	}, &stderr)
+	if err == nil {
+		t.Fatal("expected tracing otlp endpoint error")
+	}
+	if !strings.Contains(err.Error(), "invalid tracing otlp endpoint") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

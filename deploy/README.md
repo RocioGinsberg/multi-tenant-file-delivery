@@ -30,6 +30,12 @@ Phase 4 Redis 能力层验证：
 docker compose up -d redis
 ```
 
+Phase 5 本地可观测组件：
+
+```bash
+docker compose up -d otel-collector prometheus grafana
+```
+
 全栈本地依赖：
 
 ```bash
@@ -57,6 +63,27 @@ RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
 | API endpoint | http://localhost:9000 | minioadmin / minioadmin |
 | Kafka broker | localhost:9092 | PLAINTEXT 本地开发 |
 | Redis | localhost:6379 | 无密码，本地开发 |
+| OTel Collector OTLP gRPC | localhost:4317 | 无认证，本地开发 |
+| OTel Collector OTLP HTTP | http://localhost:4318 | 无认证，本地开发 |
+| OTel Collector Prometheus exporter | http://localhost:9464/metrics | 无认证，本地开发 |
+| Prometheus | http://localhost:9090 | 无认证，本地开发 |
+| Grafana | http://localhost:3000 | admin / admin |
+
+### 可观测配置说明
+
+OTel Collector 接收 OTLP gRPC / HTTP，trace 默认输出到 collector 日志，OTLP metrics 暴露到 `:9464/metrics` 供 Prometheus 抓取。
+
+Prometheus 默认抓取：
+
+| Job | Target |
+|---|---|
+| `otel-collector` | `otel-collector:9464` |
+| `control-plane` | `host.docker.internal:8000/metrics` |
+| `data-plane` | `host.docker.internal:8081/metrics` |
+
+`host.docker.internal` 由 compose 映射到 Docker host，适合 control-plane / data-plane 作为本机进程运行、Prometheus 在容器内抓取的开发场景。Phase 5 后续 app-side 工作会补齐 `/metrics` 和 OTLP 配置开关；在此之前对应 Prometheus target 可能显示为 down。
+
+Grafana 会自动配置 Prometheus datasource，并加载 `Phase 5 Observability Overview` 最小 dashboard。
 
 ### 停止
 
@@ -82,8 +109,8 @@ S3_BUCKET=auto-upload-dev
 
 ```
 deploy/
-├── docker-compose.yml        # MySQL / Kafka / MinIO / Redis 本地开发
-├── grafana/                  # Phase 5 填充：Grafana dashboard
-├── otel/                     # Phase 5 填充：OpenTelemetry Collector 配置
-└── prometheus/               # Phase 5 填充：Prometheus 抓取配置
+├── docker-compose.yml        # MySQL / Kafka / MinIO / Redis / observability 本地开发
+├── grafana/                  # Grafana datasource / dashboard provisioning
+├── otel/                     # OpenTelemetry Collector 配置
+└── prometheus/               # Prometheus 抓取配置
 ```

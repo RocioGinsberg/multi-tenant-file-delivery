@@ -209,7 +209,7 @@ async def test_create_task_folder_payload_too_large(async_client):
         patch("app.api.tasks._task_repo") as mock_repo,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 5
+        mock_s.max_internal_archive_bytes = 5
         mock_s.task_dir_base = "/tmp/test_tasks"
         mock_settings_fn.return_value = mock_s
         mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
@@ -529,8 +529,8 @@ async def test_create_task_new(async_client, tmp_path):
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -582,8 +582,8 @@ async def test_create_task_accepts_folder_files(async_client, tmp_path):
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -635,8 +635,8 @@ async def test_create_task_keeps_user_original_zip_separate(async_client, tmp_pa
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -680,8 +680,8 @@ async def test_create_task_rejects_folder_file_count_limit(async_client):
         patch("app.api.tasks._task_repo") as mock_repo,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 1
         mock_s.task_dir_base = "/tmp/test_tasks"
         mock_settings_fn.return_value = mock_s

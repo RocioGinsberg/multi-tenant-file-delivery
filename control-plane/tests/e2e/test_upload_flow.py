@@ -87,8 +87,8 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
     settings_module.get_settings.cache_clear()
 
     mock_settings = MagicMock()
-    mock_settings.max_zip_bytes = 524_288_000
-    mock_settings.max_unzipped_bytes = 1_073_741_824
+    mock_settings.max_internal_archive_bytes = 524_288_000
+    mock_settings.max_folder_payload_bytes = 1_073_741_824
     mock_settings.max_file_count = 5000
     mock_settings.task_dir_base = str(tmp_path)
     mock_settings.classification_profile_path = "/fake/profile.json"
@@ -264,13 +264,12 @@ async def test_e2e_folder_upload_flow(async_client):
 
 @pytest.mark.e2e
 async def test_e2e_folder_payload_too_large(async_client, monkeypatch):
-    """Uploading a folder payload larger than max_unzipped_bytes returns 413."""
-    # Override max_zip_bytes to a tiny value for this test
+    """Uploading a folder payload larger than max_folder_payload_bytes returns 413."""
     monkeypatch.setattr(
         "app.api.tasks.get_settings",
         lambda: MagicMock(
-            max_zip_bytes=524_288_000,
-            max_unzipped_bytes=5,
+            max_internal_archive_bytes=524_288_000,
+            max_folder_payload_bytes=5,
             max_file_count=5000,
             task_dir_base="/tmp",
         ),

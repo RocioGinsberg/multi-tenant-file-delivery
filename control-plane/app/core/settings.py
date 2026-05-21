@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"
 
-    # ── Zip receive limits (used by 1.5 / 1.9) ──
-    max_zip_bytes: int = 524_288_000  # 500 MB
-    max_unzipped_bytes: int = 1_073_741_824  # 1 GB
+    # ── Folder upload / internal archive limits ──
+    max_internal_archive_bytes: int = 524_288_000  # 500 MB
+    max_folder_payload_bytes: int = 1_073_741_824  # 1 GB
     max_file_count: int = 5000
 
     # ── CORS (used by 1.9 / main.py) ──

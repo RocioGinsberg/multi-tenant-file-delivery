@@ -46,8 +46,8 @@ class TestDefaultValues:
             "REDIS_LEASE_ENABLED",
             "REDIS_LEASE_TTL_SECONDS",
             "CLASSIFICATION_PROFILE_PATH",
-            "MAX_ZIP_BYTES",
-            "MAX_UNZIPPED_BYTES",
+            "MAX_INTERNAL_ARCHIVE_BYTES",
+            "MAX_FOLDER_PAYLOAD_BYTES",
             "MAX_FILE_COUNT",
             "CORS_ORIGINS",
         ):
@@ -67,8 +67,8 @@ class TestDefaultValues:
         assert s.worker_auto_adjust_concurrent is True
         assert s.task_dir_base == "/tmp/auto_upload_tasks"
         assert s.classification_profile_path == "../profiles/hq_subsidiary_reports_v1/profile.json"
-        assert s.max_zip_bytes == 524_288_000
-        assert s.max_unzipped_bytes == 1_073_741_824
+        assert s.max_internal_archive_bytes == 524_288_000
+        assert s.max_folder_payload_bytes == 1_073_741_824
         assert s.max_file_count == 5000
         assert s.cors_origins == "*"
         assert s.redis_url == "redis://localhost:6379/0"
@@ -155,6 +155,20 @@ class TestEnvVarPriority:
 
         assert s.env == "from_env_var"
         assert s.s3_bucket_name == "envvar-bucket"
+
+    def test_folder_archive_limit_env_names(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MAX_INTERNAL_ARCHIVE_BYTES", "123")
+        monkeypatch.setenv("MAX_FOLDER_PAYLOAD_BYTES", "456")
+        monkeypatch.setenv("MAX_ZIP_BYTES", "789")
+        monkeypatch.setenv("MAX_UNZIPPED_BYTES", "999")
+
+        s = Settings()
+
+        assert s.max_internal_archive_bytes == 123
+        assert s.max_folder_payload_bytes == 456
+        assert not hasattr(s, "max_zip_bytes")
+        assert not hasattr(s, "max_unzipped_bytes")
 
 
 class TestGetSettingsSingleton:

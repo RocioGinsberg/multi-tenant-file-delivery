@@ -69,7 +69,7 @@ UploadedFiles = Annotated[list[UploadFile] | None, File()]
 @dataclass(frozen=True, slots=True)
 class PreparedArchive:
     label: str
-    zip_bytes: bytes
+    archive_bytes: bytes
 
 
 def get_bus() -> ProgressBus:
@@ -219,11 +219,13 @@ def _setting_int(settings, name: str, default: int) -> int:
     return value if isinstance(value, int) else default
 
 
-def _validate_archive_limits(zip_bytes: bytes, settings) -> None:
+def _validate_internal_archive_limits(archive_bytes: bytes, settings) -> None:
     max_file_count = _setting_int(settings, "max_file_count", 5000)
-    max_unzipped_bytes = _setting_int(settings, "max_unzipped_bytes", 1_073_741_824)
+    max_folder_payload_bytes = _setting_int(
+        settings, "max_folder_payload_bytes", 1_073_741_824
+    )
     try:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
             total_size = 0
             file_count = 0
             for entry in zf.infolist():
@@ -237,18 +239,21 @@ def _validate_archive_limits(zip_bytes: bytes, settings) -> None:
                     _raise_payload_too_large(
                         f"Too many files: {file_count} exceeds {max_file_count}"
                     )
-                if total_size > max_unzipped_bytes:
+                if total_size > max_folder_payload_bytes:
                     _raise_payload_too_large(
-                        f"Unzipped payload too large: {total_size} bytes exceeds "
-                        f"{max_unzipped_bytes}"
+                        f"Internal archive payload too large: {total_size} bytes "
+                        f"exceeds {max_folder_payload_bytes}"
                     )
     except zipfile.BadZipFile as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid zip file: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid internal archive: {exc}",
+        ) from exc
 
 
-def _extract_archive(zip_bytes: bytes, extract_dir: str, settings) -> None:
-    _validate_archive_limits(zip_bytes, settings)
-    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+def _extract_internal_archive(archive_bytes: bytes, extract_dir: str, settings) -> None:
+    _validate_internal_archive_limits(archive_bytes, settings)
+    with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
         for entry in zf.infolist():
             if entry.filename.endswith("/"):
                 continue
@@ -284,8 +289,12 @@ async def _prepare_folder_upload(
         raise HTTPException(status_code=400, detail="Folder upload contains no files")
 
     max_file_count = _setting_int(settings, "max_file_count", 5000)
-    max_unzipped_bytes = _setting_int(settings, "max_unzipped_bytes", 1_073_741_824)
-    max_zip_bytes = _setting_int(settings, "max_zip_bytes", 524_288_000)
+    max_folder_payload_bytes = _setting_int(
+        settings, "max_folder_payload_bytes", 1_073_741_824
+    )
+    max_internal_archive_bytes = _setting_int(
+        settings, "max_internal_archive_bytes", 524_288_000
+    )
     total_size = 0
     file_count = 0
     safe_entries: list[tuple[str, bytes]] = []
@@ -302,10 +311,10 @@ async def _prepare_folder_upload(
             _raise_payload_too_large(
                 f"Too many files: {file_count} exceeds {max_file_count}"
             )
-        if total_size > max_unzipped_bytes:
+        if total_size > max_folder_payload_bytes:
             _raise_payload_too_large(
                 f"Folder payload too large: {total_size} bytes exceeds "
-                f"{max_unzipped_bytes}"
+                f"{max_folder_payload_bytes}"
             )
         safe_entries.append((archive_name, data))
         raw_names.append(archive_name)
@@ -314,14 +323,14 @@ async def _prepare_folder_upload(
     with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for archive_name, data in safe_entries:
             zf.writestr(archive_name, data)
-    zip_bytes = archive_buffer.getvalue()
-    if len(zip_bytes) > max_zip_bytes:
+    archive_bytes = archive_buffer.getvalue()
+    if len(archive_bytes) > max_internal_archive_bytes:
         _raise_payload_too_large(
-            f"Generated archive too large: {len(zip_bytes)} bytes exceeds "
-            f"{max_zip_bytes}"
+            f"Generated internal archive too large: {len(archive_bytes)} bytes exceeds "
+            f"{max_internal_archive_bytes}"
         )
     label = submission_label or _folder_label(raw_names)
-    return PreparedArchive(label=label, zip_bytes=zip_bytes)
+    return PreparedArchive(label=label, archive_bytes=archive_bytes)
 
 
 @router.post("/tasks", status_code=201)
@@ -364,9 +373,9 @@ async def create_task(
         original_zip_path = task_archive_path(extract_dir)
         os.makedirs(os.path.dirname(original_zip_path), exist_ok=True)
         with open(original_zip_path, "wb") as f:
-            f.write(prepared.zip_bytes)
+            f.write(prepared.archive_bytes)
 
-        _extract_archive(prepared.zip_bytes, extract_dir, settings)
+        _extract_internal_archive(prepared.archive_bytes, extract_dir, settings)
 
         task_obj = await _task_repo.get(session, task_id)
         task_obj.temp_dir = extract_dir

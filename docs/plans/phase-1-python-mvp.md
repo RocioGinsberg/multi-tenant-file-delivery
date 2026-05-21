@@ -49,7 +49,7 @@
 - **依赖**：1.1
 - **范围**：
   - `control-plane/app/core/settings.py`：Pydantic Settings 读 .env
-  - 字段：`s3_endpoint_url`, `s3_bucket`, `s3_access_key`, `s3_secret_key`, `s3_region`, `db_url`, `worker_max_target_concurrent`, `worker_max_file_concurrent`, `task_dir_base`, `classification_profile_path`, `max_zip_bytes`, `max_unzipped_bytes`, `max_file_count`, `cors_origins`, `app_env`
+  - 字段：`s3_endpoint_url`, `s3_bucket`, `s3_access_key`, `s3_secret_key`, `s3_region`, `db_url`, `worker_max_target_concurrent`, `worker_max_file_concurrent`, `task_dir_base`, `classification_profile_path`, `max_internal_archive_bytes`, `max_folder_payload_bytes`, `max_file_count`, `cors_origins`, `app_env`
   - `from functools import lru_cache; @lru_cache def get_settings()` 模式
 - **验收**：`pytest tests/test_settings.py` 验证默认值 + .env 覆盖
 - **commit message 草案**：`phase1(1.2): pydantic settings with .env support`

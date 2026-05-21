@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     redis_healthcheck_enabled: bool = False
     redis_idempotency_enabled: bool = False
     redis_idempotency_ttl_seconds: int = 60
+    redis_lease_enabled: bool = False
+    redis_lease_ttl_seconds: int = 30
 
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"

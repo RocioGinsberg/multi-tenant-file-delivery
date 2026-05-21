@@ -1,6 +1,6 @@
 # Phase 4 — Redis 能力层
 
-> **状态**：Current（4.1-4.4 已完成；4.5-4.7 待实现）
+> **状态**：Current（4.1-4.5 已完成；4.6-4.7 待实现）
 > **目标**：把当前单进程内存态能力迁移到 Redis-backed 能力层，为多实例 control-plane、worker 集群 backpressure、跨进程进度和幂等控制打基础。
 > **完成定义**：本地 compose 可启动 Redis；control-plane 可用 Redis pub/sub 广播任务进度；任务提交和上传触发有 Redis-backed 幂等 / lease 保护；worker 发布前有可配置限流入口；Redis 不可用时有明确降级或 fail-fast 行为。
 > **前序计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
@@ -152,7 +152,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.5 Redis lease helper
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 实现 owner-token lease：acquire / refresh / release，release 使用 token 校验避免误删他人锁。
@@ -161,8 +161,15 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 - **验收**：
   - 单测覆盖 acquire success、already-held、expired reacquire、token mismatch release。
   - 集成测试证明两个 worker/consumer 竞争同一 lease 时只有一个进入临界区。
+- **实际变更**：
+  - `control-plane/app/core/settings.py` / `.env.example`：新增 `REDIS_LEASE_ENABLED` 和 `REDIS_LEASE_TTL_SECONDS`，默认关闭。
+  - `control-plane/app/services/redis_lease.py`：新增 disabled / Redis lease client，Redis 使用 owner token、`SET NX EX` acquire、Lua token 校验 refresh / release。
+  - `control-plane/app/services/delivery.py`：`consume_delivery_results` 在 result apply 前获取 `delivery_result_apply:{task_id}` lease；未拿到 lease 时跳过 apply 和 ack，保留消息后续重试。
+  - `control-plane/tests/unit/test_redis_lease.py`、`tests/integration/test_delivery.py`、`tests/integration/test_redis_lease_docker.py`：覆盖 disabled、acquire/refresh/release、already-held、result apply skip/release 和 Docker 跨实例竞争。
+  - `control-plane/README.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`：同步 Redis lease 状态和 smoke 命令。
 - **验证**：
   - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_redis_lease.py`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_delivery.py`
   - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease_docker.py`
 
 ### 4.6 Redis limiter

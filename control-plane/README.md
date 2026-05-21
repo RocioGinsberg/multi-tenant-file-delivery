@@ -59,6 +59,8 @@ cp .env.example .env
 | `REDIS_HEALTHCHECK_ENABLED` | `false` | 是否启用 Redis opt-in health/readiness 检查 |
 | `REDIS_IDEMPOTENCY_ENABLED` | `false` | 是否启用 Redis 短 TTL idempotency guard |
 | `REDIS_IDEMPOTENCY_TTL_SECONDS` | `60` | create/upload guard claim TTL |
+| `REDIS_LEASE_ENABLED` | `false` | 是否启用 Redis lease；当前用于 result apply 临界区 |
+| `REDIS_LEASE_TTL_SECONDS` | `30` | Redis lease claim TTL |
 
 ### 3. 起本地依赖（需要 Docker）
 
@@ -183,6 +185,9 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_re
 
 # Redis idempotency guard smoke（证明两个 control-plane 实例共享短 TTL claim）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency_redis_docker.py
+
+# Redis lease smoke（证明两个 consumer 实例竞争同一 lease 时只有一个成功）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease_docker.py
 
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \

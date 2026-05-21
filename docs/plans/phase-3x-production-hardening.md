@@ -233,12 +233,30 @@ control-plane
 - **验证**：
   - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...`
 
+### 3.20 Kafka task DLQ
+
+- **状态**：`[x]`
+- **L 等级**：L1
+- **范围**：
+  - 先覆盖 task message 级不可恢复错误，不改变 item 级失败语义。
+  - invalid JSON task 写入 `delivery.tasks.dlq.v1`，写入成功后 commit 原 task offset。
+  - DLQ payload 保留原始 message、error_class、error_message、worker_id、failed_at 和原 topic/key。
+- **验收**：
+  - Go 单测覆盖 invalid JSON task 的 DLQ write + commit 顺序。
+  - README / RFC 记录 DLQ topic 和适用边界。
+- **实际变更**：
+  - `data-plane/internal/transport`：Kafka transport 新增 DLQ writer 和 `DLQMessage` payload。
+  - `data-plane/cmd/worker`：新增 `-kafka-dlq-topic` 参数，默认 `delivery.tasks.dlq.v1`。
+  - `docs/RFC/0003-kafka-retry-dlq-idempotency.md`：RFC 标记 Accepted，补充最小 DLQ 实现语义。
+- **验证**：
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...`
+
 ## 四、建议执行顺序
 
 1. 做 `3.12` benchmark baseline，避免性能讨论停留在推测。
 2. 做 `3.18` config profiles，把当前本地命令整理成生产形态配置表。
 3. 做 `3.19` worker health / readiness。
-4. 评审 RFC 0003 后，再决定是否进入 DLQ topic 实现。
+4. 评审 RFC 0003 后，再决定是否进入 DLQ topic 实现。已完成 `3.20` 最小 Kafka task DLQ。
 
 ## 五、验证矩阵
 

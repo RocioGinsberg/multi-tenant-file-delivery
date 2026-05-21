@@ -101,6 +101,7 @@ go run ./cmd/worker \
   -kafka-brokers localhost:9092 \
   -kafka-task-topic delivery.tasks.v1 \
   -kafka-result-topic delivery.results.v1 \
+  -kafka-dlq-topic delivery.tasks.dlq.v1 \
   -kafka-group-id data-plane-worker \
   -source-mode object \
   -sink s3 \
@@ -120,6 +121,11 @@ worker 默认会在处理任务前检查外部依赖：
 - `-sink s3`：对 `-s3-bucket` 执行 S3 `HeadBucket`。
 
 本地离线调试可临时加 `-startup-check=false` 跳过这些检查。
+
+Kafka DLQ：
+- 默认 topic 为 `delivery.tasks.dlq.v1`，可用 `-kafka-dlq-topic` 覆盖。
+- 仅 message 级不可恢复错误进入 DLQ，例如 task payload 不是合法 JSON。
+- DLQ 写入成功后才 commit 原 task offset；item 级 source/sink 失败仍写 normal result topic。
 
 本地 Kafka / MinIO：
 ```bash

@@ -108,6 +108,53 @@ func TestKafkaTransportProducesResult(t *testing.T) {
 	}
 }
 
+func TestKafkaTransportSendsInvalidTaskToDLQAndCommits(t *testing.T) {
+	reader := &fakeKafkaReader{fetched: []kafka.Message{{
+		Topic: "delivery.tasks.v1",
+		Key:   []byte("bad-task"),
+		Value: []byte("{not-json"),
+	}}}
+	writer := &fakeKafkaWriter{}
+	dlqWriter := &fakeKafkaWriter{}
+	transport := newKafkaTransportWithDLQ(
+		reader,
+		writer,
+		dlqWriter,
+		1,
+		"delivery.tasks.v1",
+		"delivery.tasks.dlq.v1",
+		"worker-test",
+	)
+
+	tasks, err := transport.Consume(context.Background())
+	if err != nil {
+		t.Fatalf("consume task: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("unexpected tasks: %+v", tasks)
+	}
+	if len(reader.committed) != 1 || string(reader.committed[0].Key) != "bad-task" {
+		t.Fatalf("invalid message should be committed after DLQ write: %+v", reader.committed)
+	}
+	if len(dlqWriter.written) != 1 || string(dlqWriter.written[0].Key) != "bad-task" {
+		t.Fatalf("unexpected dlq writes: %+v", dlqWriter.written)
+	}
+
+	var dlq DLQMessage
+	if err := json.Unmarshal(dlqWriter.written[0].Value, &dlq); err != nil {
+		t.Fatal(err)
+	}
+	if dlq.Topic != "delivery.tasks.dlq.v1" || dlq.ErrorClass != "invalid_message" || dlq.WorkerID != "worker-test" {
+		t.Fatalf("unexpected dlq payload: %+v", dlq)
+	}
+	if dlq.TaskTopic != "delivery.tasks.v1" || dlq.TaskKey != "bad-task" || dlq.RawMessage != "{not-json" {
+		t.Fatalf("unexpected dlq source fields: %+v", dlq)
+	}
+	if dlq.ErrorMessage == "" || dlq.FailedAt == "" {
+		t.Fatalf("expected error metadata: %+v", dlq)
+	}
+}
+
 func TestParseBrokerList(t *testing.T) {
 	brokers := ParseBrokerList("localhost:9092, kafka:9092, ")
 	if len(brokers) != 2 || brokers[0] != "localhost:9092" || brokers[1] != "kafka:9092" {

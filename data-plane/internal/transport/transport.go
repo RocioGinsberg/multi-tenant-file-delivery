@@ -25,3 +25,14 @@ type TaskConsumer interface {
 type ResultProducer interface {
 	Produce(ctx context.Context, result message.DeliveryResult) error
 }
+
+type DLQMessage struct {
+	Topic        string `json:"topic"`
+	ErrorClass   string `json:"error_class"`
+	ErrorMessage string `json:"error_message"`
+	WorkerID     string `json:"worker_id"`
+	FailedAt     string `json:"failed_at"`
+	TaskTopic    string `json:"task_topic"`
+	TaskKey      string `json:"task_key,omitempty"`
+	RawMessage   string `json:"raw_message"`
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	kafka "github.com/segmentio/kafka-go"
 
@@ -16,8 +17,10 @@ type KafkaConfig struct {
 	Brokers     []string
 	TaskTopic   string
 	ResultTopic string
+	DLQTopic    string
 	GroupID     string
 	BatchSize   int
+	WorkerID    string
 }
 
 type kafkaReader interface {
@@ -34,7 +37,11 @@ type kafkaWriter interface {
 type KafkaTransport struct {
 	reader    kafkaReader
 	writer    kafkaWriter
+	dlqWriter kafkaWriter
 	batchSize int
+	taskTopic string
+	dlqTopic  string
+	workerID  string
 }
 
 func NewKafkaTransport(cfg KafkaConfig) (*KafkaTransport, error) {
@@ -47,11 +54,17 @@ func NewKafkaTransport(cfg KafkaConfig) (*KafkaTransport, error) {
 	if cfg.ResultTopic == "" {
 		cfg.ResultTopic = "delivery.results.v1"
 	}
+	if cfg.DLQTopic == "" {
+		cfg.DLQTopic = "delivery.tasks.dlq.v1"
+	}
 	if cfg.GroupID == "" {
 		cfg.GroupID = "data-plane-worker"
 	}
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 1
+	}
+	if cfg.WorkerID == "" {
+		cfg.WorkerID = cfg.GroupID
 	}
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
@@ -64,19 +77,44 @@ func NewKafkaTransport(cfg KafkaConfig) (*KafkaTransport, error) {
 		Topic:    cfg.ResultTopic,
 		Balancer: &kafka.Hash{},
 	}
-	return newKafkaTransport(reader, writer, cfg.BatchSize), nil
+	dlqWriter := &kafka.Writer{
+		Addr:     kafka.TCP(cfg.Brokers...),
+		Topic:    cfg.DLQTopic,
+		Balancer: &kafka.Hash{},
+	}
+	return newKafkaTransportWithDLQ(reader, writer, dlqWriter, cfg.BatchSize, cfg.TaskTopic, cfg.DLQTopic, cfg.WorkerID), nil
 }
 
 func newKafkaTransport(reader kafkaReader, writer kafkaWriter, batchSize int) *KafkaTransport {
+	return newKafkaTransportWithDLQ(reader, writer, nil, batchSize, "delivery.tasks.v1", "delivery.tasks.dlq.v1", "data-plane-worker")
+}
+
+func newKafkaTransportWithDLQ(
+	reader kafkaReader,
+	writer kafkaWriter,
+	dlqWriter kafkaWriter,
+	batchSize int,
+	taskTopic string,
+	dlqTopic string,
+	workerID string,
+) *KafkaTransport {
 	if batchSize <= 0 {
 		batchSize = 1
 	}
-	return &KafkaTransport{reader: reader, writer: writer, batchSize: batchSize}
+	return &KafkaTransport{
+		reader:    reader,
+		writer:    writer,
+		dlqWriter: dlqWriter,
+		batchSize: batchSize,
+		taskTopic: taskTopic,
+		dlqTopic:  dlqTopic,
+		workerID:  workerID,
+	}
 }
 
 func (t *KafkaTransport) Consume(ctx context.Context) ([]TaskMessage, error) {
 	tasks := make([]TaskMessage, 0, t.batchSize)
-	for len(tasks) < t.batchSize {
+	for fetched := 0; fetched < t.batchSize; fetched++ {
 		kafkaMessage, err := t.reader.FetchMessage(ctx)
 		if err != nil {
 			return nil, err
@@ -84,7 +122,13 @@ func (t *KafkaTransport) Consume(ctx context.Context) ([]TaskMessage, error) {
 
 		var task message.DeliveryTask
 		if err := json.Unmarshal(kafkaMessage.Value, &task); err != nil {
-			return nil, fmt.Errorf("decode kafka task message: %w", err)
+			if dlqErr := t.produceDLQ(ctx, kafkaMessage, "invalid_message", err); dlqErr != nil {
+				return nil, dlqErr
+			}
+			if err := t.reader.CommitMessages(ctx, kafkaMessage); err != nil {
+				return nil, fmt.Errorf("commit dlq task message: %w", err)
+			}
+			continue
 		}
 
 		msg := kafkaMessage
@@ -112,10 +156,43 @@ func (t *KafkaTransport) Produce(ctx context.Context, result message.DeliveryRes
 func (t *KafkaTransport) Close() error {
 	readerErr := t.reader.Close()
 	writerErr := t.writer.Close()
+	var dlqErr error
+	if t.dlqWriter != nil {
+		dlqErr = t.dlqWriter.Close()
+	}
 	if readerErr != nil {
 		return readerErr
 	}
-	return writerErr
+	if writerErr != nil {
+		return writerErr
+	}
+	return dlqErr
+}
+
+func (t *KafkaTransport) produceDLQ(ctx context.Context, msg kafka.Message, errorClass string, cause error) error {
+	if t.dlqWriter == nil {
+		return fmt.Errorf("decode kafka task message: %w", cause)
+	}
+	payload, err := json.Marshal(DLQMessage{
+		Topic:        t.dlqTopic,
+		ErrorClass:   errorClass,
+		ErrorMessage: cause.Error(),
+		WorkerID:     t.workerID,
+		FailedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+		TaskTopic:    t.taskTopic,
+		TaskKey:      string(msg.Key),
+		RawMessage:   string(msg.Value),
+	})
+	if err != nil {
+		return err
+	}
+	if err := t.dlqWriter.WriteMessages(ctx, kafka.Message{
+		Key:   msg.Key,
+		Value: payload,
+	}); err != nil {
+		return fmt.Errorf("write kafka dlq message: %w", err)
+	}
+	return nil
 }
 
 func CheckKafkaConnectivity(ctx context.Context, brokers []string) error {

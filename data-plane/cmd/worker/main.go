@@ -32,6 +32,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	kafkaBrokers := flags.String("kafka-brokers", "localhost:9092", "comma-separated Kafka broker addresses")
 	kafkaTaskTopic := flags.String("kafka-task-topic", "delivery.tasks.v1", "Kafka topic for delivery tasks")
 	kafkaResultTopic := flags.String("kafka-result-topic", "delivery.results.v1", "Kafka topic for delivery results")
+	kafkaDLQTopic := flags.String("kafka-dlq-topic", "delivery.tasks.dlq.v1", "Kafka topic for unrecoverable task messages")
 	kafkaGroupID := flags.String("kafka-group-id", "data-plane-worker", "Kafka consumer group ID")
 	kafkaBatchSize := flags.Int("kafka-batch-size", 1, "number of Kafka task messages to process per run")
 	startupCheck := flags.Bool("startup-check", true, "check external Kafka/S3 dependencies before processing tasks")
@@ -144,6 +145,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 			Brokers:     transport.ParseBrokerList(*kafkaBrokers),
 			TaskTopic:   *kafkaTaskTopic,
 			ResultTopic: *kafkaResultTopic,
+			DLQTopic:    *kafkaDLQTopic,
 			GroupID:     *kafkaGroupID,
 			BatchSize:   *kafkaBatchSize,
 		})

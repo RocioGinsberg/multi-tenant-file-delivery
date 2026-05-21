@@ -26,8 +26,8 @@
 - [Phase 2 — Go 数据面](./phase-2-go-data-plane.md) ← 完成
 - [Phase 3 — MySQL 数据层与 source reference 迁移](./phase-3-data-layer-and-source-ref.md) ← 完成
 - [Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md) ← 完成
-- [Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md) ← 当前
-- Phase 5 — 可观测三件套（待写）
+- [Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md) ← 完成
+- [Phase 5 — 可观测三件套](./phase-5-observability.md) ← 当前
 - Phase 6 — 多租户 + 鉴权（待写）
 - Phase 6.5 — Workspace + 子公司读视图（待写）
 - Phase 7 — 扩 Sink + 压测（待写）

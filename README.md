@@ -51,6 +51,8 @@
 
 **Phase 4（完成）**：Redis 能力层已闭合。Redis compose / health smoke、跨实例 progress pub/sub、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter 和 Kafka/object source Phase 4 smoke 已落地；Redis 不替代 Kafka 的 durable task/result transport。
 
+**Phase 5（当前）**：可观测三件套。目标是补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板。
+
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 
 ## 回滚

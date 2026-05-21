@@ -47,7 +47,9 @@
 
 **Phase 3（完成）**：MySQL 数据层已接入本地 compose；source reference 基础链路已打通，control-plane 可把上传文件夹生成的内部 archive 暂存到 MinIO staging bucket，Go worker 可用 `-source-mode object` 从 staged archive 读取源文件。
 
-**Phase 3.x（当前）**：Kafka source-reference e2e、archive cache、GC、幂等、benchmark、配置 profile、worker startup check 和最小 DLQ 已落地；当前分支继续收敛审查发现的 ack / batch / 上传入口 / 文档同步问题。
+**Phase 3.x（完成）**：Kafka source-reference e2e、archive cache、GC、幂等、benchmark、配置 profile、worker startup check、最小 DLQ 和 review hardening 已落地。
+
+**Phase 4（完成）**：Redis 能力层已闭合。Redis compose / health smoke、跨实例 progress pub/sub、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter 和 Kafka/object source Phase 4 smoke 已落地；Redis 不替代 Kafka 的 durable task/result transport。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

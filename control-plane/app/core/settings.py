@@ -48,12 +48,22 @@ class Settings(BaseSettings):
     kafka_result_topic: str = "delivery.results.v1"
     kafka_result_group_id: str = "control-plane-results"
 
+    # ── Redis capability layer (Phase 4) ──
+    redis_url: str = "redis://localhost:6379/0"
+    progress_backend: str = "memory"
+    redis_socket_timeout_seconds: float = 1.0
+    redis_healthcheck_enabled: bool = False
+    redis_idempotency_enabled: bool = False
+    redis_idempotency_ttl_seconds: int = 60
+    redis_lease_enabled: bool = False
+    redis_lease_ttl_seconds: int = 30
+
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"
 
-    # ── Zip receive limits (used by 1.5 / 1.9) ──
-    max_zip_bytes: int = 524_288_000  # 500 MB
-    max_unzipped_bytes: int = 1_073_741_824  # 1 GB
+    # ── Folder upload / internal archive limits ──
+    max_internal_archive_bytes: int = 524_288_000  # 500 MB
+    max_folder_payload_bytes: int = 1_073_741_824  # 1 GB
     max_file_count: int = 5000
 
     # ── CORS (used by 1.9 / main.py) ──

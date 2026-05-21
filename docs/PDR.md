@@ -97,14 +97,14 @@
 - 关键设计有 RFC / ADR 可追溯。
 - 每个 Phase 有明确完成定义和测试记录。
 
-## 7. 下一阶段草案：可扩展 data-plane
+## 7. 下一阶段草案：Redis 能力层
 
-Phase 2 已经完成 control-plane / data-plane 分离，但当前任务消息仍携带 `temp_dir` 和 `src_path`，worker 需要访问 control-plane 解压后的本地目录。这个模型适合本地闭环，不适合多实例 worker 集群。
+Phase 3 / 3.x 已完成 MySQL、source reference、Kafka source-reference e2e、GC、幂等和最小 DLQ。下一阶段不替代 Kafka，而是在 Kafka durable transport 旁边补 Redis 共享能力层。
 
 下一阶段目标：
 
-- worker 进程保持 stateless，不依赖 control-plane 本地磁盘。
-- control-plane 把上传原始包或拆分后的源文件暂存到 durable object storage。
-- `delivery.tasks.v1` 从本地路径模型演进为 source reference 模型。
-- 多个 data-plane worker 可通过 Kafka consumer group 横向扩展。
-- file-spool 继续作为本地开发 transport，但不再代表生产输入模型。
+- 进度事件从单进程内存 bus 演进到 Redis pub/sub，可支持多个 control-plane 实例。
+- 任务创建和上传触发增加短 TTL 幂等保护，减少重复点击或并发请求造成的重复副作用。
+- 关键临界区引入 Redis lease，给后续多 consumer / 多调度器留出安全边界。
+- worker 或发布入口引入 Redis limiter，先提供最小跨实例 backpressure 能力。
+- Redis Docker tests 保持 opt-in，默认开发测试仍可不启动 Redis。

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
+from app.services.redis_lease import LeaseClaim, create_redis_lease
 
 
 class DeliveryItemSpec(BaseModel):
@@ -401,6 +402,7 @@ async def consume_delivery_results(
 ) -> list[DeliveryResultApplySummary]:
     """Read pending local result messages and apply them in order."""
     summaries: list[DeliveryResultApplySummary] = []
+    lease_client = create_redis_lease()
     try:
         if hasattr(consumer, "consume_records"):
             records = await consumer.consume_records()
@@ -410,9 +412,23 @@ async def consume_delivery_results(
                 for message in await consumer.consume()
             ]
         for record in records:
-            summaries.append(await apply_delivery_result(session, record.message))
-            await record.ack()
+            lease = await _acquire_result_apply_lease(lease_client, record.message)
+            if not lease.acquired:
+                continue
+            try:
+                summaries.append(await apply_delivery_result(session, record.message))
+                await record.ack()
+            finally:
+                await lease_client.release(lease)
         return summaries
     finally:
+        await lease_client.aclose()
         if hasattr(consumer, "close"):
             await consumer.close()
+
+
+async def _acquire_result_apply_lease(
+    lease_client,
+    message: DeliveryResultMessage,
+) -> LeaseClaim:
+    return await lease_client.acquire(f"delivery_result_apply:{message.task_id}")

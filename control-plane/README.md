@@ -53,6 +53,14 @@ cp .env.example .env
 | `KAFKA_TASK_TOPIC` | `delivery.tasks.v1` | 控制面发布任务 topic |
 | `KAFKA_RESULT_TOPIC` | `delivery.results.v1` | 控制面消费结果 topic |
 | `KAFKA_RESULT_GROUP_ID` | `control-plane-results` | 控制面 result consumer group |
+| `REDIS_URL` | `redis://localhost:6379/0` | Phase 4 Redis 能力层连接地址 |
+| `PROGRESS_BACKEND` | `memory` | 进度 backend：`memory` 或 `redis`；Redis 模式用于跨实例 SSE fanout |
+| `REDIS_SOCKET_TIMEOUT_SECONDS` | `1.0` | Redis socket timeout |
+| `REDIS_HEALTHCHECK_ENABLED` | `false` | 是否启用 Redis opt-in health/readiness 检查 |
+| `REDIS_IDEMPOTENCY_ENABLED` | `false` | 是否启用 Redis 短 TTL idempotency guard |
+| `REDIS_IDEMPOTENCY_TTL_SECONDS` | `60` | create/upload guard claim TTL |
+| `REDIS_LEASE_ENABLED` | `false` | 是否启用 Redis lease；当前用于 result apply 临界区 |
+| `REDIS_LEASE_TTL_SECONDS` | `30` | Redis lease claim TTL |
 
 ### 3. 起本地依赖（需要 Docker）
 
@@ -67,6 +75,12 @@ Phase 3 MySQL / Kafka / MinIO 全栈验证：
 
 ```bash
 docker compose up -d mysql kafka minio minio-init
+```
+
+Phase 4 Redis 本地依赖：
+
+```bash
+docker compose up -d redis
 ```
 
 Kafka Docker 集成测试：
@@ -126,8 +140,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 curl http://localhost:8000/healthz
-# {"ok":true,"service":"control-plane","env":"development"}
+# {"ok":true,"service":"control-plane","env":"development","checks":{"redis":"disabled"}}
 ```
+
+`REDIS_HEALTHCHECK_ENABLED=true` 时，`/healthz` 会额外 ping `REDIS_URL`，用于 Phase 4 Redis smoke / readiness 验证。
 
 ## API 路由（`/api/v1`）
 
@@ -160,6 +176,22 @@ pytest tests/e2e -v -m e2e
 
 # MySQL smoke（需要 deploy/docker-compose.yml mysql running）
 RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker.py
+
+# Redis smoke（需要 deploy/docker-compose.yml redis running）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py
+
+# Redis progress backend smoke（证明两个 control-plane bus 实例可跨 Redis fanout）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_redis_docker.py
+
+# Redis idempotency guard smoke（证明两个 control-plane 实例共享短 TTL claim）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency_redis_docker.py
+
+# Redis lease smoke（证明两个 consumer 实例竞争同一 lease 时只有一个成功）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease_docker.py
+
+# Phase 4 full smoke（Redis progress + Kafka/object source + Go worker limiter + result apply lease）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
+  tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
 
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \

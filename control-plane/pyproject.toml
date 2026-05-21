@@ -15,6 +15,7 @@ dependencies = [
     "httpx",
     "aiokafka>=0.14.0",
     "asyncmy>=0.2.11",
+    "redis>=5.0",
 ]
 
 [dependency-groups]

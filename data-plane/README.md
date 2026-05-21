@@ -115,6 +115,26 @@ go run ./cmd/worker \
   -item-concurrency 4
 ```
 
+Phase 4 Redis limiter 默认关闭；启用后每个 item 在进入 sink 上传前竞争一个 Redis fixed-window 配额，配额不足或 Redis 失败会让该 item 以明确错误进入 result：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -redis-url redis://localhost:6379/0 \
+  -redis-limiter-enabled \
+  -redis-limiter-key global \
+  -redis-limiter-limit 100 \
+  -redis-limiter-window 1s \
+  -sink mock
+```
+
+Docker Redis limiter smoke：
+```bash
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+  GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
+  go test ./internal/limiter -run TestRedisLimiterDocker -count=1
+```
+
 worker 默认会在处理任务前检查外部依赖：
 - `-transport kafka`：用 `-startup-check-timeout` 限制 Kafka broker TCP 连接检查。
 - `-source-mode object`：对 `-staging-bucket` 执行 S3 `HeadBucket`。

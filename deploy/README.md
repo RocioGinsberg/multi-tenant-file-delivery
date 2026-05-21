@@ -24,6 +24,31 @@ docker compose up -d kafka
 docker compose up -d kafka minio minio-init
 ```
 
+Phase 4 Redis 能力层验证：
+
+```bash
+docker compose up -d redis
+```
+
+全栈本地依赖：
+
+```bash
+docker compose up -d mysql kafka minio minio-init redis
+```
+
+Phase 4 完整 smoke：
+
+```bash
+cd ../control-plane
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
+  tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
+
+cd ../data-plane
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+  GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
+  go test ./internal/limiter -run TestRedisLimiterDocker -count=1
+```
+
 ### 访问
 
 | 用途 | 地址 | 账号/密码 |
@@ -31,6 +56,7 @@ docker compose up -d kafka minio minio-init
 | Console 管理界面 | http://localhost:9001 | minioadmin / minioadmin |
 | API endpoint | http://localhost:9000 | minioadmin / minioadmin |
 | Kafka broker | localhost:9092 | PLAINTEXT 本地开发 |
+| Redis | localhost:6379 | 无密码，本地开发 |
 
 ### 停止
 
@@ -56,7 +82,7 @@ S3_BUCKET=auto-upload-dev
 
 ```
 deploy/
-├── docker-compose.yml        # MinIO / Kafka 本地开发
+├── docker-compose.yml        # MySQL / Kafka / MinIO / Redis 本地开发
 ├── grafana/                  # Phase 5 填充：Grafana dashboard
 ├── otel/                     # Phase 5 填充：OpenTelemetry Collector 配置
 └── prometheus/               # Phase 5 填充：Prometheus 抓取配置

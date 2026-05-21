@@ -37,9 +37,17 @@ class TestDefaultValues:
             "TASK_DIR_BASE",
             "DELIVERY_BACKEND",
             "DELIVERY_OUTBOX_BASE",
+            "REDIS_URL",
+            "PROGRESS_BACKEND",
+            "REDIS_SOCKET_TIMEOUT_SECONDS",
+            "REDIS_HEALTHCHECK_ENABLED",
+            "REDIS_IDEMPOTENCY_ENABLED",
+            "REDIS_IDEMPOTENCY_TTL_SECONDS",
+            "REDIS_LEASE_ENABLED",
+            "REDIS_LEASE_TTL_SECONDS",
             "CLASSIFICATION_PROFILE_PATH",
-            "MAX_ZIP_BYTES",
-            "MAX_UNZIPPED_BYTES",
+            "MAX_INTERNAL_ARCHIVE_BYTES",
+            "MAX_FOLDER_PAYLOAD_BYTES",
             "MAX_FILE_COUNT",
             "CORS_ORIGINS",
         ):
@@ -59,10 +67,18 @@ class TestDefaultValues:
         assert s.worker_auto_adjust_concurrent is True
         assert s.task_dir_base == "/tmp/auto_upload_tasks"
         assert s.classification_profile_path == "../profiles/hq_subsidiary_reports_v1/profile.json"
-        assert s.max_zip_bytes == 524_288_000
-        assert s.max_unzipped_bytes == 1_073_741_824
+        assert s.max_internal_archive_bytes == 524_288_000
+        assert s.max_folder_payload_bytes == 1_073_741_824
         assert s.max_file_count == 5000
         assert s.cors_origins == "*"
+        assert s.redis_url == "redis://localhost:6379/0"
+        assert s.progress_backend == "memory"
+        assert s.redis_socket_timeout_seconds == 1.0
+        assert s.redis_healthcheck_enabled is False
+        assert s.redis_idempotency_enabled is False
+        assert s.redis_idempotency_ttl_seconds == 60
+        assert s.redis_lease_enabled is False
+        assert s.redis_lease_ttl_seconds == 30
 
 
 class TestDotEnvOverride:
@@ -74,6 +90,14 @@ class TestDotEnvOverride:
             "ENV",
             "S3_BUCKET_NAME",
             "WORKER_MAX_TARGET_CONCURRENT",
+            "REDIS_URL",
+            "PROGRESS_BACKEND",
+            "REDIS_SOCKET_TIMEOUT_SECONDS",
+            "REDIS_HEALTHCHECK_ENABLED",
+            "REDIS_IDEMPOTENCY_ENABLED",
+            "REDIS_IDEMPOTENCY_TTL_SECONDS",
+            "REDIS_LEASE_ENABLED",
+            "REDIS_LEASE_TTL_SECONDS",
             "CLASSIFICATION_PROFILE_PATH",
             "CORS_ORIGINS",
         ):
@@ -84,6 +108,14 @@ class TestDotEnvOverride:
             "ENV=staging\n"
             "S3_BUCKET_NAME=my-staging-bucket\n"
             "WORKER_MAX_TARGET_CONCURRENT=10\n"
+            "REDIS_URL=redis://redis.example.com:6379/2\n"
+            "PROGRESS_BACKEND=redis\n"
+            "REDIS_SOCKET_TIMEOUT_SECONDS=2.5\n"
+            "REDIS_HEALTHCHECK_ENABLED=true\n"
+            "REDIS_IDEMPOTENCY_ENABLED=true\n"
+            "REDIS_IDEMPOTENCY_TTL_SECONDS=30\n"
+            "REDIS_LEASE_ENABLED=true\n"
+            "REDIS_LEASE_TTL_SECONDS=45\n"
             "CLASSIFICATION_PROFILE_PATH=../profiles/custom/profile.json\n"
             "CORS_ORIGINS=http://example.com,http://app.example.com\n"
         )
@@ -94,6 +126,14 @@ class TestDotEnvOverride:
         assert s.env == "staging"
         assert s.s3_bucket_name == "my-staging-bucket"
         assert s.worker_max_target_concurrent == 10
+        assert s.redis_url == "redis://redis.example.com:6379/2"
+        assert s.progress_backend == "redis"
+        assert s.redis_socket_timeout_seconds == 2.5
+        assert s.redis_healthcheck_enabled is True
+        assert s.redis_idempotency_enabled is True
+        assert s.redis_idempotency_ttl_seconds == 30
+        assert s.redis_lease_enabled is True
+        assert s.redis_lease_ttl_seconds == 45
         assert s.classification_profile_path == "../profiles/custom/profile.json"
         assert s.cors_origins == "http://example.com,http://app.example.com"
 
@@ -115,6 +155,20 @@ class TestEnvVarPriority:
 
         assert s.env == "from_env_var"
         assert s.s3_bucket_name == "envvar-bucket"
+
+    def test_folder_archive_limit_env_names(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MAX_INTERNAL_ARCHIVE_BYTES", "123")
+        monkeypatch.setenv("MAX_FOLDER_PAYLOAD_BYTES", "456")
+        monkeypatch.setenv("MAX_ZIP_BYTES", "789")
+        monkeypatch.setenv("MAX_UNZIPPED_BYTES", "999")
+
+        s = Settings()
+
+        assert s.max_internal_archive_bytes == 123
+        assert s.max_folder_payload_bytes == 456
+        assert not hasattr(s, "max_zip_bytes")
+        assert not hasattr(s, "max_unzipped_bytes")
 
 
 class TestGetSettingsSingleton:

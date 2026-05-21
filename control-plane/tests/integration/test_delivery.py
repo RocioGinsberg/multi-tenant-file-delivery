@@ -13,6 +13,7 @@ from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.services.delivery import (
     DeliveryResultMessage,
+    DeliveryResultRecord,
     DeliverySourceReference,
     FileSpoolDeliveryPublisher,
     FileSpoolDeliveryResultConsumer,
@@ -22,6 +23,7 @@ from app.services.delivery import (
     build_delivery_task_message,
     consume_delivery_results,
 )
+from app.services.redis_lease import LeaseClaim
 
 
 @pytest.fixture
@@ -529,3 +531,135 @@ async def test_consume_delivery_results_commits_one_kafka_offset_at_a_time(
         for commit in consumer.commits
     ]
     assert committed_offsets == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_consume_delivery_results_skips_record_when_lease_is_held(
+    session: AsyncSession,
+    monkeypatch,
+):
+    class HeldLeaseClient:
+        def __init__(self) -> None:
+            self.released = []
+            self.closed = False
+
+        async def acquire(self, resource: str) -> LeaseClaim:
+            return LeaseClaim(key=resource, token="held", acquired=False)
+
+        async def release(self, claim: LeaseClaim) -> None:
+            self.released.append(claim)
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class OneRecordConsumer:
+        def __init__(self, message: DeliveryResultMessage) -> None:
+            self.acks = 0
+            self.closed = False
+            self.message = message
+
+        async def consume_records(self):
+            async def ack() -> None:
+                self.acks += 1
+
+            return [DeliveryResultRecord(message=self.message, ack=ack)]
+
+        async def close(self) -> None:
+            self.closed = True
+
+    lease_client = HeldLeaseClient()
+    monkeypatch.setattr(
+        "app.services.delivery.create_redis_lease",
+        lambda: lease_client,
+    )
+
+    task = Task(idempotency_key="idem-lease-held", status="queued")
+    session.add(task)
+    await session.flush()
+    message = DeliveryResultMessage(
+        task_id=task.id,
+        status="uploaded",
+        uploaded=0,
+        failed=0,
+        processed=0,
+        started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+        ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+    )
+    consumer = OneRecordConsumer(message)
+
+    summaries = await consume_delivery_results(session, consumer)
+
+    assert summaries == []
+    assert task.status == "queued"
+    assert consumer.acks == 0
+    assert consumer.closed is True
+    assert lease_client.released == []
+    assert lease_client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_consume_delivery_results_releases_acquired_lease(
+    session: AsyncSession,
+    monkeypatch,
+):
+    class AcquiredLeaseClient:
+        def __init__(self) -> None:
+            self.released = []
+            self.closed = False
+
+        async def acquire(self, resource: str) -> LeaseClaim:
+            return LeaseClaim(key=resource, token="owner", acquired=True)
+
+        async def release(self, claim: LeaseClaim) -> None:
+            self.released.append(claim)
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class OneRecordConsumer:
+        def __init__(self, message: DeliveryResultMessage) -> None:
+            self.acks = 0
+            self.message = message
+
+        async def consume_records(self):
+            async def ack() -> None:
+                self.acks += 1
+
+            return [DeliveryResultRecord(message=self.message, ack=ack)]
+
+    lease_client = AcquiredLeaseClient()
+    monkeypatch.setattr(
+        "app.services.delivery.create_redis_lease",
+        lambda: lease_client,
+    )
+
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-lease-release", status="queued")
+    session.add(task)
+    await session.flush()
+    item = (
+        await item_repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "ok.xlsx", "filename": "ok.xlsx"}],
+        )
+    )[0]
+    message = DeliveryResultMessage(
+        task_id=task.id,
+        status="uploaded",
+        uploaded=1,
+        failed=0,
+        processed=1,
+        items=[{"item_id": item.id, "status": "uploaded"}],
+        started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+        ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+    )
+    consumer = OneRecordConsumer(message)
+
+    summaries = await consume_delivery_results(session, consumer)
+
+    assert len(summaries) == 1
+    assert consumer.acks == 1
+    assert len(lease_client.released) == 1
+    assert lease_client.released[0].key == f"delivery_result_apply:{task.id}"
+    assert lease_client.closed is True

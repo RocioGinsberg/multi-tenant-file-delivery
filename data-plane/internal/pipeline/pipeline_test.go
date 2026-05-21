@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -203,6 +204,47 @@ func TestProcessTaskWithResolverOptionsLimitsItemConcurrency(t *testing.T) {
 	}
 	if sinkImpl.maxActive != 2 {
 		t.Fatalf("unexpected max concurrency: got %d want 2", sinkImpl.maxActive)
+	}
+}
+
+func TestProcessTaskBeforeUploadFailureSkipsSinkUpload(t *testing.T) {
+	task := message.DeliveryTask{
+		TaskID: "task-limited",
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SourcePath:   "one.txt",
+			DstPath:      "reports/one.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+	limited := errors.New("rate limited")
+	sinkImpl := sink.NewMockSink()
+
+	result, err := ProcessTaskWithResolverOptions(
+		context.Background(),
+		task,
+		sinkImpl,
+		staticResolver{src: source.NewMemorySource("memory://one.txt", []byte("hello"))},
+		Options{
+			MaxItemConcurrency: 1,
+			BeforeUpload: func(context.Context, message.DeliveryTask, message.DeliveryItem) error {
+				return limited
+			},
+		},
+	)
+
+	if err == nil {
+		t.Fatal("expected partial failure")
+	}
+	if result.Uploaded != 0 || result.Failed != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if result.Items[0].Status != "failed" || result.Items[0].Error != limited.Error() {
+		t.Fatalf("unexpected item result: %+v", result.Items[0])
+	}
+	if _, ok := sinkImpl.Object("reports/one.txt"); ok {
+		t.Fatal("expected sink upload to be skipped")
 	}
 }
 

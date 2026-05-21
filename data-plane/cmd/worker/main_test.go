@@ -93,11 +93,58 @@ func TestRunRejectsUnsupportedSourceMode(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsRedisLimiterFlags(t *testing.T) {
+	dir := t.TempDir()
+	inboxDir := filepath.Join(dir, "delivery.tasks.v1")
+	resultsDir := filepath.Join(dir, "delivery.results.v1")
+
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-inbox", inboxDir,
+		"-results", resultsDir,
+		"-redis-url", "redis://localhost:6379/0",
+		"-redis-limiter-enabled",
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("run worker: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
+func TestRunRejectsInvalidRedisURL(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"-redis-url", "localhost:6379"}, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "invalid redis url") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunRejectsNonPositiveItemConcurrency(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run(context.Background(), []string{"-item-concurrency", "0"}, &stderr)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestRunRejectsInvalidRedisLimiterConfig(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"-redis-limiter-limit", "0"}, &stderr)
+	if err == nil {
+		t.Fatal("expected limit error")
+	}
+	if !strings.Contains(err.Error(), "redis limiter limit") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = run(context.Background(), []string{"-redis-limiter-window", "0s"}, &stderr)
+	if err == nil {
+		t.Fatal("expected window error")
+	}
+	if !strings.Contains(err.Error(), "redis limiter window") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

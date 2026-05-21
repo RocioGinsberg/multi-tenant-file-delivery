@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -90,6 +91,31 @@ async def test_healthz(async_client):
     data = resp.json()
     assert data["ok"] is True
     assert data["service"] == "control-plane"
+    assert data["checks"]["redis"] == "disabled"
+
+
+async def test_healthz_checks_redis_when_enabled(async_client):
+    settings = MagicMock()
+    settings.env = "test"
+    settings.redis_healthcheck_enabled = True
+
+    redis_client = AsyncMock()
+    redis_client.ping = AsyncMock(return_value=True)
+    redis_client.close = AsyncMock()
+
+    with (
+        patch("app.main.get_settings", return_value=settings),
+        patch("app.main.create_redis_client", return_value=redis_client) as create_client,
+    ):
+        async with async_client as client:
+            resp = await client.get("/healthz")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["checks"]["redis"] == "ok"
+    create_client.assert_called_once_with(settings)
+    redis_client.ping.assert_awaited_once()
+    redis_client.close.assert_awaited_once()
 
 
 # ── Test 2: GET /api/v1/tasks — empty list ───────────────────────────────────
@@ -183,7 +209,7 @@ async def test_create_task_folder_payload_too_large(async_client):
         patch("app.api.tasks._task_repo") as mock_repo,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 5
+        mock_s.max_internal_archive_bytes = 5
         mock_s.task_dir_base = "/tmp/test_tasks"
         mock_settings_fn.return_value = mock_s
         mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
@@ -231,6 +257,33 @@ async def test_create_task_idempotent(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["task_id"] == "exist01"
+
+
+async def test_create_task_returns_conflict_when_idempotency_claim_exists(async_client):
+    from app.core.db import get_session
+
+    with patch("app.api.tasks._acquire_idempotency_claim") as acquire_claim:
+        acquire_claim.side_effect = HTTPException(
+            status_code=409,
+            detail="create_task for 'idem-busy' is already in progress",
+        )
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post(
+                "/api/v1/tasks",
+                data={"idempotency_key": "idem-busy"},
+                files=[("files", ("acme/test.txt", b"hello", "text/plain"))],
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 409
+    assert "already in progress" in resp.json()["detail"]
 
 
 async def test_upload_task_queues_delivery_message_when_go_worker_backend(async_client, tmp_path):
@@ -476,8 +529,8 @@ async def test_create_task_new(async_client, tmp_path):
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -529,8 +582,8 @@ async def test_create_task_accepts_folder_files(async_client, tmp_path):
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -582,8 +635,8 @@ async def test_create_task_keeps_user_original_zip_separate(async_client, tmp_pa
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
@@ -627,8 +680,8 @@ async def test_create_task_rejects_folder_file_count_limit(async_client):
         patch("app.api.tasks._task_repo") as mock_repo,
     ):
         mock_s = MagicMock()
-        mock_s.max_zip_bytes = 524_288_000
-        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_internal_archive_bytes = 524_288_000
+        mock_s.max_folder_payload_bytes = 1_073_741_824
         mock_s.max_file_count = 1
         mock_s.task_dir_base = "/tmp/test_tasks"
         mock_settings_fn.return_value = mock_s
@@ -733,6 +786,35 @@ async def test_upload_task_confirmed(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "uploading"
+
+
+async def test_upload_task_returns_conflict_when_idempotency_claim_exists(async_client):
+    from app.core.db import get_session
+
+    task = _mock_task(status="confirmed")
+
+    with (
+        patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._acquire_idempotency_claim") as acquire_claim,
+    ):
+        mock_repo.get = AsyncMock(return_value=task)
+        acquire_claim.side_effect = HTTPException(
+            status_code=409,
+            detail="upload_task for 'abc123' is already in progress",
+        )
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/upload")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 409
+    assert "already in progress" in resp.json()["detail"]
 
 
 # ── Test 11: POST /api/v1/tasks/{id}/retry ───────────────────────────────────

@@ -17,6 +17,12 @@ type Config struct {
 	SinkName           string
 	Once               bool
 	MaxItemConcurrency int
+	UploadLimiter      UploadLimiter
+	LimiterKey         string
+}
+
+type UploadLimiter interface {
+	Allow(ctx context.Context, key string) error
 }
 
 type Worker struct {
@@ -83,12 +89,23 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 		StartedAt: started,
 	}
 
+	options := pipeline.Options{MaxItemConcurrency: w.cfg.MaxItemConcurrency}
+	if w.cfg.UploadLimiter != nil {
+		limiterKey := w.cfg.LimiterKey
+		if limiterKey == "" {
+			limiterKey = "global"
+		}
+		options.BeforeUpload = func(ctx context.Context, _ message.DeliveryTask, _ message.DeliveryItem) error {
+			return w.cfg.UploadLimiter.Allow(ctx, limiterKey)
+		}
+	}
+
 	pipelineResult, err := pipeline.ProcessTaskWithResolverOptions(
 		ctx,
 		task,
 		w.sink,
 		w.source,
-		pipeline.Options{MaxItemConcurrency: w.cfg.MaxItemConcurrency},
+		options,
 	)
 	result.Uploaded = pipelineResult.Uploaded
 	result.Failed = pipelineResult.Failed

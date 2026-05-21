@@ -20,8 +20,8 @@
 | Phase 2 | Done | Go 数据面 + Kafka bridge | Go worker 接管上传执行；file-spool 和 Kafka transport 都可验证 |
 | Phase 3 | Done | MySQL 数据层 | SQLite -> MySQL 主数据库；本地全栈 compose 跑通 |
 | Phase 3.x | Done | 去本地文件依赖 + hardening | source reference 消息模型；Kafka worker 从 staging object storage 读取源文件；Kafka/GC/幂等/配置/readiness/DLQ 基础闭合 |
-| Phase 4 | Current | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
-| Phase 5 | Planned | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标 |
+| Phase 4 | Done | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
+| Phase 5 | Current | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标 |
 | Phase 6 | Planned | 多租户 + 鉴权 | HQ / 子公司用户隔离，RBAC 覆盖 |
 | Phase 6.5 | Planned | Workspace + 子公司读视图 | 子公司登录后可浏览和下载自己的 workspace 文件 |
 | Phase 7 | Planned | 扩 sink + 压测 | OSS / Webhook / mock 异常 sink，BENCHMARKS 写入实测数据 |
@@ -57,9 +57,9 @@
 
 ## 当前下一步建议
 
-Phase 4 当前状态：
+Phase 5 启动输入：
 
 - Redis 不替代 Kafka；Kafka 继续承载 durable task/result transport。
-- Redis compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` Redis pub/sub backend、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter 已落地。
-- 下一步收敛 Phase 4 smoke 与运行手册。
-- 默认测试继续走 memory/fake；Redis Docker tests 使用 `RUN_DOCKER_TESTS=1` opt-in。
+- Phase 4 已完成 Redis compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` Redis pub/sub backend、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter。
+- Phase 4 Docker smoke 覆盖 Redis progress + Kafka/object source + Go worker limiter + result apply lease。
+- Phase 5 优先补 Python -> Kafka -> Go -> sink 的 trace context 和 RED 指标。

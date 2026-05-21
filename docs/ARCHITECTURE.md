@@ -13,7 +13,7 @@
 
 **Phase 3 / 3.x Done**：MySQL 已作为主数据库目标接入本地 compose；source reference 基础链路、Kafka source-reference e2e、GC、幂等、readiness、最小 DLQ 和 review hardening 已完成。HQ 选择文件夹后，control-plane 生成内部 archive 并可暂存到 MinIO / S3 staging bucket，Go worker 可通过 `-source-mode object` 从 staged archive 读取 item bytes。
 
-**Phase 4 Current**：Redis 能力层已完成 compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` memory / Redis backend 抽象、短 TTL idempotency guard、result apply lease，以及 data-plane Redis fixed-window limiter。`PROGRESS_BACKEND=redis` 时 SSE progress 可通过 Redis pub/sub 跨 control-plane 实例 fanout；`REDIS_IDEMPOTENCY_ENABLED=true` 时 create/upload trigger 会用 Redis claim 挡住正在处理的重复请求；`REDIS_LEASE_ENABLED=true` 时 result consumer 在 apply 前竞争 task 级 lease；`-redis-limiter-enabled` 时 Go worker 在 sink 上传前竞争全局配额。Redis 不替代 Kafka。
+**Phase 4 Done**：Redis 能力层已完成 compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` memory / Redis backend 抽象、短 TTL idempotency guard、result apply lease，以及 data-plane Redis fixed-window limiter。`PROGRESS_BACKEND=redis` 时 SSE progress 可通过 Redis pub/sub 跨 control-plane 实例 fanout；`REDIS_IDEMPOTENCY_ENABLED=true` 时 create/upload trigger 会用 Redis claim 挡住正在处理的重复请求；`REDIS_LEASE_ENABLED=true` 时 result consumer 在 apply 前竞争 task 级 lease；`-redis-limiter-enabled` 时 Go worker 在 sink 上传前竞争全局配额。Redis 不替代 Kafka。
 
 ## 写路径详细时序图
 
@@ -58,10 +58,12 @@ Go data-plane worker
 control-plane result consumer
   │
   ├─ 读取 delivery.results.v1
+  ├─ REDIS_LEASE_ENABLED=true: 竞争 delivery_result_apply:{task_id} lease
   ├─ apply_delivery_result()
   └─ 回写 task / task_item 状态
 ```
 
 后续目标：
+- Phase 5 统一接入 trace context、RED 指标和运行面板。
 - 为 S3 / MinIO sink 补 multipart、resume 和平台层 dedup。
 - 在真实负载下补 worker 并发调度、backpressure 和重试策略。

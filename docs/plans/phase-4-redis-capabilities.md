@@ -1,6 +1,6 @@
 # Phase 4 — Redis 能力层
 
-> **状态**：Current（4.1-4.6 已完成；4.7 待实现）
+> **状态**：Done（4.1-4.7 已完成）
 > **目标**：把当前单进程内存态能力迁移到 Redis-backed 能力层，为多实例 control-plane、worker 集群 backpressure、跨进程进度和幂等控制打基础。
 > **完成定义**：本地 compose 可启动 Redis；control-plane 可用 Redis pub/sub 广播任务进度；任务提交和上传触发有 Redis-backed 幂等 / lease 保护；worker 发布前有可配置限流入口；Redis 不可用时有明确降级或 fail-fast 行为。
 > **前序计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
@@ -197,7 +197,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.7 Phase 4 smoke 与运行手册
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 补一条端到端 smoke：Redis progress backend + Kafka/object source task + result apply。
@@ -206,9 +206,15 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 - **验收**：
   - 新开发者能按文档启动 MySQL / Kafka / MinIO / Redis 并跑 smoke。
   - Phase 4 完成前，所有 Redis docker tests 默认跳过且有清晰 env gate。
+- **实际变更**：
+  - `control-plane/tests/integration/test_phase2_bridge.py`：新增 `test_phase4_redis_kafka_object_source_smoke`，串联 Redis progress backend、Kafka/object source、Go worker Redis limiter、control-plane result apply Redis lease。
+  - `README.md`、`deploy/README.md`、`control-plane/README.md`、`data-plane/README.md`：补 Phase 4 完整 smoke 和 Redis limiter smoke 命令。
+  - `docs/ARCHITECTURE.md`、`docs/ROADMAP.md`：标注 Phase 4 Done，并把当前下一步切到 Phase 5 可观测。
 - **验证**：
   - `cd deploy && docker compose up -d mysql kafka minio minio-init redis`
-  - `cd control-plane && RUN_DOCKER_TESTS=1 RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_* tests/integration/test_phase2_bridge.py::test_source_reference_kafka_bridge_round_trip`
+  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke`
+  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py tests/integration/test_progress_redis_docker.py tests/integration/test_idempotency_redis_docker.py tests/integration/test_redis_lease_docker.py`
+  - `cd data-plane && RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./internal/limiter -run TestRedisLimiterDocker -count=1`
 
 ## 四、建议执行顺序
 
@@ -242,6 +248,14 @@ cd ../control-plane
 RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker.py
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_redis_docker.py
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency_redis_docker.py
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease_docker.py
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
+
+cd ../data-plane
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+  GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
+  go test ./internal/limiter -run TestRedisLimiterDocker -count=1
 ```
 
 ## 六、风险与降级

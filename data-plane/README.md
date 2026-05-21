@@ -128,6 +128,13 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+Docker Redis limiter smoke：
+```bash
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+  GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
+  go test ./internal/limiter -run TestRedisLimiterDocker -count=1
+```
+
 worker 默认会在处理任务前检查外部依赖：
 - `-transport kafka`：用 `-startup-check-timeout` 限制 Kafka broker TCP 连接检查。
 - `-source-mode object`：对 `-staging-bucket` 执行 S3 `HeadBucket`。

@@ -189,6 +189,10 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency
 # Redis lease smoke（证明两个 consumer 实例竞争同一 lease 时只有一个成功）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease_docker.py
 
+# Phase 4 full smoke（Redis progress + Kafka/object source + Go worker limiter + result apply lease）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
+  tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
+
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
   tests/integration/test_phase2_bridge.py::test_source_reference_file_spool_bridge_round_trip

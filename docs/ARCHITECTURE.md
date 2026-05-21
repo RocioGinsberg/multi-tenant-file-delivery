@@ -11,7 +11,9 @@
 ## 当前状态
 **v1**：Phase 2 已完成。Go 数据面通过统一 transport 接口支持 file-spool 和 Kafka；本地默认 file-spool，Kafka adapter 已通过 Docker broker 集成测试。当前 sink 支持 mock 与 S3 / MinIO 单段 PUT，结果事件可回写控制面 task / item 状态。
 
-**Phase 3 Done / Phase 3.x Current**：MySQL 已作为主数据库目标接入本地 compose；source reference 基础链路已完成。HQ 选择文件夹后，control-plane 生成内部 archive 并可暂存到 MinIO / S3 staging bucket，Go worker 可通过 `-source-mode object` 从 staged archive 读取 item bytes。Phase 3.x 继续收敛 Kafka ack / DLQ / GC / readiness 等运行边界。
+**Phase 3 / 3.x Done**：MySQL 已作为主数据库目标接入本地 compose；source reference 基础链路、Kafka source-reference e2e、GC、幂等、readiness、最小 DLQ 和 review hardening 已完成。HQ 选择文件夹后，control-plane 生成内部 archive 并可暂存到 MinIO / S3 staging bucket，Go worker 可通过 `-source-mode object` 从 staged archive 读取 item bytes。
+
+**Phase 4 Current**：Redis 能力层开始规划。Redis 不替代 Kafka，而是补跨进程 progress pub/sub、短 TTL 幂等、lease 和限流。
 
 ## 写路径详细时序图
 

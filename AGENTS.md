@@ -8,7 +8,8 @@ These rules supplement global agent instructions. They should not restate genera
 
 - Keep Phase status in `docs/plans/phase-*.md`.
 - Phase 3 is closed around MySQL + source reference foundation work.
-- Phase 3.x owns Kafka source-reference e2e, performance, GC, idempotency, config hardening, benchmark, and worker readiness.
+- Phase 3.x is closed around Kafka source-reference e2e, performance, GC, idempotency, config hardening, benchmark, worker readiness, and review hardening.
+- Phase 4 owns Redis progress pub/sub, short-TTL idempotency, lease helpers, and rate limiting.
 - Do not append new Phase 3.x tasks back into `docs/plans/phase-3-data-layer-and-source-ref.md`.
 - If a Phase 3.x topic grows beyond a few tasks, split it into a focused `docs/plans/phase-3x-*.md` file.
 
@@ -91,11 +92,14 @@ docker compose up -d mysql kafka minio minio-init
 - Do not add `study/` files to git. The directory is intentionally ignored and should stay local.
 - Mention in the final response when a study note was updated.
 
-## Phase 3.x Current Queue
+## Phase 4 Current Queue
 
-Continue remaining Phase 3.x work in this order unless the user redirects:
+Continue Phase 4 work in this order unless the user redirects:
 
-1. Keep the folder-upload path as the primary HQ input; do not reintroduce a user-facing zip upload path unless explicitly requested.
-2. Keep Kafka ack / retry / DLQ behavior aligned with RFC 0003.
-3. Keep Phase status synchronized across `docs/plans/`, `README.md`, `docs/ROADMAP.md`, and component READMEs.
-4. Next larger phase should start from Phase 4 Redis capability work unless the user redirects.
+1. `4.1` Redis compose and configuration baseline.
+2. `4.2` Redis client wrapper and opt-in health / Docker smoke.
+3. `4.3` ProgressBus backend abstraction with Redis pub/sub.
+4. `4.4` short-TTL idempotency guard.
+5. `4.5` Redis lease helper.
+6. `4.6` Redis limiter.
+7. `4.7` Phase 4 smoke and runbook sync.

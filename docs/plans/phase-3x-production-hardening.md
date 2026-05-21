@@ -1,6 +1,6 @@
 # Phase 3.x — Source reference 生产化与 worker 集群前置条件
 
-> **状态**：Current（3.9-3.21 已完成）
+> **状态**：Done（3.9-3.21 已完成）
 > **目标**：在 Phase 3 已打通 source reference 基础链路后，补齐 Kafka 真实链路、性能、GC、幂等和生产化运行边界。
 > **完成定义**：Kafka + object source 的端到端链路可复验；staging source 有可清理生命周期；重复 result 不破坏 DB 最终状态；剩余 worker 集群化风险有明确 RFC / 测试 / benchmark 入口。
 > **关联计划**：[Phase 3 — MySQL 数据层与 source reference 迁移](./phase-3-data-layer-and-source-ref.md)

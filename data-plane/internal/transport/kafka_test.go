@@ -114,3 +114,10 @@ func TestParseBrokerList(t *testing.T) {
 		t.Fatalf("unexpected brokers: %+v", brokers)
 	}
 }
+
+func TestCheckKafkaConnectivityRequiresBroker(t *testing.T) {
+	err := CheckKafkaConnectivity(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

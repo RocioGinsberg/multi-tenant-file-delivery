@@ -76,6 +76,32 @@ RUN_DOCKER_TESTS=1 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
   uv run pytest tests/integration/test_delivery_kafka_docker.py
 ```
 
+## 配置 Profiles
+
+| Profile | Control-plane 关键 env | Worker 启动参数 | 依赖 |
+|---|---|---|---|
+| Local file-spool | `DATABASE_URL=sqlite+aiosqlite:///./control_plane.db`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=file`<br>`DELIVERY_SOURCE_MODE=file`<br>`DELIVERY_OUTBOX_BASE=/tmp/auto_upload_outbox` | `-transport file`<br>`-source-mode file`<br>`-sink mock` | 无外部 broker；worker 与 API 共享本机 outbox 和 zip 解压目录 |
+| Docker object source | `DATABASE_URL=mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=file`<br>`DELIVERY_SOURCE_MODE=object`<br>`S3_ENDPOINT_URL=http://localhost:9000`<br>`S3_BUCKET_NAME=auto-upload-dev`<br>`STAGING_BUCKET_NAME=auto-upload-staging` | `-transport file`<br>`-source-mode object`<br>`-s3-endpoint http://localhost:9000`<br>`-s3-bucket auto-upload-dev`<br>`-sink mock` 或 `-sink s3` | `docker compose up -d mysql minio minio-init` |
+| Production-like Kafka | `DATABASE_URL=mysql+asyncmy://...`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=kafka`<br>`DELIVERY_SOURCE_MODE=object`<br>`KAFKA_BOOTSTRAP_SERVERS=<broker:9092>`<br>`KAFKA_TASK_TOPIC=delivery.tasks.v1`<br>`KAFKA_RESULT_TOPIC=delivery.results.v1`<br>`S3_ENDPOINT_URL=<s3 endpoint>`<br>`S3_BUCKET_NAME=<target bucket>`<br>`STAGING_BUCKET_NAME=<staging bucket>` | `-transport kafka`<br>`-kafka-brokers <broker:9092>`<br>`-source-mode object`<br>`-sink s3`<br>`-s3-endpoint <s3 endpoint>`<br>`-s3-bucket <target bucket>`<br>`-staging-bucket <staging bucket>`<br>`-item-concurrency 4` | MySQL、Kafka、S3-compatible object storage；task/result topic 预先创建 |
+
+Production-like 最小环境变量示例：
+
+```bash
+export DATABASE_URL='mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4'
+export DELIVERY_BACKEND=go-worker
+export DELIVERY_TRANSPORT=kafka
+export DELIVERY_SOURCE_MODE=object
+export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+export KAFKA_TASK_TOPIC=delivery.tasks.v1
+export KAFKA_RESULT_TOPIC=delivery.results.v1
+export KAFKA_RESULT_GROUP_ID=control-plane-results
+export S3_ENDPOINT_URL=http://localhost:9000
+export S3_BUCKET_NAME=auto-upload-dev
+export STAGING_BUCKET_NAME=auto-upload-staging
+export S3_ACCESS_KEY_ID=minioadmin
+export S3_SECRET_ACCESS_KEY=minioadmin
+```
+
 ### 4. 执行数据库迁移
 
 ```bash

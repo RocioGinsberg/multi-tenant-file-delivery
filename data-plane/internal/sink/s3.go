@@ -61,6 +61,16 @@ func NewS3Sink(ctx context.Context, cfg S3Config) (*S3Sink, error) {
 
 func (s *S3Sink) Name() string { return "s3" }
 
+func (s *S3Sink) Check(ctx context.Context) error {
+	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(s.bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("check s3 sink bucket %q: %w", s.bucket, err)
+	}
+	return nil
+}
+
 func (s *S3Sink) Upload(ctx context.Context, src Source, meta Meta) (Receipt, error) {
 	reader, err := src.Open()
 	if err != nil {

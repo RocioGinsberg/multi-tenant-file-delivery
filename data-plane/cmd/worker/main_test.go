@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,5 +109,20 @@ func TestRunRejectsKafkaTransportWithoutBrokers(t *testing.T) {
 	}, &stderr)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestRunKafkaStartupCheckFailsFast(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-transport", "kafka",
+		"-kafka-brokers", "127.0.0.1:1",
+		"-startup-check-timeout", "100ms",
+	}, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "connect kafka broker") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

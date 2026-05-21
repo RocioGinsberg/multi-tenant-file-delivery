@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -114,6 +116,35 @@ func TestZipArchiveResolverCachesArchiveBySourceReference(t *testing.T) {
 
 	if fetcher.calls != 1 {
 		t.Fatalf("unexpected fetch count: got %d want 1", fetcher.calls)
+	}
+}
+
+func TestS3ObjectFetcherCheckBucket(t *testing.T) {
+	var gotMethod string
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	fetcher, err := NewS3ObjectFetcher(context.Background(), S3Config{
+		Endpoint:        server.URL,
+		Region:          "us-east-1",
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		UsePathStyle:    true,
+	})
+	if err != nil {
+		t.Fatalf("create fetcher: %v", err)
+	}
+
+	if err := fetcher.CheckBucket(context.Background(), "auto-upload-staging"); err != nil {
+		t.Fatalf("check bucket: %v", err)
+	}
+	if gotMethod != http.MethodHead || gotPath != "/auto-upload-staging" {
+		t.Fatalf("unexpected request: %s %s", gotMethod, gotPath)
 	}
 }
 

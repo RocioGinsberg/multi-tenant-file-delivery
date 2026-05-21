@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -270,3 +271,85 @@ func (s *trackingSink) Upload(_ context.Context, src sink.Source, meta sink.Meta
 }
 
 func (s *trackingSink) Close() error { return nil }
+
+func BenchmarkProcessTaskMockSink(b *testing.B) {
+	cases := []struct {
+		name            string
+		items           int
+		size            int
+		itemConcurrency int
+	}{
+		{name: "10_items_16KiB_c1", items: 10, size: 16 * 1024, itemConcurrency: 1},
+		{name: "10_items_16KiB_c4", items: 10, size: 16 * 1024, itemConcurrency: 4},
+		{name: "100_items_16KiB_c1", items: 100, size: 16 * 1024, itemConcurrency: 1},
+		{name: "100_items_16KiB_c4", items: 100, size: 16 * 1024, itemConcurrency: 4},
+		{name: "1000_items_16KiB_c1", items: 1000, size: 16 * 1024, itemConcurrency: 1},
+		{name: "1000_items_16KiB_c4", items: 1000, size: 16 * 1024, itemConcurrency: 4},
+		{name: "10_items_1MiB_c1", items: 10, size: 1024 * 1024, itemConcurrency: 1},
+		{name: "10_items_1MiB_c4", items: 10, size: 1024 * 1024, itemConcurrency: 4},
+		{name: "100_items_1MiB_c1", items: 100, size: 1024 * 1024, itemConcurrency: 1},
+		{name: "100_items_1MiB_c4", items: 100, size: 1024 * 1024, itemConcurrency: 4},
+		{name: "1000_items_1MiB_c1", items: 1000, size: 1024 * 1024, itemConcurrency: 1},
+		{name: "1000_items_1MiB_c4", items: 1000, size: 1024 * 1024, itemConcurrency: 4},
+	}
+
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			task := benchmarkTask(tc.items)
+			resolver := benchmarkResolver{payload: bytesOfSize(tc.size)}
+			b.SetBytes(int64(tc.items * tc.size))
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				result, err := ProcessTaskWithResolverOptions(
+					context.Background(),
+					task,
+					sink.NewMockSink(),
+					resolver,
+					Options{MaxItemConcurrency: tc.itemConcurrency},
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if result.Uploaded != tc.items || result.Failed != 0 {
+					b.Fatalf("unexpected result: %+v", result)
+				}
+			}
+		})
+	}
+}
+
+func benchmarkTask(items int) message.DeliveryTask {
+	task := message.DeliveryTask{
+		TaskID: "bench-task",
+		Items:  make([]message.DeliveryItem, 0, items),
+	}
+	for i := 0; i < items; i++ {
+		itemID := "item-" + strconv.Itoa(i)
+		task.Items = append(task.Items, message.DeliveryItem{
+			ItemID:       itemID,
+			SourcePath:   itemID + ".bin",
+			DstPath:      "bench/" + itemID + ".bin",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		})
+	}
+	return task
+}
+
+func bytesOfSize(size int) []byte {
+	payload := make([]byte, size)
+	for i := range payload {
+		payload[i] = byte(i % 251)
+	}
+	return payload
+}
+
+type benchmarkResolver struct {
+	payload []byte
+}
+
+func (r benchmarkResolver) Resolve(_ context.Context, _ message.DeliveryTask, item message.DeliveryItem) (source.Source, error) {
+	return source.NewMemorySource("memory://"+item.SourcePath, r.payload), nil
+}

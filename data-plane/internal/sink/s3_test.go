@@ -16,6 +16,10 @@ func TestS3SinkUploadsObject(t *testing.T) {
 	var gotPath string
 	var gotBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		gotPath = r.URL.Path
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -62,6 +66,36 @@ func TestS3SinkUploadsObject(t *testing.T) {
 	}
 	if receipt.Key != "reports/report.txt" || receipt.Size != 5 || receipt.SHA256 != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
 		t.Fatalf("unexpected receipt: %+v", receipt)
+	}
+}
+
+func TestS3SinkCheckHeadBucket(t *testing.T) {
+	var gotMethod string
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	s3Sink, err := NewS3Sink(context.Background(), S3Config{
+		Endpoint:        server.URL,
+		Region:          "us-east-1",
+		Bucket:          "auto-upload-dev",
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		UsePathStyle:    true,
+	})
+	if err != nil {
+		t.Fatalf("create s3 sink: %v", err)
+	}
+
+	if err := s3Sink.Check(context.Background()); err != nil {
+		t.Fatalf("check sink: %v", err)
+	}
+	if gotMethod != http.MethodHead || gotPath != "/auto-upload-dev" {
+		t.Fatalf("unexpected request: %s %s", gotMethod, gotPath)
 	}
 }
 

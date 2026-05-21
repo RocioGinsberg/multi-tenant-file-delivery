@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
@@ -33,10 +34,13 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	kafkaResultTopic := flags.String("kafka-result-topic", "delivery.results.v1", "Kafka topic for delivery results")
 	kafkaGroupID := flags.String("kafka-group-id", "data-plane-worker", "Kafka consumer group ID")
 	kafkaBatchSize := flags.Int("kafka-batch-size", 1, "number of Kafka task messages to process per run")
+	startupCheck := flags.Bool("startup-check", true, "check external Kafka/S3 dependencies before processing tasks")
+	startupCheckTimeout := flags.Duration("startup-check-timeout", 3*time.Second, "timeout for startup dependency checks")
 	sinkName := flags.String("sink", "mock", "sink implementation: mock, s3")
 	s3Endpoint := flags.String("s3-endpoint", "http://localhost:9000", "S3-compatible endpoint for s3 sink")
 	s3Region := flags.String("s3-region", "us-east-1", "S3 region for s3 sink")
 	s3Bucket := flags.String("s3-bucket", "auto-upload-dev", "S3 bucket for s3 sink")
+	stagingBucket := flags.String("staging-bucket", "auto-upload-staging", "staging bucket checked when source-mode=object")
 	s3AccessKey := flags.String("s3-access-key-id", "minioadmin", "S3 access key ID for s3 sink")
 	s3SecretKey := flags.String("s3-secret-access-key", "minioadmin", "S3 secret access key for s3 sink")
 	s3PathStyle := flags.Bool("s3-path-style", true, "use path-style addressing for S3-compatible sinks")
@@ -48,6 +52,15 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	}
 	if *itemConcurrency <= 0 {
 		return fmt.Errorf("item concurrency must be positive")
+	}
+	if *startupCheckTimeout <= 0 {
+		return fmt.Errorf("startup check timeout must be positive")
+	}
+	checkCtx := ctx
+	var cancelCheck context.CancelFunc
+	if *startupCheck {
+		checkCtx, cancelCheck = context.WithTimeout(ctx, *startupCheckTimeout)
+		defer cancelCheck()
 	}
 
 	var sinkImpl sink.Sink = sink.NewMockSink()
@@ -64,6 +77,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		})
 		if err != nil {
 			return fmt.Errorf("create s3 sink: %w", err)
+		}
+		if *startupCheck {
+			if err := s3Sink.Check(checkCtx); err != nil {
+				return err
+			}
+			log.Printf("startup check passed: s3 sink bucket=%s", *s3Bucket)
 		}
 		sinkImpl = s3Sink
 	default:
@@ -96,6 +115,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("create source fetcher: %w", err)
 		}
+		if *startupCheck {
+			if err := fetcher.CheckBucket(checkCtx, *stagingBucket); err != nil {
+				return err
+			}
+			log.Printf("startup check passed: source bucket=%s", *stagingBucket)
+		}
 		sourceResolver = source.NewZipArchiveResolver(fetcher)
 	default:
 		return fmt.Errorf("unsupported source mode %q", *sourceMode)
@@ -124,6 +149,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		})
 		if err != nil {
 			return fmt.Errorf("create kafka transport: %w", err)
+		}
+		if *startupCheck {
+			if err := transport.CheckKafkaConnectivity(checkCtx, transport.ParseBrokerList(*kafkaBrokers)); err != nil {
+				return err
+			}
+			log.Printf("startup check passed: kafka brokers=%s", *kafkaBrokers)
 		}
 		defer kafkaTransport.Close()
 		taskConsumer = kafkaTransport

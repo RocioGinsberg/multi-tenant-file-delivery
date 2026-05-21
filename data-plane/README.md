@@ -87,11 +87,39 @@ go run ./cmd/worker \
   -s3-region us-east-1 \
   -s3-access-key-id minioadmin \
   -s3-secret-access-key minioadmin \
+  -staging-bucket auto-upload-staging \
   -s3-path-style=true \
   -sink mock
 ```
 
 同一 worker 进程内，object source resolver 会按 `bucket/key` 缓存 staged archive，避免同一 task 多 item 重复下载原始 zip。
+
+Production-like Kafka + object source + S3 sink：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -kafka-task-topic delivery.tasks.v1 \
+  -kafka-result-topic delivery.results.v1 \
+  -kafka-group-id data-plane-worker \
+  -source-mode object \
+  -sink s3 \
+  -s3-endpoint http://localhost:9000 \
+  -s3-region us-east-1 \
+  -s3-bucket auto-upload-dev \
+  -s3-access-key-id minioadmin \
+  -s3-secret-access-key minioadmin \
+  -staging-bucket auto-upload-staging \
+  -s3-path-style=true \
+  -item-concurrency 4
+```
+
+worker 默认会在处理任务前检查外部依赖：
+- `-transport kafka`：用 `-startup-check-timeout` 限制 Kafka broker TCP 连接检查。
+- `-source-mode object`：对 `-staging-bucket` 执行 S3 `HeadBucket`。
+- `-sink s3`：对 `-s3-bucket` 执行 S3 `HeadBucket`。
+
+本地离线调试可临时加 `-startup-check=false` 跳过这些检查。
 
 本地 Kafka / MinIO：
 ```bash

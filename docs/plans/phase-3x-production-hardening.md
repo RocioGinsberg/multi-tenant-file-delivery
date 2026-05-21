@@ -114,7 +114,7 @@ control-plane
 
 ### 3.12 Benchmark baseline
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 新增 benchmark 文档或脚本入口。
@@ -122,6 +122,12 @@ control-plane
 - **验收**：
   - 有可复跑命令。
   - `docs/BENCHMARKS.md` 或本计划记录一组基线结果。
+- **实际变更**：
+  - `data-plane/internal/pipeline`：新增 `BenchmarkProcessTaskMockSink`，覆盖 10 / 100 / 1000 item、16 KiB / 1 MiB payload、item concurrency 1 / 4。
+  - `docs/BENCHMARKS.md`：记录复跑命令、测试环境、代表结果和适用边界。
+- **验证**：
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/pipeline`
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/pipeline -run '^$' -bench 'BenchmarkProcessTaskMockSink' -benchmem -count 3`
 
 ### 3.13 Staging source metadata
 
@@ -195,17 +201,22 @@ control-plane
 
 ### 3.18 Config profiles
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 整理 local / docker / production-like 配置差异。
   - 明确 MySQL / Kafka / MinIO / S3 参数从 env 注入。
 - **验收**：
   - README 有 object source + Kafka 的最小生产形态配置表。
+- **实际变更**：
+  - `control-plane/README.md`：新增 local file-spool、Docker object source、production-like Kafka 配置 profiles 和最小 env 示例。
+  - `data-plane/README.md`：新增 production-like Kafka + object source + S3 sink worker 启动命令。
+- **验证**：
+  - Not run; documentation-only change.
 
 ### 3.19 Worker health / readiness
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - worker 启动时检查 Kafka / S3 配置。
@@ -213,6 +224,14 @@ control-plane
 - **验收**：
   - 错误 broker / S3 endpoint 能快速失败。
   - 日志能定位是 Kafka、source storage 还是 sink 配置错误。
+- **实际变更**：
+  - `data-plane/cmd/worker`：新增默认开启的 `-startup-check`、`-startup-check-timeout` 和 `-staging-bucket` 参数。
+  - `data-plane/internal/transport`：新增 Kafka broker TCP startup check。
+  - `data-plane/internal/source`：object source fetcher 支持 staging bucket `HeadBucket` 检查。
+  - `data-plane/internal/sink`：S3 sink 支持目标 bucket `HeadBucket` 检查。
+  - `data-plane/README.md`：记录 startup check 行为和临时跳过方式。
+- **验证**：
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...`
 
 ## 四、建议执行顺序
 

@@ -64,3 +64,16 @@ func (f *S3ObjectFetcher) GetObject(ctx context.Context, bucket, key string) ([]
 	}
 	return data, nil
 }
+
+func (f *S3ObjectFetcher) CheckBucket(ctx context.Context, bucket string) error {
+	if bucket == "" {
+		return fmt.Errorf("staging bucket is required")
+	}
+	_, err := f.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("check source bucket %q: %w", bucket, err)
+	}
+	return nil
+}

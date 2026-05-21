@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 
 	kafka "github.com/segmentio/kafka-go"
@@ -115,6 +116,18 @@ func (t *KafkaTransport) Close() error {
 		return readerErr
 	}
 	return writerErr
+}
+
+func CheckKafkaConnectivity(ctx context.Context, brokers []string) error {
+	if len(brokers) == 0 {
+		return fmt.Errorf("kafka brokers are required")
+	}
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", brokers[0])
+	if err != nil {
+		return fmt.Errorf("connect kafka broker %q: %w", brokers[0], err)
+	}
+	return conn.Close()
 }
 
 func ParseBrokerList(raw string) []string {

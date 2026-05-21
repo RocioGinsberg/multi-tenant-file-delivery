@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     kafka_result_topic: str = "delivery.results.v1"
     kafka_result_group_id: str = "control-plane-results"
 
+    # ── Redis capability layer (Phase 4) ──
+    redis_url: str = "redis://localhost:6379/0"
+    progress_backend: str = "memory"
+    redis_socket_timeout_seconds: float = 1.0
+    redis_healthcheck_enabled: bool = False
+
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"
 

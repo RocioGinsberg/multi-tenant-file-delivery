@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,6 +29,8 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	inbox := flags.String("inbox", "/tmp/auto_upload_outbox/delivery.tasks.v1", "directory containing delivery task JSON")
 	results := flags.String("results", "/tmp/auto_upload_outbox/delivery.results.v1", "directory for result JSON")
+	redisURL := flags.String("redis-url", "redis://localhost:6379/0", "Redis URL reserved for future limiter support")
+	redisLimiterEnabled := flags.Bool("redis-limiter-enabled", false, "enable Redis limiter wiring in a later phase")
 	transportName := flags.String("transport", "file", "task/result transport: file, kafka")
 	kafkaBrokers := flags.String("kafka-brokers", "localhost:9092", "comma-separated Kafka broker addresses")
 	kafkaTaskTopic := flags.String("kafka-task-topic", "delivery.tasks.v1", "Kafka topic for delivery tasks")
@@ -51,12 +54,20 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	parsedRedisURL, err := url.Parse(*redisURL)
+	if err != nil {
+		return fmt.Errorf("invalid redis url %q: %w", *redisURL, err)
+	}
+	if parsedRedisURL.Scheme == "" || parsedRedisURL.Host == "" {
+		return fmt.Errorf("invalid redis url %q: missing scheme or host", *redisURL)
+	}
 	if *itemConcurrency <= 0 {
 		return fmt.Errorf("item concurrency must be positive")
 	}
 	if *startupCheckTimeout <= 0 {
 		return fmt.Errorf("startup check timeout must be positive")
 	}
+	log.Printf("redis-limiter-enabled=%t redis-url=%s", *redisLimiterEnabled, parsedRedisURL.Redacted())
 	checkCtx := ctx
 	var cancelCheck context.CancelFunc
 	if *startupCheck {

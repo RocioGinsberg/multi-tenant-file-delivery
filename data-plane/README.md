@@ -115,6 +115,16 @@ go run ./cmd/worker \
   -item-concurrency 4
 ```
 
+Phase 4 Redis limiter 参数已预留，当前只解析和校验，不改变 worker 执行路径：
+```bash
+go run ./cmd/worker \
+  -transport kafka \
+  -kafka-brokers localhost:9092 \
+  -redis-url redis://localhost:6379/0 \
+  -redis-limiter-enabled \
+  -sink mock
+```
+
 worker 默认会在处理任务前检查外部依赖：
 - `-transport kafka`：用 `-startup-check-timeout` 限制 Kafka broker TCP 连接检查。
 - `-source-mode object`：对 `-staging-bucket` 执行 S3 `HeadBucket`。

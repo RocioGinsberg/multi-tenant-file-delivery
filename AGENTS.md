@@ -13,6 +13,13 @@ These rules supplement global agent instructions. They should not restate genera
 - Do not append new Phase 3.x tasks back into `docs/plans/phase-3-data-layer-and-source-ref.md`.
 - If a Phase 3.x topic grows beyond a few tasks, split it into a focused `docs/plans/phase-3x-*.md` file.
 
+## Agent Dispatch
+
+- Low- and medium-risk tasks may be delegated to subagents when the user allows it.
+- Prefer medium-or-lower model tiers for delegated implementation work unless the task touches high-risk architecture, concurrency, data integrity, security, or cross-component contracts.
+- The main conversation remains responsible for reviewing subagent diffs, running verification, integrating changes, and making the final commit / PR judgment.
+- Do not delegate final architectural decisions, merge readiness, or release-risk assessment; keep those in the main conversation.
+
 ## Commit Policy
 
 For non-trivial behavior, test, architecture, or phase-status changes, commit messages must include a body with:

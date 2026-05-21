@@ -53,6 +53,10 @@ cp .env.example .env
 | `KAFKA_TASK_TOPIC` | `delivery.tasks.v1` | 控制面发布任务 topic |
 | `KAFKA_RESULT_TOPIC` | `delivery.results.v1` | 控制面消费结果 topic |
 | `KAFKA_RESULT_GROUP_ID` | `control-plane-results` | 控制面 result consumer group |
+| `REDIS_URL` | `redis://localhost:6379/0` | Phase 4 Redis 能力层连接地址 |
+| `PROGRESS_BACKEND` | `memory` | 进度 backend：`memory`；后续接 `redis` |
+| `REDIS_SOCKET_TIMEOUT_SECONDS` | `1.0` | Redis socket timeout |
+| `REDIS_HEALTHCHECK_ENABLED` | `false` | 是否启用 Redis opt-in health/readiness 检查 |
 
 ### 3. 起本地依赖（需要 Docker）
 
@@ -67,6 +71,12 @@ Phase 3 MySQL / Kafka / MinIO 全栈验证：
 
 ```bash
 docker compose up -d mysql kafka minio minio-init
+```
+
+Phase 4 Redis 本地依赖：
+
+```bash
+docker compose up -d redis
 ```
 
 Kafka Docker 集成测试：

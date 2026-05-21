@@ -59,7 +59,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.1 Redis compose 与配置基线
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - `deploy/docker-compose.yml` 增加 Redis 7 服务、端口、healthcheck 和 volume（如需要）。
@@ -70,9 +70,15 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
   - `cd deploy && docker compose up -d redis` 可启动。
   - control-plane settings 单测覆盖默认值和 env override。
   - 不启用 Redis 时默认测试不需要 Redis。
+- **实际变更**：
+  - `deploy/docker-compose.yml`：新增 Redis 7 compose 服务、healthcheck 和 volume。
+  - `control-plane/app/core/settings.py` / `.env.example`：新增 Redis URL、progress backend、socket timeout 和 healthcheck 配置。
+  - `data-plane/cmd/worker`：新增 Redis limiter 预留参数，只 parse / validate / redacted log，不改变执行路径。
+  - `deploy/README.md`、`control-plane/README.md`、`data-plane/README.md`：补 Redis 启动和参数说明。
 - **验证**：
   - `cd deploy && docker compose config`
   - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_settings.py`
+  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./cmd/worker`
 
 ### 4.2 Redis client 封装与健康检查
 

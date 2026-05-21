@@ -36,6 +36,19 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -71,4 +84,5 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:
   minio_data:

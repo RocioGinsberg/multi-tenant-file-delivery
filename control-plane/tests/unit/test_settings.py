@@ -37,6 +37,10 @@ class TestDefaultValues:
             "TASK_DIR_BASE",
             "DELIVERY_BACKEND",
             "DELIVERY_OUTBOX_BASE",
+            "REDIS_URL",
+            "PROGRESS_BACKEND",
+            "REDIS_SOCKET_TIMEOUT_SECONDS",
+            "REDIS_HEALTHCHECK_ENABLED",
             "CLASSIFICATION_PROFILE_PATH",
             "MAX_ZIP_BYTES",
             "MAX_UNZIPPED_BYTES",
@@ -63,6 +67,10 @@ class TestDefaultValues:
         assert s.max_unzipped_bytes == 1_073_741_824
         assert s.max_file_count == 5000
         assert s.cors_origins == "*"
+        assert s.redis_url == "redis://localhost:6379/0"
+        assert s.progress_backend == "memory"
+        assert s.redis_socket_timeout_seconds == 1.0
+        assert s.redis_healthcheck_enabled is False
 
 
 class TestDotEnvOverride:
@@ -74,6 +82,10 @@ class TestDotEnvOverride:
             "ENV",
             "S3_BUCKET_NAME",
             "WORKER_MAX_TARGET_CONCURRENT",
+            "REDIS_URL",
+            "PROGRESS_BACKEND",
+            "REDIS_SOCKET_TIMEOUT_SECONDS",
+            "REDIS_HEALTHCHECK_ENABLED",
             "CLASSIFICATION_PROFILE_PATH",
             "CORS_ORIGINS",
         ):
@@ -84,6 +96,10 @@ class TestDotEnvOverride:
             "ENV=staging\n"
             "S3_BUCKET_NAME=my-staging-bucket\n"
             "WORKER_MAX_TARGET_CONCURRENT=10\n"
+            "REDIS_URL=redis://redis.example.com:6379/2\n"
+            "PROGRESS_BACKEND=redis\n"
+            "REDIS_SOCKET_TIMEOUT_SECONDS=2.5\n"
+            "REDIS_HEALTHCHECK_ENABLED=true\n"
             "CLASSIFICATION_PROFILE_PATH=../profiles/custom/profile.json\n"
             "CORS_ORIGINS=http://example.com,http://app.example.com\n"
         )
@@ -94,6 +110,10 @@ class TestDotEnvOverride:
         assert s.env == "staging"
         assert s.s3_bucket_name == "my-staging-bucket"
         assert s.worker_max_target_concurrent == 10
+        assert s.redis_url == "redis://redis.example.com:6379/2"
+        assert s.progress_backend == "redis"
+        assert s.redis_socket_timeout_seconds == 2.5
+        assert s.redis_healthcheck_enabled is True
         assert s.classification_profile_path == "../profiles/custom/profile.json"
         assert s.cors_origins == "http://example.com,http://app.example.com"
 

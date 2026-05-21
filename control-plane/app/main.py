@@ -10,6 +10,7 @@ from app.core.db import async_engine
 from app.core.settings import get_settings
 from app.models.base import Base
 from app.services.progress_bus import ProgressBus
+from app.services.redis_client import create_redis_client
 
 
 @asynccontextmanager
@@ -51,8 +52,19 @@ app.include_router(tasks_module.router, prefix="/api/v1")
 
 @app.get("/healthz", response_class=JSONResponse)
 async def healthz() -> dict:
+    settings = get_settings()
+    checks = {"redis": "disabled"}
+    if settings.redis_healthcheck_enabled:
+        redis_client = create_redis_client(settings)
+        try:
+            await redis_client.ping()
+            checks["redis"] = "ok"
+        finally:
+            await redis_client.close()
+
     return {
         "ok": True,
         "service": "control-plane",
-        "env": get_settings().env,
+        "env": settings.env,
+        "checks": checks,
     }

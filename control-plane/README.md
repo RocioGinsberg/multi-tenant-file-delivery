@@ -136,8 +136,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 curl http://localhost:8000/healthz
-# {"ok":true,"service":"control-plane","env":"development"}
+# {"ok":true,"service":"control-plane","env":"development","checks":{"redis":"disabled"}}
 ```
+
+`REDIS_HEALTHCHECK_ENABLED=true` 时，`/healthz` 会额外 ping `REDIS_URL`，用于 Phase 4 Redis smoke / readiness 验证。
 
 ## API 路由（`/api/v1`）
 
@@ -170,6 +172,9 @@ pytest tests/e2e -v -m e2e
 
 # MySQL smoke（需要 deploy/docker-compose.yml mysql running）
 RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker.py
+
+# Redis smoke（需要 deploy/docker-compose.yml redis running）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py
 
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \

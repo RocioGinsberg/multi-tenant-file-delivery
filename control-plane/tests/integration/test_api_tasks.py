@@ -90,6 +90,31 @@ async def test_healthz(async_client):
     data = resp.json()
     assert data["ok"] is True
     assert data["service"] == "control-plane"
+    assert data["checks"]["redis"] == "disabled"
+
+
+async def test_healthz_checks_redis_when_enabled(async_client):
+    settings = MagicMock()
+    settings.env = "test"
+    settings.redis_healthcheck_enabled = True
+
+    redis_client = AsyncMock()
+    redis_client.ping = AsyncMock(return_value=True)
+    redis_client.close = AsyncMock()
+
+    with (
+        patch("app.main.get_settings", return_value=settings),
+        patch("app.main.create_redis_client", return_value=redis_client) as create_client,
+    ):
+        async with async_client as client:
+            resp = await client.get("/healthz")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["checks"]["redis"] == "ok"
+    create_client.assert_called_once_with(settings)
+    redis_client.ping.assert_awaited_once()
+    redis_client.close.assert_awaited_once()
 
 
 # ── Test 2: GET /api/v1/tasks — empty list ───────────────────────────────────

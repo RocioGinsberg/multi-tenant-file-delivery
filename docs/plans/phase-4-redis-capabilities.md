@@ -82,7 +82,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.2 Redis client 封装与健康检查
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - control-plane 新增 `app/services/redis_client.py` 或 `app/core/redis.py`。
@@ -91,9 +91,16 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 - **验收**：
   - 单测覆盖 ping 成功、连接失败、配置禁用。
   - Docker smoke 可 ping compose Redis。
+- **实际变更**：
+  - `control-plane/app/services/redis_client.py`：新增 async Redis client wrapper、factory、ping 和 close。
+  - `control-plane/app/main.py`：`/healthz` 在 `REDIS_HEALTHCHECK_ENABLED=true` 时执行 Redis ping；默认返回 disabled，不影响现有健康检查。
+  - `control-plane/tests/unit/test_redis_client.py`：覆盖 wrapper 和 factory 参数。
+  - `control-plane/tests/integration/test_redis_docker.py`：新增 Redis compose opt-in ping smoke。
+  - `control-plane/pyproject.toml` / `uv.lock`：新增 `redis` Python client。
 - **验证**：
   - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_redis_client.py`
   - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_api_tasks.py::test_healthz tests/integration/test_api_tasks.py::test_healthz_checks_redis_when_enabled`
 
 ### 4.3 ProgressBus backend 抽象
 

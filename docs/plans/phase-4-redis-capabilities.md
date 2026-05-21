@@ -1,6 +1,6 @@
 # Phase 4 — Redis 能力层
 
-> **状态**：Current（计划已启动，尚未实现）
+> **状态**：Current（4.1-4.3 已完成；4.4-4.7 待实现）
 > **目标**：把当前单进程内存态能力迁移到 Redis-backed 能力层，为多实例 control-plane、worker 集群 backpressure、跨进程进度和幂等控制打基础。
 > **完成定义**：本地 compose 可启动 Redis；control-plane 可用 Redis pub/sub 广播任务进度；任务提交和上传触发有 Redis-backed 幂等 / lease 保护；worker 发布前有可配置限流入口；Redis 不可用时有明确降级或 fail-fast 行为。
 > **前序计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
@@ -104,7 +104,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.3 ProgressBus backend 抽象
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 保留当前 `ProgressBus` 接口：`publish(task_id, event)` / `subscribe(task_id)`。
@@ -115,6 +115,13 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
   - 现有 `tests/unit/test_progress_bus.py` 对 memory backend 继续通过。
   - 新增 Redis fake / Docker 测试证明不同 bus 实例可跨进程 fanout。
   - SSE API 测试不需要改调用方式。
+- **实际变更**：
+  - `control-plane/app/services/progress_bus.py`：新增 memory / Redis backend 抽象、`create_progress_bus(settings)` 工厂、Redis pub/sub channel `progress:{task_id}`、close sentinel 和 progress-only memory fallback。
+  - `control-plane/app/main.py`：lifespan 按 `PROGRESS_BACKEND` 创建 progress bus，并在 shutdown 关闭 backend 资源。
+  - `control-plane/app/api/tasks.py`：SSE progress 路由增加 disconnect 检查和 keep-alive，保持响应契约不变。
+  - `control-plane/tests/unit/test_progress_bus.py`：保留现有 memory fanout 测试，并新增 Redis 工厂 / 编码 / fallback 单测。
+  - `control-plane/tests/integration/test_progress_redis_docker.py`：新增 Redis Docker opt-in smoke，证明两个独立 bus 实例可跨 Redis fanout 和 close。
+  - `control-plane/README.md`、`control-plane/.env.example`：同步 `PROGRESS_BACKEND=redis` 说明和 smoke 命令。
 - **验证**：
   - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_progress_bus.py tests/integration/test_api_tasks.py::test_progress_sse`
   - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_redis_docker.py`

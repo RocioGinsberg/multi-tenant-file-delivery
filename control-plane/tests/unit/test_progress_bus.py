@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 
 import pytest
+
+from app.core.settings import Settings
 
 
 @pytest.fixture
@@ -168,3 +171,67 @@ async def test_slow_consumer_does_not_block_publisher(ProgressBus):
         # Now consume all 10 events in order
         received = [await q.get() for _ in events]
     assert received == events
+
+
+def test_create_progress_bus_rejects_unknown_backend():
+    module = importlib.import_module("app.services.progress_bus")
+
+    with pytest.raises(ValueError, match="Unsupported progress_backend"):
+        module.create_progress_bus(Settings(progress_backend="unknown"))
+
+
+async def test_redis_progress_bus_publishes_json_and_close_sentinel(monkeypatch):
+    module = importlib.import_module("app.services.progress_bus")
+
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.published: list[tuple[str, str]] = []
+            self.closed = False
+
+        async def publish(self, channel: str, message: str) -> None:
+            self.published.append((channel, message))
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    fake = FakeRedis()
+    monkeypatch.setattr(module.Redis, "from_url", lambda *args, **kwargs: fake)
+
+    bus = module.create_progress_bus(Settings(progress_backend="redis"))
+    event = {"type": "progress", "pct": 64}
+
+    await bus.publish("task-redis", event)
+    await bus.close_task("task-redis")
+    await bus.aclose()
+
+    assert fake.published == [
+        ("progress:task-redis", json.dumps(event)),
+        ("progress:task-redis", "__progress_bus_close__"),
+    ]
+    assert fake.closed is True
+
+
+async def test_redis_progress_bus_falls_back_to_memory_when_redis_is_down(monkeypatch):
+    module = importlib.import_module("app.services.progress_bus")
+
+    class FailingRedis:
+        def pubsub(self, *args, **kwargs):
+            raise module.RedisError("redis down")
+
+        async def publish(self, channel: str, message: str) -> None:
+            raise module.RedisError("redis down")
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr(module.Redis, "from_url", lambda *args, **kwargs: FailingRedis())
+
+    bus = module.create_progress_bus(Settings(progress_backend="redis"))
+    event = {"type": "progress", "pct": 12}
+
+    async with bus.subscribe("task-fallback") as queue:
+        await bus.publish("task-fallback", event)
+        assert await queue.get() == event
+
+        await bus.close_task("task-fallback")
+        assert await queue.get() is None

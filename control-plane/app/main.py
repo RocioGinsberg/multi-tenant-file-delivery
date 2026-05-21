@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app.core.db import async_engine
 from app.core.settings import get_settings
 from app.models.base import Base
-from app.services.progress_bus import ProgressBus
+from app.services.progress_bus import create_progress_bus
 from app.services.redis_client import create_redis_client
 
 
@@ -20,12 +20,14 @@ async def lifespan(application: FastAPI):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    bus = ProgressBus()
+    bus = create_progress_bus(get_settings())
     init_progress_bus(bus)
 
-    yield
-
-    await async_engine.dispose()
+    try:
+        yield
+    finally:
+        await bus.aclose()
+        await async_engine.dispose()
 
 
 app = FastAPI(title="Auto Upload Control Plane", lifespan=lifespan)

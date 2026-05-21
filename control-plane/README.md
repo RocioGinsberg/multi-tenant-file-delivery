@@ -54,7 +54,7 @@ cp .env.example .env
 | `KAFKA_RESULT_TOPIC` | `delivery.results.v1` | 控制面消费结果 topic |
 | `KAFKA_RESULT_GROUP_ID` | `control-plane-results` | 控制面 result consumer group |
 | `REDIS_URL` | `redis://localhost:6379/0` | Phase 4 Redis 能力层连接地址 |
-| `PROGRESS_BACKEND` | `memory` | 进度 backend：`memory`；后续接 `redis` |
+| `PROGRESS_BACKEND` | `memory` | 进度 backend：`memory` 或 `redis`；Redis 模式用于跨实例 SSE fanout |
 | `REDIS_SOCKET_TIMEOUT_SECONDS` | `1.0` | Redis socket timeout |
 | `REDIS_HEALTHCHECK_ENABLED` | `false` | 是否启用 Redis opt-in health/readiness 检查 |
 
@@ -175,6 +175,9 @@ RUN_MYSQL_TESTS=1 .venv/bin/python -m pytest tests/integration/test_mysql_docker
 
 # Redis smoke（需要 deploy/docker-compose.yml redis running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docker.py
+
+# Redis progress backend smoke（证明两个 control-plane bus 实例可跨 Redis fanout）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_redis_docker.py
 
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \

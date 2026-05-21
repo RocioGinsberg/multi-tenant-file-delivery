@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -9,7 +10,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -557,13 +567,20 @@ async def get_task(
 
 @router.get("/tasks/{task_id}/progress")
 async def task_progress(
+    request: Request,
     task_id: str,
     bus: ProgressBusDep,
 ):
     async def event_stream():
         async with bus.subscribe(task_id) as queue:
             while True:
-                event = await queue.get()
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
                 if event is None:
                     break
                 yield f"data: {json.dumps(event)}\n\n"

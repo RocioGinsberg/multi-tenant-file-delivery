@@ -41,6 +41,8 @@ class TestDefaultValues:
             "PROGRESS_BACKEND",
             "REDIS_SOCKET_TIMEOUT_SECONDS",
             "REDIS_HEALTHCHECK_ENABLED",
+            "REDIS_IDEMPOTENCY_ENABLED",
+            "REDIS_IDEMPOTENCY_TTL_SECONDS",
             "CLASSIFICATION_PROFILE_PATH",
             "MAX_ZIP_BYTES",
             "MAX_UNZIPPED_BYTES",
@@ -71,6 +73,8 @@ class TestDefaultValues:
         assert s.progress_backend == "memory"
         assert s.redis_socket_timeout_seconds == 1.0
         assert s.redis_healthcheck_enabled is False
+        assert s.redis_idempotency_enabled is False
+        assert s.redis_idempotency_ttl_seconds == 60
 
 
 class TestDotEnvOverride:
@@ -86,6 +90,8 @@ class TestDotEnvOverride:
             "PROGRESS_BACKEND",
             "REDIS_SOCKET_TIMEOUT_SECONDS",
             "REDIS_HEALTHCHECK_ENABLED",
+            "REDIS_IDEMPOTENCY_ENABLED",
+            "REDIS_IDEMPOTENCY_TTL_SECONDS",
             "CLASSIFICATION_PROFILE_PATH",
             "CORS_ORIGINS",
         ):
@@ -100,6 +106,8 @@ class TestDotEnvOverride:
             "PROGRESS_BACKEND=redis\n"
             "REDIS_SOCKET_TIMEOUT_SECONDS=2.5\n"
             "REDIS_HEALTHCHECK_ENABLED=true\n"
+            "REDIS_IDEMPOTENCY_ENABLED=true\n"
+            "REDIS_IDEMPOTENCY_TTL_SECONDS=30\n"
             "CLASSIFICATION_PROFILE_PATH=../profiles/custom/profile.json\n"
             "CORS_ORIGINS=http://example.com,http://app.example.com\n"
         )
@@ -114,6 +122,8 @@ class TestDotEnvOverride:
         assert s.progress_backend == "redis"
         assert s.redis_socket_timeout_seconds == 2.5
         assert s.redis_healthcheck_enabled is True
+        assert s.redis_idempotency_enabled is True
+        assert s.redis_idempotency_ttl_seconds == 30
         assert s.classification_profile_path == "../profiles/custom/profile.json"
         assert s.cors_origins == "http://example.com,http://app.example.com"
 

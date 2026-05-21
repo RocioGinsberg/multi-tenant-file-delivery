@@ -49,7 +49,7 @@
 
 **Phase 3.x（完成）**：Kafka source-reference e2e、archive cache、GC、幂等、benchmark、配置 profile、worker startup check、最小 DLQ 和 review hardening 已落地。
 
-**Phase 4（当前）**：Redis 能力层。已落地 Redis compose / health smoke 和跨实例 progress pub/sub；下一步补短 TTL 幂等、lease 和限流，不替代 Kafka 的 durable task/result transport。
+**Phase 4（当前）**：Redis 能力层。已落地 Redis compose / health smoke、跨实例 progress pub/sub 和短 TTL idempotency guard；下一步补 lease 和限流，不替代 Kafka 的 durable task/result transport。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

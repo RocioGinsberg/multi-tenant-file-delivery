@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     progress_backend: str = "memory"
     redis_socket_timeout_seconds: float = 1.0
     redis_healthcheck_enabled: bool = False
+    redis_idempotency_enabled: bool = False
+    redis_idempotency_ttl_seconds: int = 60
 
     # ── Classification profile (used by 1.5 classifier) ──
     classification_profile_path: str = "../profiles/hq_subsidiary_reports_v1/profile.json"

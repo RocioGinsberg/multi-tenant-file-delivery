@@ -13,7 +13,7 @@
 
 **Phase 3 / 3.x Done**：MySQL 已作为主数据库目标接入本地 compose；source reference 基础链路、Kafka source-reference e2e、GC、幂等、readiness、最小 DLQ 和 review hardening 已完成。HQ 选择文件夹后，control-plane 生成内部 archive 并可暂存到 MinIO / S3 staging bucket，Go worker 可通过 `-source-mode object` 从 staged archive 读取 item bytes。
 
-**Phase 4 Current**：Redis 能力层已完成 compose / 配置基线、control-plane Redis client / health smoke，以及 `ProgressBus` memory / Redis backend 抽象。`PROGRESS_BACKEND=redis` 时 SSE progress 可通过 Redis pub/sub 跨 control-plane 实例 fanout；后续继续补短 TTL 幂等、lease 和限流。Redis 不替代 Kafka。
+**Phase 4 Current**：Redis 能力层已完成 compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` memory / Redis backend 抽象，以及短 TTL idempotency guard。`PROGRESS_BACKEND=redis` 时 SSE progress 可通过 Redis pub/sub 跨 control-plane 实例 fanout；`REDIS_IDEMPOTENCY_ENABLED=true` 时 create/upload trigger 会用 Redis claim 挡住正在处理的重复请求。后续继续补 lease 和限流。Redis 不替代 Kafka。
 
 ## 写路径详细时序图
 

@@ -42,6 +42,7 @@ from app.services.delivery import (
     KafkaDeliveryPublisher,
     build_delivery_task_message,
 )
+from app.services.idempotency_guard import IdempotencyClaim, create_idempotency_guard
 from app.services.progress_bus import ProgressBus
 from app.services.staging_source import (
     INTERNAL_ARCHIVE_DIR,
@@ -84,6 +85,28 @@ def init_progress_bus(bus: ProgressBus) -> None:
     global _progress_bus
     _progress_bus = bus
     set_progress_bus(bus)
+
+
+async def _acquire_idempotency_claim(settings, operation: str, identity: str) -> IdempotencyClaim:
+    guard = create_idempotency_guard(settings)
+    try:
+        claim = await guard.acquire(operation, identity)
+    finally:
+        await guard.aclose()
+    if not claim.acquired:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{operation} for {identity!r} is already in progress",
+        )
+    return claim
+
+
+async def _release_idempotency_claim(settings, claim: IdempotencyClaim) -> None:
+    guard = create_idempotency_guard(settings)
+    try:
+        await guard.release(claim)
+    finally:
+        await guard.aclose()
 
 
 def _load_profile(path: str) -> ProfileConfig:
@@ -311,49 +334,53 @@ async def create_task(
     settings = get_settings()
 
     key = idempotency_key or str(uuid.uuid4())
+    claim = await _acquire_idempotency_claim(settings, "create_task", key)
 
-    existing = await _task_repo.get_by_idempotency_key(session, key)
-    if existing is not None:
-        from fastapi.responses import JSONResponse as _JSONResponse
-        return _JSONResponse(
-            status_code=200,
-            content={"task_id": existing.id, "status": existing.status},
+    try:
+        existing = await _task_repo.get_by_idempotency_key(session, key)
+        if existing is not None:
+            from fastapi.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(
+                status_code=200,
+                content={"task_id": existing.id, "status": existing.status},
+            )
+
+        prepared = await _prepare_folder_upload(
+            [upload for upload in files or [] if upload.filename],
+            settings,
+            submission_label=submission_label,
         )
+        task = await _task_repo.create(
+            session,
+            idempotency_key=key,
+            submission_label=prepared.label,
+            status="draft",
+        )
+        task_id = task.id
 
-    prepared = await _prepare_folder_upload(
-        [upload for upload in files or [] if upload.filename],
-        settings,
-        submission_label=submission_label,
-    )
-    task = await _task_repo.create(
-        session,
-        idempotency_key=key,
-        submission_label=prepared.label,
-        status="draft",
-    )
-    task_id = task.id
+        extract_dir = os.path.join(settings.task_dir_base, task_id)
+        os.makedirs(extract_dir, exist_ok=True)
 
-    extract_dir = os.path.join(settings.task_dir_base, task_id)
-    os.makedirs(extract_dir, exist_ok=True)
+        original_zip_path = task_archive_path(extract_dir)
+        os.makedirs(os.path.dirname(original_zip_path), exist_ok=True)
+        with open(original_zip_path, "wb") as f:
+            f.write(prepared.zip_bytes)
 
-    original_zip_path = task_archive_path(extract_dir)
-    os.makedirs(os.path.dirname(original_zip_path), exist_ok=True)
-    with open(original_zip_path, "wb") as f:
-        f.write(prepared.zip_bytes)
+        _extract_archive(prepared.zip_bytes, extract_dir, settings)
 
-    _extract_archive(prepared.zip_bytes, extract_dir, settings)
+        task_obj = await _task_repo.get(session, task_id)
+        task_obj.temp_dir = extract_dir
+        await session.flush()
+        await session.commit()
 
-    task_obj = await _task_repo.get(session, task_id)
-    task_obj.temp_dir = extract_dir
-    await session.flush()
-    await session.commit()
-
-    final = await _task_repo.get(session, task_id)
-    from fastapi.responses import JSONResponse
-    return JSONResponse(
-        status_code=201,
-        content={"task_id": final.id, "status": final.status},
-    )
+        final = await _task_repo.get(session, task_id)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=201,
+            content={"task_id": final.id, "status": final.status},
+        )
+    finally:
+        await _release_idempotency_claim(settings, claim)
 
 
 @router.post("/tasks/{task_id}/classify")
@@ -463,77 +490,84 @@ async def upload_task(
         )
 
     settings = get_settings()
+    upload_claim = await _acquire_idempotency_claim(settings, "upload_task", task_id)
     delivery_backend = getattr(settings, "delivery_backend", "python")
-    if delivery_backend == "go-worker":
-        # Phase 2 bridge: the control plane owns classification and task state,
-        # while the data plane only receives uploadable item specs.
-        items = await _item_repo.list_by_task(session, task_id)
-        upload_items = [
-            item
-            for item in items
-            if item.severity in ("ok", "warning") and item.upload_status == "pending"
-        ]
-        delivery_transport = getattr(settings, "delivery_transport", "file")
-        if delivery_transport == "file":
-            publisher = FileSpoolDeliveryPublisher(
-                getattr(settings, "delivery_outbox_base", settings.task_dir_base),
-            )
-        elif delivery_transport == "kafka":
-            publisher = KafkaDeliveryPublisher(
-                bootstrap_servers=settings.kafka_bootstrap_servers,
-                topic=settings.kafka_task_topic,
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Unsupported delivery transport: {delivery_transport!r}",
-            )
-        source_ref = None
-        try:
-            if getattr(settings, "delivery_source_mode", "file") == "object":
-                source_ref = await stage_task_archive(
-                    task,
-                    bucket_name=getattr(settings, "staging_bucket_name", None),
+    try:
+        if delivery_backend == "go-worker":
+            # Phase 2 bridge: the control plane owns classification and task state,
+            # while the data plane only receives uploadable item specs.
+            items = await _item_repo.list_by_task(session, task_id)
+            upload_items = [
+                item
+                for item in items
+                if item.severity in ("ok", "warning") and item.upload_status == "pending"
+            ]
+            delivery_transport = getattr(settings, "delivery_transport", "file")
+            if delivery_transport == "file":
+                publisher = FileSpoolDeliveryPublisher(
+                    getattr(settings, "delivery_outbox_base", settings.task_dir_base),
                 )
-                await _event_repo.append(session, task_id, "task_staged_source", {
-                    "type": source_ref.type,
-                    "bucket": source_ref.bucket,
-                    "key": source_ref.key,
-                    "sha256": source_ref.sha256,
-                    "size": source_ref.size,
-                })
-                await session.commit()
+            elif delivery_transport == "kafka":
+                publisher = KafkaDeliveryPublisher(
+                    bootstrap_servers=settings.kafka_bootstrap_servers,
+                    topic=settings.kafka_task_topic,
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Unsupported delivery transport: {delivery_transport!r}",
+                )
+            source_ref = None
+            try:
+                if getattr(settings, "delivery_source_mode", "file") == "object":
+                    source_ref = await stage_task_archive(
+                        task,
+                        bucket_name=getattr(settings, "staging_bucket_name", None),
+                    )
+                    await _event_repo.append(session, task_id, "task_staged_source", {
+                        "type": source_ref.type,
+                        "bucket": source_ref.bucket,
+                        "key": source_ref.key,
+                        "sha256": source_ref.sha256,
+                        "size": source_ref.size,
+                    })
+                    await session.commit()
 
-            message = build_delivery_task_message(
-                task=task,
-                upload_items=upload_items,
-                bucket_name=settings.s3_bucket_name,
-                source=source_ref,
-            )
-            await publisher.publish(message)
-        except Exception:
-            if source_ref is not None:
-                await delete_staged_archive(source_ref)
-                await _event_repo.append(session, task_id, "task_staged_source_deleted", {
-                    "bucket": source_ref.bucket,
-                    "key": source_ref.key,
-                    "reason": "publish_failed",
-                    "deleted_at": datetime.now(UTC).isoformat(),
-                })
-                await session.commit()
-            raise
+                message = build_delivery_task_message(
+                    task=task,
+                    upload_items=upload_items,
+                    bucket_name=settings.s3_bucket_name,
+                    source=source_ref,
+                )
+                await publisher.publish(message)
+            except Exception:
+                if source_ref is not None:
+                    await delete_staged_archive(source_ref)
+                    await _event_repo.append(session, task_id, "task_staged_source_deleted", {
+                        "bucket": source_ref.bucket,
+                        "key": source_ref.key,
+                        "reason": "publish_failed",
+                        "deleted_at": datetime.now(UTC).isoformat(),
+                    })
+                    await session.commit()
+                raise
 
-        await _task_repo.update_status(session, task_id, "queued")
-        await _event_repo.append(session, task_id, "task_queued", {
-            "topic": message.topic,
-            "transport": delivery_transport,
-            "upload_items": len(upload_items),
-        })
-        await session.commit()
-        return {"task_id": task_id, "status": "queued"}
+            await _task_repo.update_status(session, task_id, "queued")
+            await _event_repo.append(session, task_id, "task_queued", {
+                "topic": message.topic,
+                "transport": delivery_transport,
+                "upload_items": len(upload_items),
+            })
+            await session.commit()
+            return {"task_id": task_id, "status": "queued"}
 
-    background_tasks.add_task(run_task, task_id)
-    return {"task_id": task_id, "status": "uploading"}
+        background_tasks.add_task(run_task, task_id)
+        return {"task_id": task_id, "status": "uploading"}
+    finally:
+        if delivery_backend == "go-worker":
+            await _release_idempotency_claim(settings, upload_claim)
+        elif not getattr(settings, "redis_idempotency_enabled", False):
+            await _release_idempotency_claim(settings, upload_claim)
 
 
 @router.post("/tasks/{task_id}/retry")

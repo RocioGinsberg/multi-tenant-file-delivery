@@ -57,6 +57,8 @@ cp .env.example .env
 | `PROGRESS_BACKEND` | `memory` | 进度 backend：`memory` 或 `redis`；Redis 模式用于跨实例 SSE fanout |
 | `REDIS_SOCKET_TIMEOUT_SECONDS` | `1.0` | Redis socket timeout |
 | `REDIS_HEALTHCHECK_ENABLED` | `false` | 是否启用 Redis opt-in health/readiness 检查 |
+| `REDIS_IDEMPOTENCY_ENABLED` | `false` | 是否启用 Redis 短 TTL idempotency guard |
+| `REDIS_IDEMPOTENCY_TTL_SECONDS` | `60` | create/upload guard claim TTL |
 
 ### 3. 起本地依赖（需要 Docker）
 
@@ -178,6 +180,9 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_docke
 
 # Redis progress backend smoke（证明两个 control-plane bus 实例可跨 Redis fanout）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_progress_redis_docker.py
+
+# Redis idempotency guard smoke（证明两个 control-plane 实例共享短 TTL claim）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency_redis_docker.py
 
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \

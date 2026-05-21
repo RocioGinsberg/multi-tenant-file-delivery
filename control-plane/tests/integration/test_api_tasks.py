@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -256,6 +257,33 @@ async def test_create_task_idempotent(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["task_id"] == "exist01"
+
+
+async def test_create_task_returns_conflict_when_idempotency_claim_exists(async_client):
+    from app.core.db import get_session
+
+    with patch("app.api.tasks._acquire_idempotency_claim") as acquire_claim:
+        acquire_claim.side_effect = HTTPException(
+            status_code=409,
+            detail="create_task for 'idem-busy' is already in progress",
+        )
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post(
+                "/api/v1/tasks",
+                data={"idempotency_key": "idem-busy"},
+                files=[("files", ("acme/test.txt", b"hello", "text/plain"))],
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 409
+    assert "already in progress" in resp.json()["detail"]
 
 
 async def test_upload_task_queues_delivery_message_when_go_worker_backend(async_client, tmp_path):
@@ -758,6 +786,35 @@ async def test_upload_task_confirmed(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "uploading"
+
+
+async def test_upload_task_returns_conflict_when_idempotency_claim_exists(async_client):
+    from app.core.db import get_session
+
+    task = _mock_task(status="confirmed")
+
+    with (
+        patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._acquire_idempotency_claim") as acquire_claim,
+    ):
+        mock_repo.get = AsyncMock(return_value=task)
+        acquire_claim.side_effect = HTTPException(
+            status_code=409,
+            detail="upload_task for 'abc123' is already in progress",
+        )
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/upload")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 409
+    assert "already in progress" in resp.json()["detail"]
 
 
 # ── Test 11: POST /api/v1/tasks/{id}/retry ───────────────────────────────────

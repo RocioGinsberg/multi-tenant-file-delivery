@@ -1,6 +1,6 @@
 # Phase 4 — Redis 能力层
 
-> **状态**：Current（4.1-4.3 已完成；4.4-4.7 待实现）
+> **状态**：Current（4.1-4.4 已完成；4.5-4.7 待实现）
 > **目标**：把当前单进程内存态能力迁移到 Redis-backed 能力层，为多实例 control-plane、worker 集群 backpressure、跨进程进度和幂等控制打基础。
 > **完成定义**：本地 compose 可启动 Redis；control-plane 可用 Redis pub/sub 广播任务进度；任务提交和上传触发有 Redis-backed 幂等 / lease 保护；worker 发布前有可配置限流入口；Redis 不可用时有明确降级或 fail-fast 行为。
 > **前序计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
@@ -128,7 +128,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.4 Redis idempotency guard
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 新增短 TTL idempotency guard：`SET key value NX EX ttl`。
@@ -139,7 +139,14 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
   - 并发同 idempotency_key create 只有一个执行写路径；其他请求返回已有 task 或 409/202 明确状态。
   - 同 task upload trigger 快速重复调用不会重复发布 delivery task。
   - Redis disabled 时维持当前 DB 唯一键行为。
+- **实际变更**：
+  - `control-plane/app/core/settings.py` / `.env.example`：新增 `REDIS_IDEMPOTENCY_ENABLED` 和 `REDIS_IDEMPOTENCY_TTL_SECONDS`，默认关闭。
+  - `control-plane/app/services/idempotency_guard.py`：新增 disabled / Redis guard，Redis 使用 `SET key token NX EX ttl` 获取 claim，release 使用 Lua token 校验删除。
+  - `control-plane/app/api/tasks.py`：create task 和 upload trigger 在 Redis guard 开启时获取短 TTL claim；重复处理中请求返回 `409`；默认关闭时维持原 DB 唯一键行为。
+  - `control-plane/tests/unit/test_idempotency_guard.py`、`tests/integration/test_api_tasks.py`、`tests/integration/test_idempotency_redis_docker.py`：覆盖 no-op、Redis 编码/release、API conflict 和 Docker 跨实例 claim。
+  - `control-plane/README.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`：同步 Phase 4 Redis idempotency 状态和 smoke 命令。
 - **验证**：
+  - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_idempotency_guard.py tests/unit/test_settings.py`
   - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_api_tasks.py`
   - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_idempotency_redis_docker.py`
 

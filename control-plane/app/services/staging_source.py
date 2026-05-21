@@ -10,6 +10,9 @@ from botocore.exceptions import ClientError
 from app.core.settings import get_settings
 from app.services.delivery import DeliverySourceReference
 
+INTERNAL_ARCHIVE_DIR = ".auto_upload_internal"
+INTERNAL_ARCHIVE_NAME = "original.zip"
+
 
 @asynccontextmanager
 async def _s3_client():
@@ -25,11 +28,22 @@ async def _s3_client():
         yield client
 
 
+def task_archive_path(task_dir: str) -> str:
+    return os.path.join(task_dir, INTERNAL_ARCHIVE_DIR, INTERNAL_ARCHIVE_NAME)
+
+
+def find_task_archive_path(task_dir: str) -> str:
+    archive_path = task_archive_path(task_dir)
+    if os.path.exists(archive_path):
+        return archive_path
+    return os.path.join(task_dir, INTERNAL_ARCHIVE_NAME)
+
+
 async def stage_task_archive(task, *, bucket_name: str | None = None) -> DeliverySourceReference:
-    """Upload a task's original archive to durable staging storage."""
+    """Upload a task's internal source archive to durable staging storage."""
     settings = get_settings()
     bucket = bucket_name or settings.staging_bucket_name
-    archive_path = os.path.join(task.temp_dir, "original.zip")
+    archive_path = find_task_archive_path(task.temp_dir)
     key = f"staged/tasks/{task.id}/archive.zip"
 
     with open(archive_path, "rb") as f:
@@ -52,6 +66,11 @@ async def stage_task_archive(task, *, bucket_name: str | None = None) -> Deliver
         sha256=sha256,
         size=len(data),
     )
+
+
+async def delete_staged_archive(source: DeliverySourceReference) -> None:
+    async with _s3_client() as client:
+        await client.delete_object(Bucket=source.bucket, Key=source.key)
 
 
 async def _ensure_bucket(client, bucket: str) -> None:

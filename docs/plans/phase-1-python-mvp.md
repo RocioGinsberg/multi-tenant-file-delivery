@@ -2,7 +2,7 @@
 
 > **状态**：✅ 已完成（2026-05-11）
 > **预计工时**：4-6 天
-> **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能上传 zip → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
+> **完成定义**：本地起 FastAPI 进程 + MinIO 容器，浏览器能选择文件夹 → 看见分类预览 → 确认 → 看进度 → 文件到达 MinIO bucket
 > **关联路线图**：[ROADMAP Phase 1](../ROADMAP.md)
 > **关联 ADR**：[0001 双语言架构](../ADR/0001-dual-language.md)、[0010 首版后端选 S3/MinIO](../ADR/0010-pivot-to-generic-object-storage.md)、[0011 Classifier Core 与业务 Profile 分层](../ADR/0011-classification-profile-engine.md)
 
@@ -384,7 +384,7 @@ class ProgressBus:
     5. 任务结束更新 task.status (uploaded / partial_failed)
   - 由 `BackgroundTask` 启动；不用 Celery / arq
   - 错误处理：单个 file 失败不阻断 task；整个 task 异常要兜底写 task_event
-- **验收**：手工跑一次 zip → 完成；端到端测试在 1.14
+- **验收**：手工跑一次文件夹上传 → 完成；端到端测试在 1.14
 - **commit message 草案**：`phase1(1.8): task runner with state machine and progress emit`
 
 ### 1.9 API 路由
@@ -394,7 +394,7 @@ class ProgressBus:
 - **依赖**：1.4-1.8
 - **范围**：
   - `control-plane/app/api/tasks.py`：
-    - `POST /api/v1/tasks` (multipart zip upload) → 创建 task + 解压
+    - `POST /api/v1/tasks` (multipart folder file upload) → 创建 task + 写入任务工作目录
     - `POST /api/v1/tasks/{id}/classify` → 调 classifier
     - `GET /api/v1/tasks/{id}/preview` → 返回 items + summary
     - `POST /api/v1/tasks/{id}/confirm` → 改 status=confirmed
@@ -447,7 +447,7 @@ class ProgressBus:
 - **范围**：
   - `control-plane/tests/e2e/test_upload_flow.py`
   - FastAPI TestClient + 真 MinIO（用 docker-compose 起）
-  - 完整流程：上传测试 zip → classify → confirm → upload → 验证 MinIO bucket 里有文件
+  - 完整流程：上传测试文件夹 → classify → confirm → upload → 验证 MinIO bucket 里有文件
   - 用 pytest mark 标注 `@pytest.mark.e2e`，CI 时按需跑
 - **验收**：`pytest tests/e2e/test_upload_flow.py -v` 全过
 
@@ -462,7 +462,7 @@ class ProgressBus:
   - API 路径前缀全部改成 `/api/v1/`
   - 改动 `web/js/utils/api.js` 的 base URL
   - 删掉一些用不上的组件（如 status-vocab.js 里 cosdrive 专属状态）
-- **验收**：浏览器能完成上传 zip → 预览 → 确认 → 看进度 SSE → 看结果
+- **验收**：浏览器能完成选择文件夹 → 预览 → 确认 → 看进度 SSE → 看结果
 
 ### 1.16 docker-compose for MinIO
 - **状态**：`[x]`

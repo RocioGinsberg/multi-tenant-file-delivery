@@ -54,20 +54,24 @@ func NewWithTransportAndResolver(
 // Run processes tasks from the configured transport. Kafka can replace the
 // file-spool transport without changing pipeline.ProcessTask.
 func (w *Worker) Run(ctx context.Context) error {
-	tasks, err := w.tasks.Consume(ctx)
-	if err != nil {
-		return err
-	}
+	for {
+		tasks, err := w.tasks.Consume(ctx)
+		if err != nil {
+			return err
+		}
 
-	for _, taskMessage := range tasks {
-		if err := w.processTask(ctx, taskMessage.Task); err != nil {
-			return err
+		for _, taskMessage := range tasks {
+			if err := w.processTask(ctx, taskMessage.Task); err != nil {
+				return err
+			}
+			if err := taskMessage.Ack(ctx); err != nil {
+				return err
+			}
 		}
-		if err := taskMessage.Ack(ctx); err != nil {
-			return err
+		if w.cfg.Once {
+			return nil
 		}
 	}
-	return nil
 }
 
 func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) error {

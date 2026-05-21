@@ -1,6 +1,6 @@
 # Phase 3.x — Source reference 生产化与 worker 集群前置条件
 
-> **状态**：Current（3.9-3.17 部分完成）
+> **状态**：Current（3.9-3.21 已完成）
 > **目标**：在 Phase 3 已打通 source reference 基础链路后，补齐 Kafka 真实链路、性能、GC、幂等和生产化运行边界。
 > **完成定义**：Kafka + object source 的端到端链路可复验；staging source 有可清理生命周期；重复 result 不破坏 DB 最终状态；剩余 worker 集群化风险有明确 RFC / 测试 / benchmark 入口。
 > **关联计划**：[Phase 3 — MySQL 数据层与 source reference 迁移](./phase-3-data-layer-and-source-ref.md)
@@ -36,7 +36,8 @@ Phase 3.x 继续证明：
 
 ```text
 control-plane
-  -> stage original.zip to MinIO/S3
+  -> receive folder files and build internal archive
+  -> stage internal archive to MinIO/S3
   -> publish schema_version=2 task to Kafka
 
 data-plane worker
@@ -251,12 +252,28 @@ control-plane
 - **验证**：
   - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...`
 
+### 3.21 Review hardening sweep
+
+- **状态**：`[x]`
+- **L 等级**：L2
+- **范围**：
+  - HQ 上传入口改为文件夹多文件上传；用户不再手工上传 zip。
+  - control-plane 继续生成内部 archive，复用分类和 source reference 管线。
+  - 修复 Kafka result consumer 单条 offset commit、Kafka partial batch、invalid message DLQ 校验。
+  - 修复 object source publish 失败后的 staging cleanup 补偿。
+  - retry failed items 后恢复 task 到可再次 upload 的状态。
+  - 同步 Phase 状态文档、README、ROADMAP、AGENTS。
+- **验收**：
+  - 文件夹上传 e2e 覆盖相对路径。
+  - Kafka ack / partial batch / missing task_id DLQ 有回归测试。
+  - `ruff check app tests` 通过。
+
 ## 四、建议执行顺序
 
-1. 做 `3.12` benchmark baseline，避免性能讨论停留在推测。
-2. 做 `3.18` config profiles，把当前本地命令整理成生产形态配置表。
-3. 做 `3.19` worker health / readiness。
-4. 评审 RFC 0003 后，再决定是否进入 DLQ topic 实现。已完成 `3.20` 最小 Kafka task DLQ。
+1. 完成 `3.21` review hardening sweep。
+2. 跑完非 Docker 全量测试和 lint。
+3. Docker Kafka / MinIO / MySQL 链路按需手动复验。
+4. 进入 Phase 4 前，若 3.x 继续扩大，应按主题拆新 plan。
 
 ## 五、验证矩阵
 
@@ -289,6 +306,6 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
 
 - Kafka topic 重跑读到旧消息：测试使用唯一 topic，生产依赖 consumer group 和 offset 管理。
 - object source 重复下载：已补进程内 archive cache；大文件场景后续评估本地临时文件 cache / streaming。
-- staging object 泄露：已补 event metadata、cleanup service 和手动 GC job；后续接 cron / K8s CronJob。
-- at-least-once 重复执行：已补 duplicate result apply 测试；重复 task execution 仍需 e2e。
+- staging object 泄露：已补 event metadata、cleanup service、手动 GC job 和 publish 失败补偿；后续接 cron / K8s CronJob。
+- at-least-once 重复执行：已补 duplicate result apply 和重复 source-reference task e2e；Kafka result commit 改为按已 apply record 单条提交 offset。
 - plan 文件膨胀：3.x 后续若单线任务超过 8-10 个子项，应再按主题拆新 plan。

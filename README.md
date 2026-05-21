@@ -35,18 +35,19 @@
 ├── deploy/                docker-compose、Grafana、Prometheus、OTel 配置
 ├── proto/                 跨语言消息/接口定义（备用，主用 Kafka JSON）
 ├── docs/                  PDR / RFC / ADR / Roadmap / Data Model / Plans
-└── BLUEPRINT.md           兼容入口，指向 docs/
 ```
 
 ## 当前阶段
 
 **Phase 0（完成）**：清理半成品脚手架，建立 monorepo 骨架。
 
-**Phase 1（完成）**：Python 控制面 MVP，包含任务创建、分类、确认、Python 直传、repo/API/e2e 测试。
+**Phase 1（完成）**：Python 控制面 MVP，包含文件夹上传、分类、确认、Python 直传、repo/API/e2e 测试。
 
 **Phase 2（完成）**：Go 数据面、file-spool / Kafka transport、S3 / MinIO 单段 PUT、结果回写、跨语言集成验证已完成。
 
-**Phase 3（进行中）**：MySQL 数据层已接入本地 compose；source reference 迁移已开始，control-plane 可把原始 zip 暂存到 MinIO staging bucket，Go worker 可用 `-source-mode object` 从 staged archive 读取源文件。
+**Phase 3（完成）**：MySQL 数据层已接入本地 compose；source reference 基础链路已打通，control-plane 可把上传文件夹生成的内部 archive 暂存到 MinIO staging bucket，Go worker 可用 `-source-mode object` 从 staged archive 读取源文件。
+
+**Phase 3.x（当前）**：Kafka source-reference e2e、archive cache、GC、幂等、benchmark、配置 profile、worker startup check 和最小 DLQ 已落地；当前分支继续收敛审查发现的 ack / batch / 上传入口 / 文档同步问题。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

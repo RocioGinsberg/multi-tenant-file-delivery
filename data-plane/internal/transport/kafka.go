@@ -3,7 +3,9 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -39,6 +41,7 @@ type KafkaTransport struct {
 	writer    kafkaWriter
 	dlqWriter kafkaWriter
 	batchSize int
+	batchWait time.Duration
 	taskTopic string
 	dlqTopic  string
 	workerID  string
@@ -82,11 +85,29 @@ func NewKafkaTransport(cfg KafkaConfig) (*KafkaTransport, error) {
 		Topic:    cfg.DLQTopic,
 		Balancer: &kafka.Hash{},
 	}
-	return newKafkaTransportWithDLQ(reader, writer, dlqWriter, cfg.BatchSize, cfg.TaskTopic, cfg.DLQTopic, cfg.WorkerID), nil
+	return newKafkaTransportWithDLQ(
+		reader,
+		writer,
+		dlqWriter,
+		cfg.BatchSize,
+		250*time.Millisecond,
+		cfg.TaskTopic,
+		cfg.DLQTopic,
+		cfg.WorkerID,
+	), nil
 }
 
 func newKafkaTransport(reader kafkaReader, writer kafkaWriter, batchSize int) *KafkaTransport {
-	return newKafkaTransportWithDLQ(reader, writer, nil, batchSize, "delivery.tasks.v1", "delivery.tasks.dlq.v1", "data-plane-worker")
+	return newKafkaTransportWithDLQ(
+		reader,
+		writer,
+		nil,
+		batchSize,
+		250*time.Millisecond,
+		"delivery.tasks.v1",
+		"delivery.tasks.dlq.v1",
+		"data-plane-worker",
+	)
 }
 
 func newKafkaTransportWithDLQ(
@@ -94,6 +115,7 @@ func newKafkaTransportWithDLQ(
 	writer kafkaWriter,
 	dlqWriter kafkaWriter,
 	batchSize int,
+	batchWait time.Duration,
 	taskTopic string,
 	dlqTopic string,
 	workerID string,
@@ -101,11 +123,15 @@ func newKafkaTransportWithDLQ(
 	if batchSize <= 0 {
 		batchSize = 1
 	}
+	if batchWait <= 0 {
+		batchWait = 250 * time.Millisecond
+	}
 	return &KafkaTransport{
 		reader:    reader,
 		writer:    writer,
 		dlqWriter: dlqWriter,
 		batchSize: batchSize,
+		batchWait: batchWait,
 		taskTopic: taskTopic,
 		dlqTopic:  dlqTopic,
 		workerID:  workerID,
@@ -115,13 +141,31 @@ func newKafkaTransportWithDLQ(
 func (t *KafkaTransport) Consume(ctx context.Context) ([]TaskMessage, error) {
 	tasks := make([]TaskMessage, 0, t.batchSize)
 	for fetched := 0; fetched < t.batchSize; fetched++ {
-		kafkaMessage, err := t.reader.FetchMessage(ctx)
+		fetchCtx := ctx
+		cancelFetch := func() {}
+		if fetched > 0 {
+			fetchCtx, cancelFetch = context.WithTimeout(ctx, t.batchWait)
+		}
+		kafkaMessage, err := t.reader.FetchMessage(fetchCtx)
+		cancelFetch()
 		if err != nil {
+			if fetched > 0 && isKafkaTimeout(err) {
+				return tasks, nil
+			}
 			return nil, err
 		}
 
 		var task message.DeliveryTask
 		if err := json.Unmarshal(kafkaMessage.Value, &task); err != nil {
+			if dlqErr := t.produceDLQ(ctx, kafkaMessage, "invalid_message", err); dlqErr != nil {
+				return nil, dlqErr
+			}
+			if err := t.reader.CommitMessages(ctx, kafkaMessage); err != nil {
+				return nil, fmt.Errorf("commit dlq task message: %w", err)
+			}
+			continue
+		}
+		if err := validateTaskMessage(task); err != nil {
 			if dlqErr := t.produceDLQ(ctx, kafkaMessage, "invalid_message", err); dlqErr != nil {
 				return nil, dlqErr
 			}
@@ -193,6 +237,35 @@ func (t *KafkaTransport) produceDLQ(ctx context.Context, msg kafka.Message, erro
 		return fmt.Errorf("write kafka dlq message: %w", err)
 	}
 	return nil
+}
+
+func validateTaskMessage(task message.DeliveryTask) error {
+	if task.TaskID == "" {
+		return fmt.Errorf("task_id is required")
+	}
+	if task.SchemaVersion == 0 {
+		return fmt.Errorf("schema_version is required")
+	}
+	if task.SchemaVersion >= 2 {
+		if task.Source == nil {
+			return fmt.Errorf("source is required for schema_version=%d", task.SchemaVersion)
+		}
+		if task.Source.Type != "object" || task.Source.Bucket == "" || task.Source.Key == "" {
+			return fmt.Errorf("valid object source is required for schema_version=%d", task.SchemaVersion)
+		}
+	}
+	return nil
+}
+
+func isKafkaTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == context.DeadlineExceeded || err == io.EOF {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func CheckKafkaConnectivity(ctx context.Context, brokers []string) error {

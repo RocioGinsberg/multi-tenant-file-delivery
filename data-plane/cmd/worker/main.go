@@ -47,7 +47,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	s3PathStyle := flags.Bool("s3-path-style", true, "use path-style addressing for S3-compatible sinks")
 	sourceMode := flags.String("source-mode", "file", "source resolver mode: file, object")
 	itemConcurrency := flags.Int("item-concurrency", 1, "maximum number of task items to upload concurrently")
-	once := flags.Bool("once", true, "process current inbox contents once and exit")
+	once := flags.Bool("once", true, "process one batch and exit; set false for a long-running worker loop")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

@@ -16,10 +16,10 @@
 | Phase | 状态 | 目标 | 完成定义 |
 |---|---|---|---|
 | Phase 0 | Done | 清理半成品脚手架，建立 monorepo | 目录骨架和基础文档完成 |
-| Phase 1 | Done | Python 控制面 MVP | 上传 zip -> 分类 -> 确认 -> Python 上传 -> 前端进度闭环 |
+| Phase 1 | Done | Python 控制面 MVP | 选择文件夹 -> 分类 -> 确认 -> Python 上传 -> 前端进度闭环 |
 | Phase 2 | Done | Go 数据面 + Kafka bridge | Go worker 接管上传执行；file-spool 和 Kafka transport 都可验证 |
-| Phase 3 | Current | MySQL 数据层 | SQLite -> MySQL 主数据库；本地全栈 compose 跑通 |
-| Phase 3.x | Current | 去本地文件依赖 | source reference 消息模型；Kafka worker 从 staging object storage 读取源文件 |
+| Phase 3 | Done | MySQL 数据层 | SQLite -> MySQL 主数据库；本地全栈 compose 跑通 |
+| Phase 3.x | Current | 去本地文件依赖 + hardening | source reference 消息模型；Kafka worker 从 staging object storage 读取源文件；Kafka/GC/幂等/配置/readiness/DLQ 基础闭合 |
 | Phase 4 | Planned | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Planned | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标 |
 | Phase 6 | Planned | 多租户 + 鉴权 | HQ / 子公司用户隔离，RBAC 覆盖 |
@@ -57,9 +57,8 @@
 
 ## 当前下一步建议
 
-Phase 3 启动输入：
+Phase 3.x 收敛输入：
 
-- 主数据库使用 MySQL。
-- SQLite 保留为轻量测试数据库。
-- zip 暂存按 RFC 0002 从本地磁盘迁移到 MinIO / S3 staged source。
-- alembic 迁移策略和本地 compose 服务清单。
+- 上传入口面向 HQ 文件夹选择；服务端生成内部 archive 作为分类和 source reference 的统一输入。
+- Kafka ack / batch / DLQ 行为需要和 RFC 0003 保持一致。
+- Phase 状态以 `docs/plans/phase-*.md` 为准，README/ROADMAP/AGENTS 需要同步更新。

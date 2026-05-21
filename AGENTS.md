@@ -95,7 +95,7 @@ docker compose up -d mysql kafka minio minio-init
 
 Continue remaining Phase 3.x work in this order unless the user redirects:
 
-1. `3.12` benchmark baseline.
-2. `3.18` config profiles.
-3. `3.19` worker health / readiness.
-4. RFC 0003 review, then decide whether to implement DLQ topics.
+1. Keep the folder-upload path as the primary HQ input; do not reintroduce a user-facing zip upload path unless explicitly requested.
+2. Keep Kafka ack / retry / DLQ behavior aligned with RFC 0003.
+3. Keep Phase status synchronized across `docs/plans/`, `README.md`, `docs/ROADMAP.md`, and component READMEs.
+4. Next larger phase should start from Phase 4 Redis capability work unless the user redirects.

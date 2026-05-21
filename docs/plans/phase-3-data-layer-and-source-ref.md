@@ -136,14 +136,14 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
-  - 新增 staging source service，把原始 zip 或解包后的源文件写入 MinIO / S3 staging bucket。
+  - 新增 staging source service，把控制面内部 source archive 写入 MinIO / S3 staging bucket。
   - 配置 `DELIVERY_SOURCE_MODE=file|object`。
   - 在 `go-worker` 模式下可发布 object source task。
 - **验收**：
   - object source 模式下，任务消息不要求 worker 访问 control-plane 本地目录。
   - staging object key 可由 task_id 稳定推导，便于排障和后续 GC。
 - **实际变更**：
-  - `control-plane/app/services/staging_source.py`：新增 `stage_task_archive()`，上传 `original.zip` 到 staging bucket 并返回 `DeliverySourceReference`。
+  - `control-plane/app/services/staging_source.py`：新增 `stage_task_archive()`，上传内部 source archive 到 staging bucket 并返回 `DeliverySourceReference`。
   - `control-plane/app/api/tasks.py`：`DELIVERY_SOURCE_MODE=object` 时发布 source reference task。
   - `control-plane/app/core/settings.py` / `.env.example`：新增 `staging_bucket_name` 和 `delivery_source_mode`。
   - `deploy/docker-compose.yml`：MinIO 初始化时创建 `auto-upload-staging` bucket。
@@ -204,7 +204,7 @@ Phase 2 已经完成 control-plane / data-plane 拆分、Kafka bridge 和 S3 / M
 - **验收**：
   - 新开发者能按 README 起 MySQL / Kafka / MinIO 并跑通最小链路。
 - **实际变更**：
-  - `README.md`：标注 Phase 3 进行中能力。
+  - `README.md`：标注 Phase 3 已完成能力。
   - `control-plane/README.md`：补 MySQL、staging bucket、source mode 和测试命令。
   - `data-plane/README.md`：补 `-source-mode object` worker 示例。
   - `docs/ARCHITECTURE.md`：补 source reference 写路径。

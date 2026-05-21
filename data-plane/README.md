@@ -115,13 +115,16 @@ go run ./cmd/worker \
   -item-concurrency 4
 ```
 
-Phase 4 Redis limiter 参数已预留，当前只解析和校验，不改变 worker 执行路径：
+Phase 4 Redis limiter 默认关闭；启用后每个 item 在进入 sink 上传前竞争一个 Redis fixed-window 配额，配额不足或 Redis 失败会让该 item 以明确错误进入 result：
 ```bash
 go run ./cmd/worker \
   -transport kafka \
   -kafka-brokers localhost:9092 \
   -redis-url redis://localhost:6379/0 \
   -redis-limiter-enabled \
+  -redis-limiter-key global \
+  -redis-limiter-limit 100 \
+  -redis-limiter-window 1s \
   -sink mock
 ```
 

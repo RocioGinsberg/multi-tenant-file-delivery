@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"smh_auto_upload/data-plane/internal/limiter"
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
 	"smh_auto_upload/data-plane/internal/transport"
@@ -29,8 +30,11 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	inbox := flags.String("inbox", "/tmp/auto_upload_outbox/delivery.tasks.v1", "directory containing delivery task JSON")
 	results := flags.String("results", "/tmp/auto_upload_outbox/delivery.results.v1", "directory for result JSON")
-	redisURL := flags.String("redis-url", "redis://localhost:6379/0", "Redis URL reserved for future limiter support")
-	redisLimiterEnabled := flags.Bool("redis-limiter-enabled", false, "enable Redis limiter wiring in a later phase")
+	redisURL := flags.String("redis-url", "redis://localhost:6379/0", "Redis URL for limiter support")
+	redisLimiterEnabled := flags.Bool("redis-limiter-enabled", false, "enable Redis fixed-window upload limiter")
+	redisLimiterLimit := flags.Int("redis-limiter-limit", 100, "maximum upload attempts allowed per limiter window")
+	redisLimiterWindow := flags.Duration("redis-limiter-window", time.Second, "Redis limiter fixed-window duration")
+	redisLimiterKey := flags.String("redis-limiter-key", "global", "Redis limiter key dimension")
 	transportName := flags.String("transport", "file", "task/result transport: file, kafka")
 	kafkaBrokers := flags.String("kafka-brokers", "localhost:9092", "comma-separated Kafka broker addresses")
 	kafkaTaskTopic := flags.String("kafka-task-topic", "delivery.tasks.v1", "Kafka topic for delivery tasks")
@@ -67,7 +71,20 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	if *startupCheckTimeout <= 0 {
 		return fmt.Errorf("startup check timeout must be positive")
 	}
-	log.Printf("redis-limiter-enabled=%t redis-url=%s", *redisLimiterEnabled, parsedRedisURL.Redacted())
+	if *redisLimiterLimit <= 0 {
+		return fmt.Errorf("redis limiter limit must be positive")
+	}
+	if *redisLimiterWindow <= 0 {
+		return fmt.Errorf("redis limiter window must be positive")
+	}
+	log.Printf(
+		"redis-limiter-enabled=%t redis-url=%s redis-limiter-key=%s redis-limiter-limit=%d redis-limiter-window=%s",
+		*redisLimiterEnabled,
+		parsedRedisURL.Redacted(),
+		*redisLimiterKey,
+		*redisLimiterLimit,
+		*redisLimiterWindow,
+	)
 	checkCtx := ctx
 	var cancelCheck context.CancelFunc
 	if *startupCheck {
@@ -111,6 +128,23 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		SinkName:           *sinkName,
 		Once:               *once,
 		MaxItemConcurrency: *itemConcurrency,
+	}
+	if *redisLimiterEnabled {
+		uploadLimiter, err := limiter.NewRedisLimiter(limiter.RedisConfig{
+			URL:    *redisURL,
+			Limit:  *redisLimiterLimit,
+			Window: *redisLimiterWindow,
+		})
+		if err != nil {
+			return fmt.Errorf("create redis limiter: %w", err)
+		}
+		defer func() {
+			if err := uploadLimiter.Close(); err != nil {
+				log.Printf("close redis limiter: %v", err)
+			}
+		}()
+		cfg.UploadLimiter = uploadLimiter
+		cfg.LimiterKey = *redisLimiterKey
 	}
 
 	var sourceResolver source.Resolver = source.NewFileResolver()

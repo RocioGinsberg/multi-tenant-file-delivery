@@ -1,6 +1,6 @@
 # Phase 4 — Redis 能力层
 
-> **状态**：Current（4.1-4.5 已完成；4.6-4.7 待实现）
+> **状态**：Current（4.1-4.6 已完成；4.7 待实现）
 > **目标**：把当前单进程内存态能力迁移到 Redis-backed 能力层，为多实例 control-plane、worker 集群 backpressure、跨进程进度和幂等控制打基础。
 > **完成定义**：本地 compose 可启动 Redis；control-plane 可用 Redis pub/sub 广播任务进度；任务提交和上传触发有 Redis-backed 幂等 / lease 保护；worker 发布前有可配置限流入口；Redis 不可用时有明确降级或 fail-fast 行为。
 > **前序计划**：[Phase 3.x — Source reference 生产化与 worker 集群前置条件](./phase-3x-production-hardening.md)
@@ -174,7 +174,7 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
 
 ### 4.6 Redis limiter
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 定义 limiter key 维度：global、sink、tenant/task 先选最小可落地的一类。
@@ -185,9 +185,15 @@ Phase 4 的原则是“Redis 一物多用，但不滥用”：先做 progress pu
   - 单测用 fake clock / fake Redis 验证并发上限。
   - Go worker limiter 失败时返回明确错误，不静默无限等待。
   - 不启用 limiter 时现有 pipeline benchmark 和 tests 不回归。
+- **实际变更**：
+  - `data-plane/internal/limiter`：新增 Redis fixed-window limiter，使用 Lua 脚本原子 `INCR` / `PEXPIRE`，并提供 no-op limiter 与 fake Redis 单测。
+  - `data-plane/internal/pipeline`：新增 `BeforeUpload` hook，在 sink 上传前执行 limiter acquire，失败时该 item 进入 failed result。
+  - `data-plane/internal/worker` / `cmd/worker`：`-redis-limiter-enabled` 开启后创建 Redis limiter，并支持 `-redis-limiter-key`、`-redis-limiter-limit`、`-redis-limiter-window`；默认关闭时不改变执行路径。
+  - `data-plane/internal/limiter/limiter_integration_test.go`：新增 Redis Docker opt-in smoke，覆盖真实 Redis fixed-window 限流和窗口过期恢复。
+  - `data-plane/README.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`：同步 Redis limiter 状态和参数说明。
 - **验证**：
-  - `cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./internal/... ./cmd/worker`
-  - `cd control-plane && .venv/bin/python -m pytest tests/unit/test_rate_limiter.py`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./internal/... ./cmd/worker`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache RUN_DOCKER_TESTS=1 go test ./internal/limiter -run TestRedisLimiterDocker -count=1`
 
 ### 4.7 Phase 4 smoke 与运行手册
 

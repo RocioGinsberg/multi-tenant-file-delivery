@@ -60,6 +60,6 @@
 Phase 4 当前状态：
 
 - Redis 不替代 Kafka；Kafka 继续承载 durable task/result transport。
-- Redis compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` Redis pub/sub backend、短 TTL idempotency guard、result apply lease 已落地。
-- 下一步优先实现限流。
+- Redis compose / 配置基线、control-plane Redis client / health smoke、`ProgressBus` Redis pub/sub backend、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter 已落地。
+- 下一步收敛 Phase 4 smoke 与运行手册。
 - 默认测试继续走 memory/fake；Redis Docker tests 使用 `RUN_DOCKER_TESTS=1` opt-in。

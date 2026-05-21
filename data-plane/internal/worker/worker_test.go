@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,66 @@ func TestRunWritesPartialFailureResult(t *testing.T) {
 	}
 }
 
+func TestRunWritesLimiterFailureResult(t *testing.T) {
+	dir := t.TempDir()
+	inboxDir := filepath.Join(dir, "inbox")
+	resultsDir := filepath.Join(dir, "results")
+	tempDir := filepath.Join(dir, "task")
+	if err := os.MkdirAll(inboxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "report.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	task := message.DeliveryTask{
+		TaskID:         "task-limited",
+		IdempotencyKey: "idem-limited",
+		TempDir:        tempDir,
+		BucketName:     "auto-upload-dev",
+		CreatedAt:      time.Date(2026, 5, 17, 10, 0, 0, 0, time.UTC),
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SrcPath:      "report.txt",
+			Filename:     "report.txt",
+			DstPath:      "reports/report.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+	writeTaskFile(t, inboxDir, task)
+
+	mockSink := sink.NewMockSink()
+	w := New(
+		Config{
+			InboxDir:      inboxDir,
+			ResultsDir:    resultsDir,
+			SinkName:      "mock",
+			Once:          true,
+			UploadLimiter: failingLimiter{err: errors.New("redis limiter acquire: rate limited")},
+			LimiterKey:    "sink:s3",
+		},
+		mockSink,
+	)
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+
+	result := readResultFile(t, resultsDir, "task-limited")
+	if result.Status != "partial_failed" || result.Uploaded != 0 || result.Failed != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(result.Items) != 1 || !strings.Contains(result.Items[0].Error, "redis limiter acquire") {
+		t.Fatalf("expected item limiter error, got %+v", result.Items)
+	}
+	if _, ok := mockSink.Object("reports/report.txt"); ok {
+		t.Fatal("expected upload to be blocked by limiter")
+	}
+}
+
 func TestRunLoopsWhenOnceIsFalse(t *testing.T) {
 	task := message.DeliveryTask{
 		TaskID: "task-loop",
@@ -177,6 +238,14 @@ func (c *loopConsumer) Consume(context.Context) ([]transport.TaskMessage, error)
 
 type recordingProducer struct {
 	results []message.DeliveryResult
+}
+
+type failingLimiter struct {
+	err error
+}
+
+func (l failingLimiter) Allow(context.Context, string) error {
+	return l.err
 }
 
 func (p *recordingProducer) Produce(_ context.Context, result message.DeliveryResult) error {

@@ -19,6 +19,7 @@ type Result struct {
 
 type Options struct {
 	MaxItemConcurrency int
+	BeforeUpload       func(context.Context, message.DeliveryTask, message.DeliveryItem) error
 }
 
 // ProcessTask is deliberately narrow: it trusts the control plane's
@@ -69,7 +70,7 @@ func ProcessTaskWithResolverOptions(
 		go func(index int, uploadItem message.DeliveryItem) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			itemResults[index] = processItem(ctx, task, uploadItem, sinkImpl, resolver)
+			itemResults[index] = processItem(ctx, task, uploadItem, sinkImpl, resolver, opts.BeforeUpload)
 		}(i, item)
 	}
 	wg.Wait()
@@ -95,6 +96,7 @@ func processItem(
 	item message.DeliveryItem,
 	sinkImpl sink.Sink,
 	resolver source.Resolver,
+	beforeUpload func(context.Context, message.DeliveryTask, message.DeliveryItem) error,
 ) message.DeliveryResultItem {
 	src, err := resolver.Resolve(ctx, task, item)
 	if err != nil {
@@ -102,6 +104,15 @@ func processItem(
 			ItemID: item.ItemID,
 			Status: "failed",
 			Error:  err.Error(),
+		}
+	}
+	if beforeUpload != nil {
+		if err := beforeUpload(ctx, task, item); err != nil {
+			return message.DeliveryResultItem{
+				ItemID: item.ItemID,
+				Status: "failed",
+				Error:  err.Error(),
+			}
 		}
 	}
 	receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{

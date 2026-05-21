@@ -129,6 +129,25 @@ func TestRunRejectsNonPositiveItemConcurrency(t *testing.T) {
 	}
 }
 
+func TestRunRejectsInvalidRedisLimiterConfig(t *testing.T) {
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"-redis-limiter-limit", "0"}, &stderr)
+	if err == nil {
+		t.Fatal("expected limit error")
+	}
+	if !strings.Contains(err.Error(), "redis limiter limit") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = run(context.Background(), []string{"-redis-limiter-window", "0s"}, &stderr)
+	if err == nil {
+		t.Fatal("expected window error")
+	}
+	if !strings.Contains(err.Error(), "redis limiter window") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunRejectsKafkaTransportWithoutBrokers(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run(context.Background(), []string{

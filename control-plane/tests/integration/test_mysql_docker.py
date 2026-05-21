@@ -4,11 +4,11 @@ import asyncio
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from alembic import command
 
 MYSQL_DATABASE_URL = (
     "mysql+asyncmy://control_plane:control_plane@localhost:3306/"

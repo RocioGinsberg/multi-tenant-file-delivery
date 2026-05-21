@@ -85,7 +85,7 @@ table.item-table td{padding:6px 8px;border-bottom:1px solid #f2f2f7;vertical-ali
   <div>
     <div class="hero-kicker">Auto Upload</div>
     <h1 class="hero-title">文件上传台</h1>
-    <p class="hero-subtitle">上传 zip 包，自动分类预检，确认后批量上传至 MinIO 对象存储。</p>
+    <p class="hero-subtitle">选择文件夹，自动分类预检，确认后批量上传至 MinIO 对象存储。</p>
   </div>
 </section>
 
@@ -96,14 +96,17 @@ table.item-table td{padding:6px 8px;border-bottom:1px solid #f2f2f7;vertical-ali
   <div class="section-divider">
     <div>
       <h2 class="section-title">上传准备</h2>
-      <p class="section-copy">选择或拖放 zip 文件，上传后自动解压并等待分类。</p>
+      <p class="section-copy">选择文件夹，上传后自动整理并等待分类。</p>
     </div>
   </div>
 
-  <div id="dz-zip" class="drop-box" onclick="document.getElementById('inp-zip').click()">
-    <input type="file" id="inp-zip" accept=".zip" class="hidden" onchange="onZipSelected(this.files[0])"/>
-    <p class="text-sm text-gray-500">拖放或点击选择 .zip 文件</p>
-    <p id="zip-info" class="text-xs text-gray-400 mt-1"></p>
+  <div id="folder-dropzone" class="drop-box">
+    <input type="file" id="inp-folder" class="hidden" webkitdirectory directory multiple onchange="onFolderSelected(this.files)"/>
+    <p class="text-sm text-gray-500">点击选择文件夹</p>
+    <div class="flex justify-center gap-2 mt-3 flex-wrap">
+      <button type="button" class="action-btn secondary" onclick="event.stopPropagation(); document.getElementById('inp-folder').click()">选择文件夹</button>
+    </div>
+    <p id="folder-info" class="text-xs text-gray-400 mt-1"></p>
   </div>
 
   <div class="mt-4">
@@ -210,37 +213,45 @@ const showToast = PortalToast.makeFloatingToast('app-toast', {
 // 上传准备
 // ═══════════════════════════════════════════════════════════
 
-async function onZipSelected(file) {
-  if (!file || !file.name.endsWith('.zip')) {
-    showToast('请选择 .zip 文件', 'err');
+async function onFolderSelected(fileList) {
+  const files = Array.from(fileList || []).filter(f => f && f.name);
+  if (!files.length) {
+    showToast('请选择包含文件的文件夹', 'err');
     return;
   }
-  const dz = document.getElementById('dz-zip');
+  const dz = document.getElementById('folder-dropzone');
   dz.classList.add('done');
-  document.getElementById('zip-info').textContent = `${file.name} (${fmtSize(file.size)}) — 上传中...`;
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const label = folderLabel(files);
+  document.getElementById('folder-info').textContent =
+    `${label} (${files.length} 个文件，${fmtSize(totalBytes)}) — 上传中...`;
 
   const fd = new FormData();
-  fd.append('file', file);
+  fd.append('submission_label', label);
+  files.forEach(file => {
+    const relativePath = file.webkitRelativePath || file.name;
+    fd.append('files', file, relativePath);
+  });
 
   try {
     const d = await PortalApi.sendForm(`${API}/tasks`, fd, { method: 'POST' });
     currentTaskId = d.task_id;
-    document.getElementById('zip-info').textContent =
-      `${file.name} (${fmtSize(file.size)}) — Task: ${d.task_id}`;
+    document.getElementById('folder-info').textContent =
+      `${label} (${files.length} 个文件，${fmtSize(totalBytes)}) — Task: ${d.task_id}`;
     document.getElementById('btn-classify').disabled = false;
   } catch (e) {
     dz.classList.remove('done');
-    document.getElementById('zip-info').textContent = '';
+    document.getElementById('folder-info').textContent = '';
     showToast('上传失败: ' + PortalApi.errorMessage(e, '创建任务失败'), 'err');
   }
 }
 
-// 拖放支持
 (function () {
-  const dz = document.getElementById('dz-zip');
-  ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); }));
-  ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); }));
-  dz.addEventListener('drop', ev => { if (ev.dataTransfer.files[0]) onZipSelected(ev.dataTransfer.files[0]); });
+  const dz = document.getElementById('folder-dropzone');
+  dz.addEventListener('click', ev => {
+    if (ev.target.closest('button')) return;
+    document.getElementById('inp-folder').click();
+  });
 })();
 
 // ═══════════════════════════════════════════════════════════
@@ -479,6 +490,14 @@ async function retryFailed() {
 
 function statCard(num, label, bg, color) {
   return `<div class="stat-card" style="background:${bg}"><div class="num" style="color:${color}">${num}</div><div class="label">${label}</div></div>`;
+}
+
+function folderLabel(files) {
+  const roots = files.map(file => {
+    const relativePath = file.webkitRelativePath || file.name;
+    return relativePath.split('/').filter(Boolean)[0] || file.name;
+  });
+  return roots.length && roots.every(root => root === roots[0]) ? roots[0] : 'folder-upload';
 }
 </script>
 </body>

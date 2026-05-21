@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,14 +8,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-
-
-def _make_zip_bytes(files: dict[str, bytes] | None = None) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        for name, data in (files or {"test.txt": b"hello"}).items():
-            zf.writestr(name, data)
-    return buf.getvalue()
 
 
 def _mock_task(
@@ -181,18 +171,22 @@ async def test_get_task_found(async_client):
     assert data["status"] == "draft"
 
 
-# ── Test 5: POST /api/v1/tasks — file too large ──────────────────────────────
+# ── Test 5: POST /api/v1/tasks — folder payload too large ───────────────────
 
-async def test_create_task_file_too_large(async_client):
+async def test_create_task_folder_payload_too_large(async_client):
     from app.core.db import get_session
 
     big_bytes = b"x" * 10
 
-    with patch("app.api.tasks.get_settings") as mock_settings_fn:
+    with (
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+        patch("app.api.tasks._task_repo") as mock_repo,
+    ):
         mock_s = MagicMock()
         mock_s.max_zip_bytes = 5
         mock_s.task_dir_base = "/tmp/test_tasks"
         mock_settings_fn.return_value = mock_s
+        mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
 
         async def override_session():
             yield AsyncMock()
@@ -202,7 +196,7 @@ async def test_create_task_file_too_large(async_client):
         async with async_client as client:
             resp = await client.post(
                 "/api/v1/tasks",
-                files={"file": ("big.zip", big_bytes, "application/zip")},
+                files=[("files", ("acme/big.txt", big_bytes, "text/plain"))],
             )
 
         app.dependency_overrides.clear()
@@ -216,7 +210,6 @@ async def test_create_task_idempotent(async_client):
     from app.core.db import get_session
 
     existing = _mock_task(task_id="exist01", status="draft", idempotency_key="idem-x")
-    zip_bytes = _make_zip_bytes()
 
     with patch("app.api.tasks._task_repo") as mock_repo:
         mock_repo.get_by_idempotency_key = AsyncMock(return_value=existing)
@@ -230,7 +223,7 @@ async def test_create_task_idempotent(async_client):
             resp = await client.post(
                 "/api/v1/tasks",
                 data={"idempotency_key": "idem-x"},
-                files={"file": ("test.zip", zip_bytes, "application/zip")},
+                files=[("files", ("acme/test.txt", b"hello", "text/plain"))],
             )
 
         app.dependency_overrides.clear()
@@ -403,6 +396,71 @@ async def test_upload_task_can_publish_object_source_reference(async_client, tmp
     }
 
 
+async def test_upload_task_deletes_staged_source_when_publish_fails():
+    from app.core.db import get_session
+    from app.services.delivery import DeliverySourceReference
+
+    task = _mock_task(status="confirmed")
+    item = _mock_item()
+    source_ref = DeliverySourceReference(
+        bucket="auto-upload-staging",
+        key="staged/tasks/abc123/archive.zip",
+        sha256="abc",
+        size=123,
+    )
+
+    with (
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+        patch("app.api.tasks.stage_task_archive", new_callable=AsyncMock) as stage_task_archive,
+        patch(
+            "app.api.tasks.delete_staged_archive",
+            new_callable=AsyncMock,
+        ) as delete_staged_archive,
+        patch("app.api.tasks.FileSpoolDeliveryPublisher") as publisher_cls,
+        patch("app.api.tasks._task_repo") as mock_task_repo,
+        patch("app.api.tasks._item_repo") as mock_item_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
+    ):
+        mock_settings = MagicMock()
+        mock_settings.delivery_backend = "go-worker"
+        mock_settings.delivery_transport = "file"
+        mock_settings.delivery_source_mode = "object"
+        mock_settings.delivery_outbox_base = "/tmp/outbox"
+        mock_settings.task_dir_base = "/tmp/tasks"
+        mock_settings.s3_bucket_name = "auto-upload-dev"
+        mock_settings.staging_bucket_name = "auto-upload-staging"
+        mock_settings_fn.return_value = mock_settings
+
+        publisher = AsyncMock()
+        publisher.publish.side_effect = RuntimeError("publish failed")
+        publisher_cls.return_value = publisher
+        stage_task_archive.return_value = source_ref
+        mock_task_repo.get = AsyncMock(return_value=task)
+        mock_item_repo.list_by_task = AsyncMock(return_value=[item])
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
+
+        mock_session_obj = AsyncMock()
+        mock_session_obj.commit = AsyncMock()
+
+        async def override_session():
+            yield mock_session_obj
+
+        app.dependency_overrides[get_session] = override_session
+
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/tasks/abc123/upload")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 500
+    delete_staged_archive.assert_awaited_once_with(source_ref)
+    assert mock_session_obj.commit.await_count == 2
+    deleted_event = mock_event_repo.append.await_args_list[-1]
+    assert deleted_event.args[2] == "task_staged_source_deleted"
+    assert deleted_event.args[3]["reason"] == "publish_failed"
+
+
 # ── Test 7: POST /api/v1/tasks — new task created ────────────────────────────
 
 async def test_create_task_new(async_client, tmp_path):
@@ -413,14 +471,14 @@ async def test_create_task_new(async_client, tmp_path):
         status="draft",
         temp_dir=str(tmp_path / "new001"),
     )
-    zip_bytes = _make_zip_bytes()
-
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
         mock_s.max_zip_bytes = 524_288_000
+        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_file_count = 5000
         mock_s.task_dir_base = str(tmp_path)
         mock_settings_fn.return_value = mock_s
 
@@ -447,7 +505,7 @@ async def test_create_task_new(async_client, tmp_path):
         async with async_client as client:
             resp = await client.post(
                 "/api/v1/tasks",
-                files={"file": ("test.zip", zip_bytes, "application/zip")},
+                files=[("files", ("acme/test.txt", b"hello", "text/plain"))],
             )
 
         app.dependency_overrides.clear()
@@ -455,6 +513,144 @@ async def test_create_task_new(async_client, tmp_path):
     assert resp.status_code == 201
     data = resp.json()
     assert data["task_id"] == "new001"
+
+
+async def test_create_task_accepts_folder_files(async_client, tmp_path):
+    from app.core.db import get_session
+
+    created_task = _mock_task(
+        task_id="folder01",
+        status="draft",
+        temp_dir=str(tmp_path / "folder01"),
+    )
+
+    with (
+        patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+    ):
+        mock_s = MagicMock()
+        mock_s.max_zip_bytes = 524_288_000
+        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_file_count = 5000
+        mock_s.task_dir_base = str(tmp_path)
+        mock_settings_fn.return_value = mock_s
+
+        mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
+        mock_repo.create = AsyncMock(return_value=created_task)
+        mock_repo.get = AsyncMock(return_value=created_task)
+
+        mock_session_obj = AsyncMock()
+        mock_session_obj.flush = AsyncMock()
+        mock_session_obj.commit = AsyncMock()
+
+        async def override_session():
+            yield mock_session_obj
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post(
+                "/api/v1/tasks",
+                data={"submission_label": "HQ batch"},
+                files=[
+                    ("files", ("acme/report.txt", b"hello", "text/plain")),
+                    ("files", ("globex/report.txt", b"world", "text/plain")),
+                ],
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 201
+    mock_repo.create.assert_awaited_once()
+    assert mock_repo.create.await_args.kwargs["submission_label"] == "HQ batch"
+    assert (tmp_path / "folder01" / ".auto_upload_internal" / "original.zip").exists()
+    assert (tmp_path / "folder01" / "acme" / "report.txt").read_text(encoding="utf-8") == "hello"
+    assert (tmp_path / "folder01" / "globex" / "report.txt").read_text(encoding="utf-8") == "world"
+
+
+async def test_create_task_keeps_user_original_zip_separate(async_client, tmp_path):
+    from app.core.db import get_session
+
+    created_task = _mock_task(
+        task_id="folder02",
+        status="draft",
+        temp_dir=str(tmp_path / "folder02"),
+    )
+
+    with (
+        patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+    ):
+        mock_s = MagicMock()
+        mock_s.max_zip_bytes = 524_288_000
+        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_file_count = 5000
+        mock_s.task_dir_base = str(tmp_path)
+        mock_settings_fn.return_value = mock_s
+
+        mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
+        mock_repo.create = AsyncMock(return_value=created_task)
+        mock_repo.get = AsyncMock(return_value=created_task)
+
+        mock_session_obj = AsyncMock()
+        mock_session_obj.flush = AsyncMock()
+        mock_session_obj.commit = AsyncMock()
+
+        async def override_session():
+            yield mock_session_obj
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post(
+                "/api/v1/tasks",
+                files=[
+                    ("files", ("original.zip", b"user zip bytes", "application/zip")),
+                    ("files", ("acme/report.txt", b"hello", "text/plain")),
+                ],
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 201
+    assert (tmp_path / "folder02" / "original.zip").read_bytes() == b"user zip bytes"
+    internal_archive = tmp_path / "folder02" / ".auto_upload_internal" / "original.zip"
+    assert internal_archive.exists()
+    assert internal_archive.read_bytes() != b"user zip bytes"
+
+
+async def test_create_task_rejects_folder_file_count_limit(async_client):
+    from app.core.db import get_session
+
+    with (
+        patch("app.api.tasks.get_settings") as mock_settings_fn,
+        patch("app.api.tasks._task_repo") as mock_repo,
+    ):
+        mock_s = MagicMock()
+        mock_s.max_zip_bytes = 524_288_000
+        mock_s.max_unzipped_bytes = 1_073_741_824
+        mock_s.max_file_count = 1
+        mock_s.task_dir_base = "/tmp/test_tasks"
+        mock_settings_fn.return_value = mock_s
+        mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post(
+                "/api/v1/tasks",
+                files=[
+                    ("files", ("acme/one.txt", b"one", "text/plain")),
+                    ("files", ("acme/two.txt", b"two", "text/plain")),
+                ],
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 413
 
 
 # ── Test 8: POST /api/v1/tasks/{id}/confirm ──────────────────────────────────
@@ -569,6 +765,8 @@ async def test_retry_task(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["reset_count"] == 3
+    assert data["status"] == "confirmed"
+    assert task.status == "confirmed"
 
 
 # ── Test 12: GET /api/v1/tasks/{id}/preview ──────────────────────────────────

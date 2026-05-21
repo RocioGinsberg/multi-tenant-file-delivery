@@ -390,22 +390,26 @@ async def test_consume_delivery_results_applies_kafka_messages_and_commits(
     session: AsyncSession,
 ):
     class FakeKafkaMessage:
-        def __init__(self, value: bytes):
+        def __init__(self, value: bytes, *, offset: int = 0):
+            self.offset = offset
             self.value = value
+
+    class FakeTopicPartition:
+        pass
 
     class FakeConsumer:
         def __init__(self, value: bytes):
             self.value = value
-            self.commits = 0
+            self.commits = []
             self.stopped = False
 
         async def getmany(self, *, timeout_ms, max_records):
             assert timeout_ms == 1000
             assert max_records == 100
-            return {object(): [FakeKafkaMessage(self.value)]}
+            return {FakeTopicPartition(): [FakeKafkaMessage(self.value)]}
 
-        async def commit(self):
-            self.commits += 1
+        async def commit(self, offsets=None):
+            self.commits.append(offsets)
 
         async def stop(self):
             self.stopped = True
@@ -444,6 +448,84 @@ async def test_consume_delivery_results_applies_kafka_messages_and_commits(
     )
 
     assert len(summaries) == 1
-    assert consumer.commits == 1
+    assert len(consumer.commits) == 1
+    committed_offsets = list(consumer.commits[0].values())
+    assert committed_offsets == [1]
     assert consumer.stopped is False
     assert task.status == "uploaded"
+
+
+@pytest.mark.asyncio
+async def test_consume_delivery_results_commits_one_kafka_offset_at_a_time(
+    session: AsyncSession,
+):
+    class FakeKafkaMessage:
+        def __init__(self, value: bytes, offset: int):
+            self.value = value
+            self.offset = offset
+
+    class FakeTopicPartition:
+        pass
+
+    class FakeConsumer:
+        def __init__(self, values: list[bytes]):
+            self.values = values
+            self.commits = []
+            self.stopped = False
+
+        async def getmany(self, *, timeout_ms, max_records):
+            return {
+                FakeTopicPartition(): [
+                    FakeKafkaMessage(value, index)
+                    for index, value in enumerate(self.values)
+                ]
+            }
+
+        async def commit(self, offsets=None):
+            self.commits.append(offsets)
+
+        async def stop(self):
+            self.stopped = True
+
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-kafka-offsets", status="queued")
+    session.add(task)
+    await session.flush()
+    items = await item_repo.bulk_insert(
+        session,
+        task.id,
+        [
+            {"src_path": "one.xlsx", "filename": "one.xlsx"},
+            {"src_path": "two.xlsx", "filename": "two.xlsx"},
+        ],
+    )
+
+    def payload(item_id: str) -> bytes:
+        return json.dumps({
+            "topic": "delivery.results.v1",
+            "task_id": task.id,
+            "status": "uploaded",
+            "uploaded": 1,
+            "failed": 0,
+            "processed": 1,
+            "started_at": "2026-05-17T11:59:00Z",
+            "ended_at": "2026-05-17T12:00:00Z",
+            "items": [{"item_id": item_id, "status": "uploaded"}],
+        }).encode("utf-8")
+
+    consumer = FakeConsumer([payload(items[0].id), payload(items[1].id)])
+
+    summaries = await consume_delivery_results(
+        session,
+        KafkaDeliveryResultConsumer(
+            bootstrap_servers="localhost:9092",
+            consumer=consumer,
+        ),
+    )
+
+    assert len(summaries) == 2
+    committed_offsets = [
+        list(commit.values())[0]
+        for commit in consumer.commits
+    ]
+    assert committed_offsets == [1, 2]

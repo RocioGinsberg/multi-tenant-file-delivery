@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
-import zipfile
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -26,18 +24,6 @@ _TASK_ITEM_COLUMNS = frozenset({
     "severity", "error_code", "error_message", "warning_message",
     "upload_status", "upload_error", "uploaded_at",
 })
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_zip_bytes(files: dict[str, bytes] | None = None) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        for name, data in (files or {"acme/月报.xlsx": b"fake xlsx content"}).items():
-            zf.writestr(name, data)
-    return buf.getvalue()
 
 
 def _make_profile() -> ProfileConfig:
@@ -102,6 +88,8 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
 
     mock_settings = MagicMock()
     mock_settings.max_zip_bytes = 524_288_000
+    mock_settings.max_unzipped_bytes = 1_073_741_824
+    mock_settings.max_file_count = 5000
     mock_settings.task_dir_base = str(tmp_path)
     mock_settings.classification_profile_path = "/fake/profile.json"
     mock_settings.s3_endpoint_url = "http://localhost:9000"
@@ -181,13 +169,10 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
 
 @pytest.mark.e2e
 async def test_e2e_full_flow(async_client):
-    """Complete business flow: upload zip → classify → preview → confirm → upload."""
-    zip_bytes = _make_zip_bytes({"acme/月报.xlsx": b"fake xlsx"})
-
-    # Step 1: Upload zip
+    """Complete business flow: upload folder → classify → preview → confirm → upload."""
     resp = await async_client.post(
         "/api/v1/tasks",
-        files={"file": ("test.zip", zip_bytes, "application/zip")},
+        files=[("files", ("acme/月报.xlsx", b"fake xlsx", "application/octet-stream"))],
     )
     assert resp.status_code == 201, f"create_task failed: {resp.text}"
     task_id = resp.json()["task_id"]
@@ -229,14 +214,13 @@ async def test_e2e_full_flow(async_client):
 @pytest.mark.e2e
 async def test_e2e_idempotency(async_client):
     """Uploading the same idempotency_key twice returns the same task_id."""
-    zip_bytes = _make_zip_bytes({"acme/月报.xlsx": b"fake xlsx"})
     idem_key = "my-unique-key-001"
 
     # First upload
     resp1 = await async_client.post(
         "/api/v1/tasks",
         data={"idempotency_key": idem_key},
-        files={"file": ("test.zip", zip_bytes, "application/zip")},
+        files=[("files", ("acme/月报.xlsx", b"fake xlsx", "application/octet-stream"))],
     )
     assert resp1.status_code == 201, f"First upload failed: {resp1.text}"
     task_id_1 = resp1.json()["task_id"]
@@ -245,7 +229,7 @@ async def test_e2e_idempotency(async_client):
     resp2 = await async_client.post(
         "/api/v1/tasks",
         data={"idempotency_key": idem_key},
-        files={"file": ("test.zip", zip_bytes, "application/zip")},
+        files=[("files", ("acme/月报.xlsx", b"fake xlsx", "application/octet-stream"))],
     )
     assert resp2.status_code == 200, f"Second upload (idempotent) failed: {resp2.text}"
     task_id_2 = resp2.json()["task_id"]
@@ -256,13 +240,38 @@ async def test_e2e_idempotency(async_client):
 
 
 @pytest.mark.e2e
-async def test_e2e_file_too_large(async_client, monkeypatch):
-    """Uploading a file larger than max_zip_bytes returns 413."""
+async def test_e2e_folder_upload_flow(async_client):
+    resp = await async_client.post(
+        "/api/v1/tasks",
+        data={"submission_label": "folder upload"},
+        files=[
+            ("files", ("acme/月报.xlsx", b"fake xlsx", "application/octet-stream")),
+            ("files", ("acme/说明.txt", b"note", "text/plain")),
+        ],
+    )
+    assert resp.status_code == 201, f"create folder task failed: {resp.text}"
+    task_id = resp.json()["task_id"]
+
+    resp = await async_client.post(f"/api/v1/tasks/{task_id}/classify")
+    assert resp.status_code == 200, f"classify failed: {resp.text}"
+    assert resp.json()["summary"]["total"] == 2
+
+    resp = await async_client.get(f"/api/v1/tasks/{task_id}/preview")
+    assert resp.status_code == 200, f"preview failed: {resp.text}"
+    items = resp.json()["items"]
+    assert {item["src_path"] for item in items} == {"acme/月报.xlsx", "acme/说明.txt"}
+
+
+@pytest.mark.e2e
+async def test_e2e_folder_payload_too_large(async_client, monkeypatch):
+    """Uploading a folder payload larger than max_unzipped_bytes returns 413."""
     # Override max_zip_bytes to a tiny value for this test
     monkeypatch.setattr(
         "app.api.tasks.get_settings",
         lambda: MagicMock(
-            max_zip_bytes=5,
+            max_zip_bytes=524_288_000,
+            max_unzipped_bytes=5,
+            max_file_count=5000,
             task_dir_base="/tmp",
         ),
     )
@@ -271,7 +280,7 @@ async def test_e2e_file_too_large(async_client, monkeypatch):
 
     resp = await async_client.post(
         "/api/v1/tasks",
-        files={"file": ("big.zip", big_bytes, "application/zip")},
+        files=[("files", ("acme/big.txt", big_bytes, "text/plain"))],
     )
     assert resp.status_code == 413, f"Expected 413, got {resp.status_code}: {resp.text}"
 
@@ -279,12 +288,10 @@ async def test_e2e_file_too_large(async_client, monkeypatch):
 @pytest.mark.e2e
 async def test_e2e_confirm_without_classify(async_client):
     """A task in draft status can still be confirmed (confirm doesn't check classification)."""
-    zip_bytes = _make_zip_bytes({"acme/月报.xlsx": b"fake xlsx"})
-
     # Create task (draft status)
     resp = await async_client.post(
         "/api/v1/tasks",
-        files={"file": ("test.zip", zip_bytes, "application/zip")},
+        files=[("files", ("acme/月报.xlsx", b"fake xlsx", "application/octet-stream"))],
     )
     assert resp.status_code == 201
     task_id = resp.json()["task_id"]

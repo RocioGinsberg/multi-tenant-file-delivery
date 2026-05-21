@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -14,9 +15,16 @@ import (
 type fakeKafkaReader struct {
 	fetched   []kafka.Message
 	committed []kafka.Message
+	emptyErr  error
 }
 
 func (r *fakeKafkaReader) FetchMessage(context.Context) (kafka.Message, error) {
+	if len(r.fetched) == 0 {
+		if r.emptyErr != nil {
+			return kafka.Message{}, r.emptyErr
+		}
+		return kafka.Message{}, io.EOF
+	}
 	msg := r.fetched[0]
 	r.fetched = r.fetched[1:]
 	return msg, nil
@@ -121,6 +129,7 @@ func TestKafkaTransportSendsInvalidTaskToDLQAndCommits(t *testing.T) {
 		writer,
 		dlqWriter,
 		1,
+		time.Millisecond,
 		"delivery.tasks.v1",
 		"delivery.tasks.dlq.v1",
 		"worker-test",
@@ -152,6 +161,74 @@ func TestKafkaTransportSendsInvalidTaskToDLQAndCommits(t *testing.T) {
 	}
 	if dlq.ErrorMessage == "" || dlq.FailedAt == "" {
 		t.Fatalf("expected error metadata: %+v", dlq)
+	}
+}
+
+func TestKafkaTransportReturnsPartialBatchOnTimeout(t *testing.T) {
+	task := message.DeliveryTask{
+		SchemaVersion:  1,
+		Topic:          "delivery.tasks.v1",
+		TaskID:         "task-1",
+		IdempotencyKey: "idem-1",
+		TempDir:        "/tmp/task-1",
+		BucketName:     "auto-upload-dev",
+		CreatedAt:      time.Date(2026, 5, 17, 10, 0, 0, 0, time.UTC),
+	}
+	raw, err := json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &fakeKafkaReader{
+		fetched: []kafka.Message{{
+			Topic: "delivery.tasks.v1",
+			Key:   []byte("task-1"),
+			Value: raw,
+		}},
+		emptyErr: context.DeadlineExceeded,
+	}
+	writer := &fakeKafkaWriter{}
+	transport := newKafkaTransport(reader, writer, 2)
+
+	tasks, err := transport.Consume(context.Background())
+	if err != nil {
+		t.Fatalf("consume partial batch: %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].Task.TaskID != "task-1" {
+		t.Fatalf("unexpected tasks: %+v", tasks)
+	}
+}
+
+func TestKafkaTransportSendsMissingTaskIDToDLQAndCommits(t *testing.T) {
+	reader := &fakeKafkaReader{fetched: []kafka.Message{{
+		Topic: "delivery.tasks.v1",
+		Key:   []byte("bad-task"),
+		Value: []byte(`{"schema_version":1}`),
+	}}}
+	writer := &fakeKafkaWriter{}
+	dlqWriter := &fakeKafkaWriter{}
+	transport := newKafkaTransportWithDLQ(
+		reader,
+		writer,
+		dlqWriter,
+		1,
+		time.Millisecond,
+		"delivery.tasks.v1",
+		"delivery.tasks.dlq.v1",
+		"worker-test",
+	)
+
+	tasks, err := transport.Consume(context.Background())
+	if err != nil {
+		t.Fatalf("consume task: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("unexpected tasks: %+v", tasks)
+	}
+	if len(reader.committed) != 1 || string(reader.committed[0].Key) != "bad-task" {
+		t.Fatalf("invalid message should be committed after DLQ write: %+v", reader.committed)
+	}
+	if len(dlqWriter.written) != 1 || string(dlqWriter.written[0].Key) != "bad-task" {
+		t.Fatalf("unexpected dlq writes: %+v", dlqWriter.written)
 	}
 }
 

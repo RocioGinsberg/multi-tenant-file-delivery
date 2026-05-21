@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"smh_auto_upload/data-plane/internal/message"
 	"smh_auto_upload/data-plane/internal/sink"
+	"smh_auto_upload/data-plane/internal/transport"
 )
 
 func TestRunProcessesInboxTaskAndWritesResult(t *testing.T) {
@@ -117,6 +119,69 @@ func TestRunWritesPartialFailureResult(t *testing.T) {
 	if len(result.Items) != 1 || result.Items[0].ItemID != "item-1" || result.Items[0].Status != "failed" || result.Items[0].Error == "" {
 		t.Fatalf("unexpected item result: %+v", result.Items)
 	}
+}
+
+func TestRunLoopsWhenOnceIsFalse(t *testing.T) {
+	task := message.DeliveryTask{
+		TaskID: "task-loop",
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SourcePath:   "report.txt",
+			DstPath:      "reports/report.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+	consumer := &loopConsumer{
+		batches: [][]transport.TaskMessage{
+			{transport.NewTaskMessage(task)},
+			{},
+		},
+		finalErr: errors.New("stop loop"),
+	}
+	producer := &recordingProducer{}
+	w := NewWithTransport(
+		Config{SinkName: "mock", Once: false},
+		sink.NewMockSink(),
+		consumer,
+		producer,
+	)
+
+	err := w.Run(context.Background())
+	if err == nil || err.Error() != "stop loop" {
+		t.Fatalf("unexpected run error: %v", err)
+	}
+	if consumer.calls != 3 {
+		t.Fatalf("expected repeated consume calls, got %d", consumer.calls)
+	}
+	if len(producer.results) != 1 || producer.results[0].TaskID != "task-loop" {
+		t.Fatalf("unexpected produced results: %+v", producer.results)
+	}
+}
+
+type loopConsumer struct {
+	batches  [][]transport.TaskMessage
+	finalErr error
+	calls    int
+}
+
+func (c *loopConsumer) Consume(context.Context) ([]transport.TaskMessage, error) {
+	c.calls++
+	if len(c.batches) == 0 {
+		return nil, c.finalErr
+	}
+	batch := c.batches[0]
+	c.batches = c.batches[1:]
+	return batch, nil
+}
+
+type recordingProducer struct {
+	results []message.DeliveryResult
+}
+
+func (p *recordingProducer) Produce(_ context.Context, result message.DeliveryResult) error {
+	p.results = append(p.results, result)
+	return nil
 }
 
 func writeTaskFile(t *testing.T, inboxDir string, task message.DeliveryTask) {

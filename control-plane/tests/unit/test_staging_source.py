@@ -24,11 +24,13 @@ class FakeS3Client:
 
 
 @pytest.mark.asyncio
-async def test_stage_task_archive_uploads_original_zip(monkeypatch, tmp_path):
+async def test_stage_task_archive_uploads_internal_archive(monkeypatch, tmp_path):
     task_dir = tmp_path / "task-1"
-    task_dir.mkdir()
+    internal_dir = task_dir / ".auto_upload_internal"
+    internal_dir.mkdir(parents=True)
     archive_bytes = b"zip-bytes"
-    (task_dir / "original.zip").write_bytes(archive_bytes)
+    (internal_dir / "original.zip").write_bytes(archive_bytes)
+    (task_dir / "original.zip").write_bytes(b"user-file")
     fake_client = FakeS3Client()
 
     @asynccontextmanager

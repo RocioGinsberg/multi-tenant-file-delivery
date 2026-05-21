@@ -369,12 +369,20 @@ class KafkaDeliveryResultConsumer:
             max_records=self.max_records,
         )
         records: list[DeliveryResultRecord] = []
-        for messages in batches.values():
+        for topic_partition, messages in batches.items():
             for kafka_message in messages:
                 result = DeliveryResultMessage.model_validate_json(
                     kafka_message.value.decode("utf-8")
                 )
-                records.append(DeliveryResultRecord(message=result, ack=consumer.commit))
+                offset = kafka_message.offset + 1
+
+                async def _ack(
+                    tp=topic_partition,
+                    committed_offset=offset,
+                ) -> None:
+                    await consumer.commit({tp: committed_offset})
+
+                records.append(DeliveryResultRecord(message=result, ack=_ack))
         return records
 
     async def close(self) -> None:

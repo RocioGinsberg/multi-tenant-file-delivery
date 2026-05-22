@@ -128,16 +128,20 @@ go run ./cmd/worker \
   -sink mock
 ```
 
-Phase 5.1 observability flags are placeholders and default disabled. They are parsed, validated when enabled, and logged, but they do not start metrics or tracing yet:
+Phase 5.4 metrics default disabled. When `-metrics-enabled` is set, the worker starts a Prometheus endpoint on `-metrics-listen-addr` and records low-cardinality RED metrics for task consume, source read, sink upload, result publish, and limiter acquire:
 ```bash
 go run ./cmd/worker \
   -metrics-enabled \
   -metrics-listen-addr :8081 \
-  -tracing-enabled \
-  -tracing-service-name data-plane-worker \
-  -tracing-otlp-endpoint http://localhost:4318 \
   -sink mock
 ```
+
+Then scrape:
+```bash
+curl http://localhost:8081/metrics
+```
+
+Tracing flags are still parsed and validated as placeholders until Phase 5.5.
 
 Docker Redis limiter smoke：
 ```bash

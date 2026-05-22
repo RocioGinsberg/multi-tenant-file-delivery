@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"smh_auto_upload/data-plane/internal/message"
+	dmetrics "smh_auto_upload/data-plane/internal/metrics"
 	"smh_auto_upload/data-plane/internal/pipeline"
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
@@ -15,10 +16,12 @@ type Config struct {
 	InboxDir           string
 	ResultsDir         string
 	SinkName           string
+	TransportName      string
 	Once               bool
 	MaxItemConcurrency int
 	UploadLimiter      UploadLimiter
 	LimiterKey         string
+	Metrics            dmetrics.Recorder
 }
 
 type UploadLimiter interface {
@@ -60,8 +63,16 @@ func NewWithTransportAndResolver(
 // Run processes tasks from the configured transport. Kafka can replace the
 // file-spool transport without changing pipeline.ProcessTask.
 func (w *Worker) Run(ctx context.Context) error {
+	recorder := dmetrics.OrNoop(w.cfg.Metrics)
+	transportName := w.transportName()
 	for {
+		consumeStart := time.Now()
 		tasks, err := w.tasks.Consume(ctx)
+		consumeStatus := dmetrics.StatusFromError(err)
+		if err == nil && len(tasks) == 0 {
+			consumeStatus = dmetrics.StatusEmpty
+		}
+		recorder.ObserveTaskConsume(transportName, consumeStatus, time.Since(consumeStart))
 		if err != nil {
 			return err
 		}
@@ -81,6 +92,7 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) error {
+	recorder := dmetrics.OrNoop(w.cfg.Metrics)
 	started := time.Now().UTC()
 	result := message.DeliveryResult{
 		Topic:     "delivery.results.v1",
@@ -89,14 +101,20 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 		StartedAt: started,
 	}
 
-	options := pipeline.Options{MaxItemConcurrency: w.cfg.MaxItemConcurrency}
+	options := pipeline.Options{
+		MaxItemConcurrency: w.cfg.MaxItemConcurrency,
+		Metrics:            recorder,
+	}
 	if w.cfg.UploadLimiter != nil {
 		limiterKey := w.cfg.LimiterKey
 		if limiterKey == "" {
 			limiterKey = "global"
 		}
 		options.BeforeUpload = func(ctx context.Context, _ message.DeliveryTask, _ message.DeliveryItem) error {
-			return w.cfg.UploadLimiter.Allow(ctx, limiterKey)
+			limiterStart := time.Now()
+			err := w.cfg.UploadLimiter.Allow(ctx, limiterKey)
+			recorder.ObserveLimiterAcquire(dmetrics.StatusFromError(err), time.Since(limiterStart))
+			return err
 		}
 	}
 
@@ -117,5 +135,22 @@ func (w *Worker) processTask(ctx context.Context, task message.DeliveryTask) err
 		result.Error = err.Error()
 	}
 
-	return w.results.Produce(ctx, result)
+	publishStart := time.Now()
+	publishErr := w.results.Produce(ctx, result)
+	recorder.ObserveResultPublish(
+		w.transportName(),
+		dmetrics.StatusFromError(publishErr),
+		time.Since(publishStart),
+	)
+	return publishErr
+}
+
+func (w *Worker) transportName() string {
+	if w.cfg.TransportName != "" {
+		return w.cfg.TransportName
+	}
+	if w.cfg.InboxDir != "" || w.cfg.ResultsDir != "" {
+		return "file"
+	}
+	return "unknown"
 }

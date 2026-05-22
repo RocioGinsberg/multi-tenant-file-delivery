@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"smh_auto_upload/data-plane/internal/limiter"
+	dmetrics "smh_auto_upload/data-plane/internal/metrics"
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
 	"smh_auto_upload/data-plane/internal/transport"
@@ -45,7 +46,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	kafkaBatchSize := flags.Int("kafka-batch-size", 1, "number of Kafka task messages to process per run")
 	startupCheck := flags.Bool("startup-check", true, "check external Kafka/S3 dependencies before processing tasks")
 	startupCheckTimeout := flags.Duration("startup-check-timeout", 3*time.Second, "timeout for startup dependency checks")
-	metricsEnabled := flags.Bool("metrics-enabled", false, "enable Prometheus metrics endpoint (placeholder; no-op in Phase 5.1)")
+	metricsEnabled := flags.Bool("metrics-enabled", false, "enable Prometheus metrics endpoint")
 	metricsListenAddr := flags.String("metrics-listen-addr", ":8081", "listen address for Prometheus metrics endpoint")
 	tracingEnabled := flags.Bool("tracing-enabled", false, "enable OpenTelemetry tracing (placeholder; no-op in Phase 5.1)")
 	tracingServiceName := flags.String("tracing-service-name", "data-plane-worker", "OpenTelemetry service name")
@@ -116,6 +117,23 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		*tracingServiceName,
 		redactURL(*tracingOTLPEndpoint),
 	)
+	var metricsRecorder dmetrics.Recorder = dmetrics.NoopRecorder{}
+	if *metricsEnabled {
+		prometheusRecorder := dmetrics.NewPrometheusRecorder()
+		metricsServer, err := dmetrics.StartServer(ctx, *metricsListenAddr, prometheusRecorder)
+		if err != nil {
+			return fmt.Errorf("start metrics server: %w", err)
+		}
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("shutdown metrics server: %v", err)
+			}
+		}()
+		log.Printf("metrics endpoint listening on %s", metricsServer.Addr())
+		metricsRecorder = prometheusRecorder
+	}
 	checkCtx := ctx
 	var cancelCheck context.CancelFunc
 	if *startupCheck {
@@ -157,8 +175,10 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		InboxDir:           *inbox,
 		ResultsDir:         *results,
 		SinkName:           *sinkName,
+		TransportName:      *transportName,
 		Once:               *once,
 		MaxItemConcurrency: *itemConcurrency,
+		Metrics:            metricsRecorder,
 	}
 	if *redisLimiterEnabled {
 		uploadLimiter, err := limiter.NewRedisLimiter(limiter.RedisConfig{

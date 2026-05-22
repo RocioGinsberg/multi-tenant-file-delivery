@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1-5.3 已完成；5.4-5.7 待实现）
+> **状态**：Current（5.1-5.4 已完成；5.5-5.7 待实现）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -142,7 +142,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.4 data-plane metrics baseline
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - Go worker 增加 metrics HTTP endpoint 或复用现有 server 入口。
@@ -153,8 +153,18 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - 单测或 integration test 能读取 metrics endpoint 并看到 worker 指标。
   - 不启用 metrics 时 CLI 行为不变。
 - **建议执行方**：L2 worker。
+- **实际执行**：主 Agent 实现并审计；子代理额度已满，未派发。
+- **实际变更**：
+  - `data-plane/internal/metrics/`：新增独立 Prometheus registry、metrics HTTP server、no-op recorder、低基数 RED metrics recorder 和 source read wrapper。
+  - `data-plane/cmd/worker/main.go`：`-metrics-enabled` 启动独立 `/metrics` endpoint；默认关闭时保持 no-op。
+  - `data-plane/internal/worker/worker.go`：为 task consume、result publish、limiter acquire 注入 metrics；把 recorder 传入 pipeline。
+  - `data-plane/internal/pipeline/pipeline.go`：为 source read 和 sink upload 注入 metrics；labels 仅使用 `source`、`sink`、`status` 等低基数字段。
+  - `data-plane/cmd/worker/main_test.go`、`data-plane/internal/worker/worker_test.go`、`data-plane/internal/metrics/metrics_test.go`：覆盖 CLI enabled 配置、worker path metrics、metrics endpoint scrape。
+  - `data-plane/README.md`、`deploy/README.md`：补 data-plane metrics 启动和 scrape 说明。
+- **风险 / 备注**：
+  - `data_plane_source_read_*` 记录的是 source `Open` 到 `Close` 的读操作；S3 sink 因 hash + upload 两次打开 source，可能记录两次 source read，这是读操作指标而不是 item 数。
 - **验证**：
-  - `cd data-plane && GOTOOLCHAIN=local GOCACHE=/tmp/smh_go_cache go test ./...`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./...`
 
 ### 5.5 data-plane trace context 提取与 sink spans
 

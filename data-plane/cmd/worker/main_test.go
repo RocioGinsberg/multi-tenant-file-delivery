@@ -125,17 +125,45 @@ func TestRunAcceptsDefaultObservabilityFlags(t *testing.T) {
 	}
 }
 
-func TestRunAcceptsEnabledObservabilityPlaceholders(t *testing.T) {
+func TestRunAcceptsEnabledObservabilityConfig(t *testing.T) {
 	dir := t.TempDir()
 	inboxDir := filepath.Join(dir, "delivery.tasks.v1")
 	resultsDir := filepath.Join(dir, "delivery.results.v1")
+	tempDir := filepath.Join(dir, "task")
+	if err := os.MkdirAll(inboxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "report.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task := message.DeliveryTask{
+		TaskID:  "task-metrics-cli",
+		TempDir: tempDir,
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SrcPath:      "report.txt",
+			DstPath:      "reports/report.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+	raw, err := json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inboxDir, "task-metrics-cli.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	var stderr bytes.Buffer
-	err := run(context.Background(), []string{
+	err = run(context.Background(), []string{
 		"-inbox", inboxDir,
 		"-results", resultsDir,
 		"-metrics-enabled",
-		"-metrics-listen-addr", "127.0.0.1:8081",
+		"-metrics-listen-addr", "127.0.0.1:0",
 		"-tracing-enabled",
 		"-tracing-service-name", "data-plane-test",
 		"-tracing-otlp-endpoint", "http://otel-collector:4318",

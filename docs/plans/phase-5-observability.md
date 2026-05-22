@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1-5.5 已完成；5.6-5.7 待实现）
+> **状态**：Current（5.1-5.6 已完成；5.7 待实现）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -195,7 +195,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.6 Phase 5 observability smoke
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 新增一条 Docker opt-in smoke，启动 MySQL / Kafka / MinIO / Redis / OTel / Prometheus。
@@ -206,9 +206,20 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - smoke 默认跳过，`RUN_DOCKER_TESTS=1` 才执行。
   - 失败信息能指明是 collector / metrics / Kafka / worker 哪一段异常。
 - **建议执行方**：L2 worker；主 Agent 负责最终审计。
+- **实际执行**：主 Agent 实现并审计；子代理额度已满，未派发。
+- **实际变更**：
+  - `control-plane/tests/integration/test_observability_docker.py`：新增 Docker opt-in smoke，自动启动本地依赖、发布 object-source task、校验 control-plane `/metrics`、data-plane metrics、Kafka result apply，以及 collector debug 日志中的同 trace ID。
+  - `data-plane/internal/tracing/tracing.go`：修复 Go 端 W3C `traceparent` 恢复逻辑，手动构造 remote span context，确保 `data_plane.task.process` 及后续 spans 继承 Python payload trace ID。
+  - `data-plane/internal/tracing/tracing_test.go`：补 span parent 继承单测，证明提取后的 traceparent 会成为新 span 的 remote parent。
+  - `deploy/otel/collector.yml`：debug exporter 调整为 `verbosity: detailed`，让 smoke 能从 collector logs 验证 span 名称、service.name 和 trace ID。
+- **备注**：
+  - `data_plane.task.consume` 在 payload 被读取前开始，可能是独立 trace；5.6 smoke 只要求 control-plane publish 与 data-plane task process/source/sink/result publish 共享同一 trace。
+  - control-plane result consume/apply 当前不强制继承 data-plane result trace；后续如要补 result trace propagation，可单独进入 Phase 5.x 或 Phase 6。
 - **验证**：
-  - `cd deploy && docker compose up -d mysql kafka minio minio-init redis otel-collector prometheus grafana`
-  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observability_docker.py`
+  - `cd control-plane && .venv/bin/python -m ruff check app tests`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./...`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_observability_docker.py`
+  - `cd control-plane && timeout 180s env RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observability_docker.py -q`
 
 ### 5.7 Dashboard、runbook 与阶段收口
 

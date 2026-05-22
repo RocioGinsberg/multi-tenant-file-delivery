@@ -36,6 +36,14 @@ Phase 5 本地可观测组件：
 docker compose up -d otel-collector prometheus grafana
 ```
 
+Phase 5 observability smoke 会自动启动所需本地依赖，也可以手动先启动全栈：
+
+```bash
+docker compose up -d mysql kafka minio minio-init redis otel-collector prometheus grafana
+cd ../control-plane
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observability_docker.py
+```
+
 全栈本地依赖：
 
 ```bash
@@ -71,7 +79,7 @@ RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
 
 ### 可观测配置说明
 
-OTel Collector 接收 OTLP gRPC / HTTP，trace 默认输出到 collector 日志，OTLP metrics 暴露到 `:9464/metrics` 供 Prometheus 抓取。
+OTel Collector 接收 OTLP gRPC / HTTP，trace 默认以 detailed debug 格式输出到 collector 日志，OTLP metrics 暴露到 `:9464/metrics` 供 Prometheus 抓取。Phase 5 smoke 会读取 collector 日志中的 `Trace ID`、`service.name` 和 span 名称，验证 control-plane publish 与 data-plane process/upload 共享同一 trace。
 
 Prometheus 默认抓取：
 

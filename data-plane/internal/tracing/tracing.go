@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -81,10 +83,36 @@ func ExtractTraceparent(ctx context.Context, traceparent string) context.Context
 	if traceparent == "" {
 		return ctx
 	}
-	return propagation.TraceContext{}.Extract(
-		ctx,
-		propagation.MapCarrier{"traceparent": traceparent},
-	)
+	spanContext, ok := parseTraceparent(traceparent)
+	if !ok {
+		return ctx
+	}
+	return trace.ContextWithRemoteSpanContext(ctx, spanContext)
+}
+
+func parseTraceparent(header string) (trace.SpanContext, bool) {
+	parts := strings.Split(header, "-")
+	if len(parts) != 4 || parts[0] == "ff" {
+		return trace.SpanContext{}, false
+	}
+	traceID, err := trace.TraceIDFromHex(parts[1])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	spanID, err := trace.SpanIDFromHex(parts[2])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	flags, err := strconv.ParseUint(parts[3], 16, 8)
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	return trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: trace.TraceFlags(byte(flags)),
+		Remote:     true,
+	}), true
 }
 
 func RecordError(span trace.Span, err error) {

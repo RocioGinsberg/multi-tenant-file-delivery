@@ -1,6 +1,6 @@
 # Phase 6.5 — Workspace + 子公司读视图
 
-> **状态**：Current（Phase 6 已合并；tag-prep review 后进入 workspace 读视图实现）
+> **状态**：Done（workspace schema/repo、result apply 读模型、子公司读 API、download URL、最小前端视图和回归测试已完成；tag 前补最终 README demo/GIF）
 > **目标**：在 Phase 6 tenant / actor / RBAC 基线上补齐 workspace 元数据、投递结果映射和子公司只读浏览/下载路径，让平台形成最小完整产品闭环。
 > **完成定义**：HQ 写路径上传成功后会生成 workspace_object 元数据；子公司 actor 只能列出 / 查看 / 下载自己租户可见的 workspace 文件；下载由控制面鉴权后签发短 TTL presigned URL；测试覆盖跨租户不可见、HQ 写入到 workspace、子公司读路径和默认 actor 兼容。
 > **前序计划**：[Phase 6 — 多租户 + 鉴权](./phase-6-multitenancy-auth.md)
@@ -53,7 +53,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.1 Workspace schema baseline
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **推荐执行方**：`gpt-5.5` medium worker，主对话审计
 - **范围**：
@@ -66,7 +66,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.2 Workspace repository and access policy
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **推荐执行方**：`gpt-5.5` medium worker，主对话审计
 - **范围**：
@@ -78,7 +78,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.3 Result apply to workspace metadata
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **推荐执行方**：主对话或 `gpt-5.5` medium worker，小步提交后主对话审计
 - **范围**：
@@ -91,7 +91,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.4 Workspace read APIs
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **推荐执行方**：`gpt-5.5` medium worker，主对话审计
 - **范围**：
@@ -103,7 +103,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.5 Presigned download URL
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **推荐执行方**：`gpt-5.5` medium worker，主对话审计
 - **范围**：
@@ -116,7 +116,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 
 ### 6.5.6 Phase 6.5 smoke and docs
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **推荐执行方**：mini worker 可做文档草稿；主对话跑 smoke
 - **范围**：
@@ -135,6 +135,15 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 cd control-plane
 .venv/bin/python -m ruff check app tests
 .venv/bin/python -m pytest
+```
+
+已执行验证：
+
+```bash
+cd control-plane
+.venv/bin/python -m pytest tests/integration/test_db.py tests/integration/test_workspace_repo.py tests/integration/test_delivery.py tests/integration/test_api_workspaces.py tests/unit/test_presign.py -q
+.venv/bin/python -m ruff check app tests
+.venv/bin/python -m pytest -q
 ```
 
 迁移验证：

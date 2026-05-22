@@ -8,10 +8,10 @@
 app/
   api/           FastAPI 路由（/api/v1）
   core/          配置（pydantic-settings）、数据库（SQLAlchemy 2.0 async）
-  models/        SQLAlchemy ORM 模型（task / task_item / task_event）
+  models/        SQLAlchemy ORM 模型（task / task_item / task_event / workspace）
   schemas/       Pydantic v2 response schemas
   services/      classifier、classification_profile、delivery、staging_source、progress_bus、task_runner
-  repos/         数据访问层（task_repo / item_repo / event_repo）
+  repos/         数据访问层（task_repo / item_repo / event_repo / workspace_repo）
 alembic/         DB migrations（SQLite test，MySQL dev/prod target）
 tests/           pytest 单测 + e2e 集成测试
 _legacy/         v0 历史代码（参考用，不参与构建）
@@ -43,6 +43,7 @@ cp .env.example .env
 | `STAGING_BUCKET_NAME` | `auto-upload-staging` | source reference 暂存 bucket |
 | `S3_ACCESS_KEY_ID` | `minioadmin` | MinIO root user |
 | `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
+| `WORKSPACE_DOWNLOAD_URL_TTL_SECONDS` | `300` | Phase 6.5 workspace 下载 URL TTL |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
 | `AUTH_ALLOW_DEV_HEADERS` | `true` | 是否允许通过开发 header 指定当前 actor |
 | `AUTH_DEFAULT_ACTOR_ENABLED` | `true` | 未提供 actor header 时是否使用默认本地 actor |
@@ -136,7 +137,7 @@ cd control-plane
 alembic upgrade head
 ```
 
-应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入。
+应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入；Phase 6.5 的 demo subsidiary actor 和 `aishide` / `xinyanhaijia` workspace seed 由 `0003_phase65_workspace_read_view.py` 写入。
 
 MySQL 本地 compose：
 
@@ -191,6 +192,10 @@ Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span
 | `POST` | `/tasks/{id}/retry` | 重置 failed items → pending |
 | `GET` | `/tasks/{id}` | task 详情 |
 | `GET` | `/tasks` | task 列表（limit/offset 分页） |
+| `GET` | `/workspaces` | 当前 actor 可见 workspace 列表 |
+| `GET` | `/workspaces/{id}/objects` | 当前 actor 可见 workspace 文件列表 |
+| `GET` | `/workspace-objects/{id}` | workspace 文件详情 |
+| `POST` | `/workspace-objects/{id}/download-url` | 鉴权后签发短 TTL S3 / MinIO 下载 URL |
 
 ## 运行测试
 
@@ -250,5 +255,5 @@ python -m app.jobs.cleanup_staging_sources --retention-days 7 --bucket-name auto
 
 ## 前端
 
-静态前端位于 `../web/public/index.html`，直接用浏览器打开或通过 nginx/静态服务器伺服。
+静态前端写路径位于 `../web/public/index.html`，Phase 6.5 子公司读视图位于 `../web/public/workspaces.html`；直接用浏览器打开或通过 nginx/静态服务器伺服。
 API 请求默认打到同域的 `/api/v1`，dev 环境可用 nginx 反向代理到 `localhost:8000`。

@@ -30,7 +30,7 @@
 | Phase 4 | Done | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Done | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标；本地 dashboard / smoke |
 | Phase 6 | Done | 多租户 + 鉴权 | 控制面基线已落地并合并：dev header / 默认 actor，tenant / app_user，repo tenant filter，最小 task_event actor attribution；tag-prep review 修复 result apply 任务绑定和 confirm 状态检查 |
-| Phase 6.5 | Current | Workspace + 子公司读视图 | 计划已写；子公司登录后可浏览和下载自己的 workspace 文件 |
+| Phase 6.5 | Done | Workspace + 子公司读视图 | workspace / physical_object / workspace_object 元数据、result apply 读模型、子公司只读 API、download URL 和最小前端视图已落地 |
 | Phase 7 | Planned | 扩 sink + 压测 | OSS / Webhook / mock 异常 sink，BENCHMARKS 写入实测数据 |
 | Phase 8 | Optional | HA 改造 | 多实例和 rolling restart 不丢任务 |
 
@@ -74,16 +74,14 @@
 
 ## 当前下一步建议
 
-Phase 6 已落地：
+Phase 6.5 已落地，首次 tag 前建议：
 
-- Phase 5 的 observability baseline 已可用于审计多租户改造中的跨组件回归。
-- tenant / app_user / role schema 与 request actor context 已进入控制面。
-- task / task_item / task_event 的仓储层访问已收敛到 tenant-aware repo；写路径优先覆盖 RBAC。
-- Phase 6.5 当前扩 workspace / 子公司读视图。
-- 避免把 workspace_object、dedup、sink credential 加密全部塞进 Phase 6；这些应拆到 Phase 6.5 / Phase 7。
+- 补 README 最终 demo GIF，展示 HQ 上传 -> data-plane 投递 -> 子公司 workspace 查看 / 下载。
+- 跑 tag 前 smoke：control-plane full pytest / ruff、data-plane go test、SQLite + MySQL migration、Docker observability 或最小全链路 smoke。
+- tag 打在 Phase 6.5 合并到 `main` 后的 commit 上。
 
-Phase 6.5 启动输入：
+Phase 7 启动输入：
 
-- Phase 6 已合并，`CurrentActor`、tenant filter 和 task_event actor attribution 可作为读路径权限基线。
-- Phase 6.5 先做 metadata-first workspace 读视图：workspace / physical_object / workspace_object、result apply 元数据写入、子公司列表和 presigned download URL。
-- 平台层 dedup、multipart / resume、sink credential 加密和 workspace 管理后台继续留到 Phase 7 或独立后续阶段。
+- Phase 6.5 已提供 workspace / physical_object / workspace_object 元数据，可作为平台层 dedup、refcount GC、sink credential 和管理后台的基线。
+- 当前 data-plane 仍是 S3 / MinIO 单段 PUT；OSS / Webhook / 异常 sink 和压测进入 Phase 7。
+- 完整 audit_log 仍未落表，当前下载 URL 签发审计暂存在来源 task_event。

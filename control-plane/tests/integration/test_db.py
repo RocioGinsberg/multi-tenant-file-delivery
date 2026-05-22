@@ -28,6 +28,9 @@ def test_models_are_registered():
     assert "task" in table_names
     assert "task_item" in table_names
     assert "task_event" in table_names
+    assert "workspace" in table_names
+    assert "physical_object" in table_names
+    assert "workspace_object" in table_names
 
 
 def test_alembic_upgrade_creates_tables(tmp_path):
@@ -69,6 +72,9 @@ def test_alembic_upgrade_creates_tables(tmp_path):
     assert "task_event" in existing
     assert "tenant" in existing
     assert "app_user" in existing
+    assert "workspace" in existing
+    assert "physical_object" in existing
+    assert "workspace_object" in existing
 
 
 @pytest.mark.asyncio

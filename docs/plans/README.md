@@ -29,7 +29,7 @@
 - [Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md) ← 完成
 - [Phase 5 — 可观测三件套](./phase-5-observability.md) ← 完成
 - [Phase 6 — 多租户 + 鉴权](./phase-6-multitenancy-auth.md) ← 完成
-- [Phase 6.5 — Workspace + 子公司读视图](./phase-6.5-workspace-read-view.md) ← 当前
+- [Phase 6.5 — Workspace + 子公司读视图](./phase-6.5-workspace-read-view.md) ← 完成
 - Phase 7 — 扩 Sink + 压测（待写）
 - Phase 8（可选）— HA 改造（待写）
 

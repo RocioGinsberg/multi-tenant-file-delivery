@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     s3_access_key_id: str = "minioadmin"
     s3_secret_access_key: str = "minioadmin"
     staging_bucket_name: str = "auto-upload-staging"
+    workspace_download_url_ttl_seconds: int = 300
 
     # ── Worker concurrency (used by 1.8 task_runner) ──
     worker_max_target_concurrent: int = 3

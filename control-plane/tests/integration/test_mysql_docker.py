@@ -40,7 +40,15 @@ def test_mysql_alembic_upgrade_creates_core_tables():
         os.environ.pop("DATABASE_URL", None)
         get_settings.cache_clear()
 
-    assert {"alembic_version", "task", "task_item", "task_event"} <= tables
+    assert {
+        "alembic_version",
+        "task",
+        "task_item",
+        "task_event",
+        "workspace",
+        "physical_object",
+        "workspace_object",
+    } <= tables
 
 
 async def _get_table_names(db_url: str) -> set[str]:

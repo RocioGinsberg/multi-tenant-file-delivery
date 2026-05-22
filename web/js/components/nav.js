@@ -4,14 +4,18 @@
   function render(selector) {
     var target = document.querySelector(selector || 'header.hdr');
     if (!target) return;
+    var path = window.location.pathname || '/';
+    var uploadActive = path === '/' || path.endsWith('/index.html');
+    var workspaceActive = path.endsWith('/workspaces.html');
     target.innerHTML = ''
       + '<div class="hdr-inner">'
       +   '<a href="/" class="logo">'
-      +     '<div class="logo-mark">C</div>'
-      +     '<span class="logo-text">CosDrive Local Service</span>'
+      +     '<div class="logo-mark">AU</div>'
+      +     '<span class="logo-text">Auto Upload</span>'
       +   '</a>'
       +   '<nav class="nav">'
-      +     '<a href="/" class="nav-link active">企业网盘</a>'
+      +     '<a href="/" class="nav-link ' + (uploadActive ? 'active' : '') + '">上传台</a>'
+      +     '<a href="/workspaces.html" class="nav-link ' + (workspaceActive ? 'active' : '') + '">子公司视图</a>'
       +     '<div class="conn-ind">'
       +       '<span class="dot" id="dot"></span>'
       +       '<span id="conn-status">连接中…</span>'

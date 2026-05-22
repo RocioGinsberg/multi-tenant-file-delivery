@@ -55,7 +55,7 @@
 
 **Phase 6（完成）**：多租户 + 鉴权。已补齐 dev header / 默认 actor、tenant / app_user、task owner tenant/user、repo tenant filter 和最小 task_event actor attribution，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
 
-**Phase 6.5（当前）**：Workspace + 子公司读视图。目标是在 Phase 6 身份与隔离基线上补齐 workspace 元数据、投递结果映射和子公司只读浏览 / 下载路径，形成最小完整平台闭环。
+**Phase 6.5（完成）**：Workspace + 子公司读视图。控制面已补 workspace / physical object / workspace object 元数据、result apply 到读模型映射、子公司只读 API、短 TTL presigned download URL 和最小静态 workspace 页面，形成 tag 前的最小完整平台闭环。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

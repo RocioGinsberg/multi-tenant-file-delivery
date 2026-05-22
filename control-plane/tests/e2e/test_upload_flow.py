@@ -294,7 +294,7 @@ async def test_e2e_folder_payload_too_large(async_client, monkeypatch):
 
 @pytest.mark.e2e
 async def test_e2e_confirm_without_classify(async_client):
-    """A task in draft status can still be confirmed (confirm doesn't check classification)."""
+    """A task in draft status cannot be confirmed before classification."""
     # Create task (draft status)
     resp = await async_client.post(
         "/api/v1/tasks",
@@ -305,5 +305,5 @@ async def test_e2e_confirm_without_classify(async_client):
 
     # Confirm without classify
     resp = await async_client.post(f"/api/v1/tasks/{task_id}/confirm")
-    assert resp.status_code == 200, f"confirm failed: {resp.text}"
-    assert resp.json()["status"] == "confirmed"
+    assert resp.status_code == 422
+    assert "classified" in resp.json()["detail"]

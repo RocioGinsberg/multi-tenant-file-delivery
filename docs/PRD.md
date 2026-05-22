@@ -1,6 +1,6 @@
-# PDR — 多租户文件分发与观测平台
+# PRD — 多租户文件分发与观测平台
 
-> PDR = Product Design Requirements。本文描述“要解决什么业务问题、服务谁、边界在哪里”。技术方案细节放到 `ARCHITECTURE.md` / `RFC` / `ADR`。
+> PRD = Product Requirements Document。本文描述“要解决什么业务问题、服务谁、边界在哪里”。技术方案细节放到 `ARCHITECTURE.md` / `RFC` / `ADR`。
 
 ## 1. 背景
 
@@ -98,14 +98,14 @@
 - 关键设计有 RFC / ADR 可追溯。
 - 每个 Phase 有明确完成定义和测试记录。
 
-## 7. 当前阶段草案：多租户 + 鉴权
+## 7. 当前阶段草案：Workspace + 子公司读视图
 
-Phase 4 Redis 能力层和 Phase 5 可观测三件套已完成。当前阶段进入多租户 + 鉴权，目标是先把身份、租户和权限边界落到控制面写路径，再进入 Phase 6.5 的 workspace / 子公司读视图。
+Phase 6 多租户 + 鉴权基线已完成并合并。当前阶段进入 Phase 6.5，目标是在身份、租户和权限边界之上补齐 workspace 元数据、投递结果映射和子公司只读浏览 / 下载路径。
 
 当前阶段目标：
 
-- 新增 tenant / user / role 基线模型。
-- 控制面 API 能构造当前 actor，并按角色执行最小 RBAC。
-- task / task_item / task_event 访问默认带 tenant filter，避免跨租户可见。
-- 关键写操作记录 actor attribution，为后续 audit_log 和读审计铺路。
-- 默认开发 actor 保持本地 smoke 可跑，生产模式再要求显式身份。
+- 新增 workspace / physical_object / workspace_object 元数据模型。
+- 控制面在 result apply 后建立可读的 workspace object 视图。
+- 子公司 actor 只能列出、查看和下载自己租户可见的 workspace 文件。
+- 下载由控制面鉴权后签发短 TTL presigned URL。
+- 记录下载 URL 签发审计，为后续完整 audit_log 铺路。

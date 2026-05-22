@@ -1,13 +1,13 @@
 # Phase 6.5 — Workspace + 子公司读视图
 
-> **状态**：Planned（等待 Phase 6 PR 合并后启动）
+> **状态**：Current（Phase 6 已合并；tag-prep review 后进入 workspace 读视图实现）
 > **目标**：在 Phase 6 tenant / actor / RBAC 基线上补齐 workspace 元数据、投递结果映射和子公司只读浏览/下载路径，让平台形成最小完整产品闭环。
 > **完成定义**：HQ 写路径上传成功后会生成 workspace_object 元数据；子公司 actor 只能列出 / 查看 / 下载自己租户可见的 workspace 文件；下载由控制面鉴权后签发短 TTL presigned URL；测试覆盖跨租户不可见、HQ 写入到 workspace、子公司读路径和默认 actor 兼容。
 > **前序计划**：[Phase 6 — 多租户 + 鉴权](./phase-6-multitenancy-auth.md)
 
 ## Summary
 
-Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到控制面写路径。Phase 6.5 不再扩写路径权限模型，而是把“投递完成后子公司能看到什么”落成最小可用读视图。
+Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到控制面写路径，并在 tag-prep review 中收紧 result apply 的 task/tenant 绑定与 confirm 前置状态。Phase 6.5 不再扩写路径权限模型，而是把“投递完成后子公司能看到什么”落成最小可用读视图。
 
 本阶段只做 metadata-first 的 workspace 读路径：控制面保存 workspace / workspace_object / physical_object 元数据，子公司通过 API 浏览和下载；data-plane 仍负责把字节写入 sink，控制面根据 result receipt 建立读模型。
 

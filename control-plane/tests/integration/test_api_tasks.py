@@ -122,6 +122,29 @@ async def test_healthz_checks_redis_when_enabled(async_client):
     redis_client.close.assert_awaited_once()
 
 
+async def test_lifespan_does_not_auto_create_database_schema(monkeypatch):
+    from app import main as main_module
+
+    class ForbiddenEngine:
+        def begin(self):  # pragma: no cover - failure path only
+            raise AssertionError("lifespan must not call Base.metadata.create_all")
+
+        async def dispose(self):
+            return None
+
+    bus = MagicMock()
+    bus.aclose = AsyncMock()
+    monkeypatch.setattr(main_module, "async_engine", ForbiddenEngine())
+    monkeypatch.setattr(main_module, "create_progress_bus", lambda _settings: bus)
+    monkeypatch.setattr(main_module, "configure_tracing", lambda _settings: None)
+    monkeypatch.setattr(main_module, "shutdown_tracing", lambda: None)
+
+    async with main_module.lifespan(main_module.app):
+        pass
+
+    bus.aclose.assert_awaited_once()
+
+
 async def test_metrics_endpoint_disabled_by_default(async_client):
     settings = MagicMock()
     settings.metrics_enabled = False
@@ -847,6 +870,53 @@ async def test_confirm_task(async_client):
         "actor_user_id": "local-user",
         "actor_role": "hq_uploader",
     }
+
+
+async def test_confirm_task_requires_classified_status(async_client):
+    from app.core.db import get_session
+
+    task = _mock_task(status="draft")
+
+    with patch("app.api.tasks._task_repo") as mock_repo:
+        mock_repo.get = AsyncMock(return_value=task)
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/confirm")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 422
+    assert "classified" in resp.json()["detail"]
+
+
+async def test_confirm_task_rejects_blocking_classification_errors(async_client):
+    from app.core.db import get_session
+
+    task = _mock_task(
+        status="classified",
+        summary_json={"has_blocking_errors": True, "error": 1},
+    )
+
+    with patch("app.api.tasks._task_repo") as mock_repo:
+        mock_repo.get = AsyncMock(return_value=task)
+
+        async def override_session():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.post("/api/v1/tasks/abc123/confirm")
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 422
+    assert "blocking" in resp.json()["detail"]
 
 
 # ── Test 9: POST /api/v1/tasks/{id}/upload — wrong status ────────────────────

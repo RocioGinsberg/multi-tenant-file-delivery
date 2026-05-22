@@ -1,6 +1,6 @@
 # Architecture
 
-> 当前实现架构说明。产品范围见 [PDR](./PDR.md)，阶段进度见 [ROADMAP](./ROADMAP.md)，方案评审见 [RFC](./RFC/)。
+> 当前实现架构说明。产品范围见 [PRD](./PRD.md)，阶段进度见 [ROADMAP](./ROADMAP.md)，方案评审见 [RFC](./RFC/)。
 
 ## 目录
 - [系统架构图](#系统架构图)
@@ -19,7 +19,7 @@
 
 **Phase 5 Done**：本地可观测三件套已接入。`deploy/docker-compose.yml` 提供 OTel Collector、Prometheus 和 Grafana；control-plane `/metrics` 暴露 HTTP / task / delivery RED 指标，data-plane `-metrics-enabled` 暴露 task consume、source read、sink upload、result publish 和 limiter RED 指标。control-plane 在 delivery task payload 和 Kafka header 写入 W3C `traceparent`，Go worker 从 payload 恢复 remote parent，并为 task process、source resolve、sink upload、result publish 继续创建 spans。Phase 5 smoke 覆盖 control-plane -> Kafka -> data-plane -> result apply，并验证 collector 日志里的同 trace ID。
 
-**Phase 6 Current**：多租户 + 鉴权进入当前阶段。控制面已落地 dev header / 默认 actor、tenant / app_user / role 基线、task owner tenant/user、仓储层 tenant filter、HQ / 子公司权限边界和最小 task_event actor attribution，为 Phase 6.5 workspace 读视图提供身份与隔离前提。
+**Phase 6 Done / Phase 6.5 Current**：控制面已落地 dev header / 默认 actor、tenant / app_user / role 基线、task owner tenant/user、仓储层 tenant filter、HQ / 子公司权限边界和最小 task_event actor attribution。Phase 6.5 当前在此基础上补 workspace 元数据、投递结果映射和子公司读路径。
 
 ## 系统架构图
 

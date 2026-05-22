@@ -6,7 +6,7 @@
 
 | 文档 | 用途 |
 |---|---|
-| [PDR](./PDR.md) | Product Design Requirements：产品背景、用户、范围、需求、非目标 |
+| [PRD](./PRD.md) | Product Design Requirements：产品背景、用户、范围、需求、非目标 |
 | [ROADMAP](./ROADMAP.md) | 阶段路线图、当前状态、后续优先级 |
 | [ARCHITECTURE](./ARCHITECTURE.md) | 当前实现架构图、可观测拓扑与写路径细节 |
 | [DATA_MODEL](./DATA_MODEL.md) | 当前和目标态数据库模型、约束、迁移关注点 |
@@ -20,7 +20,7 @@
 
 ## 使用规则
 
-- 产品范围变更：先改 `PDR.md`。
+- 产品范围变更：先改 `PRD.md`。
 - 架构方案变更：先新增/更新 `docs/RFC/*.md`，方案稳定后沉淀到 `ADR`。
 - 阶段排期和完成状态：更新 `ROADMAP.md` 和对应 `docs/plans/phase-*.md`。
 - 当前实现说明：更新 `ARCHITECTURE.md` / 模块 README。

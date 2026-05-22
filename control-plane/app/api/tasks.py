@@ -536,6 +536,16 @@ async def confirm_task(
         task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
         if task is None:
             raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+        if task.status != "classified":
+            raise HTTPException(
+                status_code=422,
+                detail=f"Task must be in 'classified' status to confirm, got {task.status!r}",
+            )
+        if (task.summary_json or {}).get("has_blocking_errors"):
+            raise HTTPException(
+                status_code=422,
+                detail="Task has blocking classification errors",
+            )
 
         updated = await _task_repo.update_status(
             session,

@@ -39,6 +39,8 @@ async def test_task_repo_create_and_get_returns_persisted_task(session: AsyncSes
     assert len(task.id) == 12
     assert task.status == "draft"
     assert task.created_by == "local-user"
+    assert task.owner_tenant_id == "hq"
+    assert task.owner_user_id == "local-user"
 
     fetched = await repo.get(session, task.id)
     assert fetched is not None
@@ -47,6 +49,81 @@ async def test_task_repo_create_and_get_returns_persisted_task(session: AsyncSes
     assert fetched.submission_label == "upload.zip"
     assert fetched.temp_dir == "/tmp/task-001"
     assert fetched.summary_json == {"total": 3}
+
+
+@pytest.mark.asyncio
+async def test_task_repo_tenant_filters_get_list_idempotency_and_updates(
+    session: AsyncSession,
+):
+    repo = TaskRepo()
+    hq_task = await repo.create(
+        session,
+        idempotency_key="idem-hq",
+        owner_tenant_id="hq",
+        owner_user_id="hq-user",
+    )
+    subsidiary_task = await repo.create(
+        session,
+        idempotency_key="idem-subsidiary",
+        owner_tenant_id="subsidiary-a",
+        owner_user_id="subsidiary-user",
+    )
+
+    visible_task = await repo.get(session, hq_task.id, tenant_id="hq")
+    hidden_task = await repo.get(session, hq_task.id, tenant_id="subsidiary-a")
+    visible_by_key = await repo.get_by_idempotency_key(
+        session,
+        "idem-hq",
+        tenant_id="hq",
+    )
+    hidden_by_key = await repo.get_by_idempotency_key(
+        session,
+        "idem-hq",
+        tenant_id="subsidiary-a",
+    )
+    visible_tasks = await repo.list(session, tenant_id="hq")
+    hidden_tasks = await repo.list(session, tenant_id="subsidiary-a")
+    missing_update = await repo.update_status(
+        session,
+        hq_task.id,
+        "confirmed",
+        tenant_id="subsidiary-a",
+    )
+
+    assert visible_task is not None and visible_task.id == hq_task.id
+    assert hidden_task is None
+    assert visible_by_key is not None and visible_by_key.id == hq_task.id
+    assert hidden_by_key is None
+    assert [task.id for task in visible_tasks] == [hq_task.id]
+    assert [task.id for task in hidden_tasks] == [subsidiary_task.id]
+    assert missing_update is None
+
+
+@pytest.mark.asyncio
+async def test_task_repo_idempotency_key_is_tenant_scoped(session: AsyncSession):
+    repo = TaskRepo()
+    hq_task = await repo.create(
+        session,
+        idempotency_key="same-idem",
+        owner_tenant_id="hq",
+        owner_user_id="hq-user",
+    )
+    subsidiary_task = await repo.create(
+        session,
+        idempotency_key="same-idem",
+        owner_tenant_id="subsidiary-a",
+        owner_user_id="subsidiary-user",
+    )
+
+    hq_lookup = await repo.get_by_idempotency_key(session, "same-idem", tenant_id="hq")
+    subsidiary_lookup = await repo.get_by_idempotency_key(
+        session,
+        "same-idem",
+        tenant_id="subsidiary-a",
+    )
+
+    assert hq_lookup is not None and hq_lookup.id == hq_task.id
+    assert subsidiary_lookup is not None and subsidiary_lookup.id == subsidiary_task.id
 
 
 @pytest.mark.asyncio

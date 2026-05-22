@@ -29,6 +29,7 @@ from app.core.settings import get_settings
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
+from app.services.auth import CurrentActor, get_current_actor
 from app.services.classification_profile import (
     DocumentTypeConfig,
     EntryFilterConfig,
@@ -64,6 +65,7 @@ _event_repo = EventRepo()
 _progress_bus: ProgressBus | None = None
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ActorDep = Annotated[CurrentActor, Depends(get_current_actor)]
 FormString = Annotated[str | None, Form()]
 UploadedFiles = Annotated[list[UploadFile] | None, File()]
 
@@ -168,6 +170,8 @@ def _task_to_dict(task) -> dict:
         "task_id": task.id,
         "status": task.status,
         "idempotency_key": task.idempotency_key,
+        "owner_tenant_id": task.owner_tenant_id,
+        "owner_user_id": task.owner_user_id,
         "submission_label": task.submission_label,
         "temp_dir": task.temp_dir,
         "summary_json": task.summary_json,
@@ -338,6 +342,7 @@ async def _prepare_folder_upload(
 @router.post("/tasks", status_code=201)
 async def create_task(
     session: SessionDep,
+    actor: ActorDep,
     files: UploadedFiles = None,
     idempotency_key: FormString = None,
     submission_label: FormString = None,
@@ -345,12 +350,21 @@ async def create_task(
     metric_start = time.perf_counter()
     metric_status = "error"
     settings = get_settings()
+    actor.require_task_writer()
 
     key = idempotency_key or str(uuid.uuid4())
     claim: IdempotencyClaim | None = None
     try:
-        claim = await _acquire_idempotency_claim(settings, "create_task", key)
-        existing = await _task_repo.get_by_idempotency_key(session, key)
+        claim = await _acquire_idempotency_claim(
+            settings,
+            "create_task",
+            f"{actor.tenant_id}:{key}",
+        )
+        existing = await _task_repo.get_by_idempotency_key(
+            session,
+            key,
+            tenant_id=actor.tenant_id,
+        )
         if existing is not None:
             from fastapi.responses import JSONResponse as _JSONResponse
             metric_status = "existing"
@@ -368,9 +382,21 @@ async def create_task(
             session,
             idempotency_key=key,
             submission_label=prepared.label,
+            created_by=actor.user_id,
+            owner_tenant_id=actor.tenant_id,
+            owner_user_id=actor.user_id,
             status="draft",
         )
         task_id = task.id
+        await _event_repo.append(
+            session,
+            task_id,
+            "task_created",
+            {
+                **actor.to_event_payload(),
+                "submission_label": prepared.label,
+            },
+        )
 
         extract_dir = os.path.join(settings.task_dir_base, task_id)
         os.makedirs(extract_dir, exist_ok=True)
@@ -408,13 +434,15 @@ async def create_task(
 async def classify_task(
     task_id: str,
     session: SessionDep,
+    actor: ActorDep,
 ):
     metric_start = time.perf_counter()
     metric_status = "error"
     settings = get_settings()
+    actor.require_task_writer()
 
     try:
-        task = await _task_repo.get(session, task_id)
+        task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
         if task is None:
             raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
@@ -455,7 +483,16 @@ async def classify_task(
         task_obj.summary_json = summary_dict
         await session.flush()
 
-        await _task_repo.update_status(session, task_id, "classified")
+        await _task_repo.update_status(session, task_id, "classified", tenant_id=actor.tenant_id)
+        await _event_repo.append(
+            session,
+            task_id,
+            "classified",
+            {
+                **actor.to_event_payload(),
+                "summary": summary_dict,
+            },
+        )
         await session.commit()
 
         metric_status = "classified"
@@ -472,12 +509,13 @@ async def classify_task(
 async def preview_task(
     task_id: str,
     session: SessionDep,
+    actor: ActorDep,
 ):
-    task = await _task_repo.get(session, task_id)
+    task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
-    items = await _item_repo.list_by_task(session, task_id)
+    items = await _item_repo.list_by_task(session, task_id, tenant_id=actor.tenant_id)
     return {
         "task_id": task_id,
         "summary": task.summary_json,
@@ -489,11 +527,13 @@ async def preview_task(
 async def confirm_task(
     task_id: str,
     session: SessionDep,
+    actor: ActorDep,
 ):
     metric_start = time.perf_counter()
     metric_status = "error"
+    actor.require_task_writer()
     try:
-        task = await _task_repo.get(session, task_id)
+        task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
         if task is None:
             raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
@@ -501,7 +541,16 @@ async def confirm_task(
             session,
             task_id,
             "confirmed",
+            tenant_id=actor.tenant_id,
             confirmed_at=datetime.now(UTC),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+        await _event_repo.append(
+            session,
+            task_id,
+            "confirmed",
+            actor.to_event_payload(),
         )
         await session.commit()
         metric_status = "confirmed"
@@ -519,10 +568,12 @@ async def upload_task(
     task_id: str,
     background_tasks: BackgroundTasks,
     session: SessionDep,
+    actor: ActorDep,
 ):
     metric_start = time.perf_counter()
     metric_status = "error"
-    task = await _task_repo.get(session, task_id)
+    actor.require_task_writer()
+    task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
     if task is None:
         try:
             raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
@@ -550,11 +601,15 @@ async def upload_task(
     upload_claim: IdempotencyClaim | None = None
     delivery_backend = getattr(settings, "delivery_backend", "python")
     try:
-        upload_claim = await _acquire_idempotency_claim(settings, "upload_task", task_id)
+        upload_claim = await _acquire_idempotency_claim(
+            settings,
+            "upload_task",
+            f"{actor.tenant_id}:{task_id}",
+        )
         if delivery_backend == "go-worker":
             # Phase 2 bridge: the control plane owns classification and task state,
             # while the data plane only receives uploadable item specs.
-            items = await _item_repo.list_by_task(session, task_id)
+            items = await _item_repo.list_by_task(session, task_id, tenant_id=actor.tenant_id)
             upload_items = [
                 item
                 for item in items
@@ -583,6 +638,7 @@ async def upload_task(
                         bucket_name=getattr(settings, "staging_bucket_name", None),
                     )
                     await _event_repo.append(session, task_id, "task_staged_source", {
+                        **actor.to_event_payload(),
                         "type": source_ref.type,
                         "bucket": source_ref.bucket,
                         "key": source_ref.key,
@@ -602,6 +658,7 @@ async def upload_task(
                 if source_ref is not None:
                     await delete_staged_archive(source_ref)
                     await _event_repo.append(session, task_id, "task_staged_source_deleted", {
+                        **actor.to_event_payload(),
                         "bucket": source_ref.bucket,
                         "key": source_ref.key,
                         "reason": "publish_failed",
@@ -610,8 +667,9 @@ async def upload_task(
                     await session.commit()
                 raise
 
-            await _task_repo.update_status(session, task_id, "queued")
+            await _task_repo.update_status(session, task_id, "queued", tenant_id=actor.tenant_id)
             await _event_repo.append(session, task_id, "task_queued", {
+                **actor.to_event_payload(),
                 "topic": message.topic,
                 "transport": delivery_transport,
                 "upload_items": len(upload_items),
@@ -620,6 +678,13 @@ async def upload_task(
             metric_status = "queued"
             return {"task_id": task_id, "status": "queued"}
 
+        await _event_repo.append(
+            session,
+            task_id,
+            "task_upload_requested",
+            actor.to_event_payload(),
+        )
+        await session.commit()
         background_tasks.add_task(run_task, task_id)
         metric_status = "uploading"
         return {"task_id": task_id, "status": "uploading"}
@@ -640,16 +705,31 @@ async def upload_task(
 async def retry_task(
     task_id: str,
     session: SessionDep,
+    actor: ActorDep,
 ):
-    task = await _task_repo.get(session, task_id)
+    actor.require_task_writer()
+    task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
-    reset_count = await _item_repo.batch_reset_failed(session, task_id)
+    reset_count = await _item_repo.batch_reset_failed(
+        session,
+        task_id,
+        tenant_id=actor.tenant_id,
+    )
     if reset_count > 0 and task.status in {"failed", "partial_failed"}:
         task.status = "confirmed"
         task.finished_at = None
         await session.flush()
+    await _event_repo.append(
+        session,
+        task_id,
+        "task_retry_requested",
+        {
+            **actor.to_event_payload(),
+            "reset_count": reset_count,
+        },
+    )
     await session.commit()
     return {"task_id": task_id, "reset_count": reset_count, "status": task.status}
 
@@ -658,8 +738,9 @@ async def retry_task(
 async def get_task(
     task_id: str,
     session: SessionDep,
+    actor: ActorDep,
 ):
-    task = await _task_repo.get(session, task_id)
+    task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
     return _task_to_dict(task)
@@ -669,8 +750,14 @@ async def get_task(
 async def task_progress(
     request: Request,
     task_id: str,
+    session: SessionDep,
+    actor: ActorDep,
     bus: ProgressBusDep,
 ):
+    task = await _task_repo.get(session, task_id, tenant_id=actor.tenant_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+
     async def event_stream():
         async with bus.subscribe(task_id) as queue:
             while True:
@@ -691,8 +778,14 @@ async def task_progress(
 @router.get("/tasks")
 async def list_tasks(
     session: SessionDep,
+    actor: ActorDep,
     limit: int = 50,
     offset: int = 0,
 ):
-    tasks = await _task_repo.list(session, limit=limit, offset=offset)
+    tasks = await _task_repo.list(
+        session,
+        limit=limit,
+        offset=offset,
+        tenant_id=actor.tenant_id,
+    )
     return {"tasks": [_task_to_dict(t) for t in tasks], "limit": limit, "offset": offset}

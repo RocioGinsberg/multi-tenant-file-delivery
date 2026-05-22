@@ -23,8 +23,18 @@ async def session() -> AsyncIterator[AsyncSession]:
     await engine.dispose()
 
 
-async def _create_task(session: AsyncSession, idempotency_key: str = "idem-item") -> Task:
-    task = Task(idempotency_key=idempotency_key)
+async def _create_task(
+    session: AsyncSession,
+    idempotency_key: str = "idem-item",
+    *,
+    owner_tenant_id: str = "hq",
+    owner_user_id: str = "local-user",
+) -> Task:
+    task = Task(
+        idempotency_key=idempotency_key,
+        owner_tenant_id=owner_tenant_id,
+        owner_user_id=owner_user_id,
+    )
     session.add(task)
     await session.flush()
     return task
@@ -64,6 +74,36 @@ async def test_item_repo_bulk_insert_and_list_by_task_orders_by_src_path(
     assert items[0].target_name_matched == "a-corp"
     assert items[0].document_type == "monthly_report"
     assert items[0].dst_path == "finance/monthly_report/report-a.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_item_repo_tenant_filter_hides_other_tenant_items(session: AsyncSession):
+    repo = ItemRepo()
+    hq_task = await _create_task(session, "idem-item-hq", owner_tenant_id="hq")
+    sub_task = await _create_task(
+        session,
+        "idem-item-sub",
+        owner_tenant_id="subsidiary-a",
+        owner_user_id="sub-user",
+    )
+    await repo.bulk_insert(
+        session,
+        hq_task.id,
+        [{"src_path": "hq/report.xlsx", "filename": "report.xlsx"}],
+    )
+    await repo.bulk_insert(
+        session,
+        sub_task.id,
+        [{"src_path": "sub/report.xlsx", "filename": "report.xlsx"}],
+    )
+
+    visible_items = await repo.list_by_task(session, hq_task.id, tenant_id="hq")
+    hidden_items = await repo.list_by_task(session, hq_task.id, tenant_id="subsidiary-a")
+    sub_items = await repo.list_by_task(session, sub_task.id, tenant_id="subsidiary-a")
+
+    assert [item.src_path for item in visible_items] == ["hq/report.xlsx"]
+    assert hidden_items == []
+    assert [item.src_path for item in sub_items] == ["sub/report.xlsx"]
 
 
 @pytest.mark.asyncio
@@ -127,6 +167,26 @@ async def test_item_repo_count_by_status_groups_task_items_only(session: AsyncSe
 
 
 @pytest.mark.asyncio
+async def test_item_repo_count_by_status_honors_tenant_filter(session: AsyncSession):
+    repo = ItemRepo()
+    task = await _create_task(session, "idem-count-tenant", owner_tenant_id="hq")
+    item = (
+        await repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "a.xlsx", "filename": "a.xlsx"}],
+        )
+    )[0]
+    await repo.update_upload_status(session, item.id, "failed")
+
+    visible_counts = await repo.count_by_status(session, task.id, tenant_id="hq")
+    hidden_counts = await repo.count_by_status(session, task.id, tenant_id="subsidiary-a")
+
+    assert visible_counts == {"failed": 1}
+    assert hidden_counts == {}
+
+
+@pytest.mark.asyncio
 async def test_item_repo_batch_reset_failed_only_resets_failed_items_for_task(
     session: AsyncSession,
 ):
@@ -174,6 +234,32 @@ async def test_item_repo_batch_reset_failed_only_resets_failed_items_for_task(
     assert by_path["failed.xlsx"].uploaded_at is None
     assert by_path["uploaded.xlsx"].upload_status == "uploaded"
     assert other_reset_items[0].upload_status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_item_repo_batch_reset_failed_honors_tenant_filter(session: AsyncSession):
+    repo = ItemRepo()
+    task = await _create_task(session, "idem-reset-tenant", owner_tenant_id="hq")
+    item = (
+        await repo.bulk_insert(
+            session,
+            task.id,
+            [{"src_path": "failed.xlsx", "filename": "failed.xlsx"}],
+        )
+    )[0]
+    await repo.update_upload_status(session, item.id, "failed")
+
+    hidden_reset_count = await repo.batch_reset_failed(
+        session,
+        task.id,
+        tenant_id="subsidiary-a",
+    )
+    visible_reset_count = await repo.batch_reset_failed(session, task.id, tenant_id="hq")
+    reset_items = await repo.list_by_task(session, task.id)
+
+    assert hidden_reset_count == 0
+    assert visible_reset_count == 1
+    assert reset_items[0].upload_status == "pending"
 
 
 @pytest.mark.asyncio

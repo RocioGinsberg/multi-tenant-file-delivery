@@ -53,7 +53,7 @@
 
 **Phase 5（完成）**：可观测三件套已闭合。control-plane / data-plane 都支持 Prometheus metrics；delivery task payload 注入 W3C `traceparent`；Go worker 能恢复 trace context；本地 compose 提供 OTel Collector、Prometheus、Grafana 和 Phase 5 smoke。
 
-**Phase 6（当前）**：多租户 + 鉴权。目标是补齐 tenant / user / RBAC / request context 基线，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
+**Phase 6（当前）**：多租户 + 鉴权。目标是补齐 dev header / 默认 actor、tenant / app_user、task owner tenant/user、repo tenant filter 和最小 task_event actor attribution，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

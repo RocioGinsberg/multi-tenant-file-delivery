@@ -19,6 +19,8 @@ def _mock_task(
     temp_dir: str = "/tmp/auto_upload_tasks/abc123",
     summary_json: dict | None = None,
     created_by: str = "local-user",
+    owner_tenant_id: str = "hq",
+    owner_user_id: str = "local-user",
     created_at: datetime | None = None,
     confirmed_at: datetime | None = None,
     finished_at: datetime | None = None,
@@ -31,6 +33,8 @@ def _mock_task(
     t.temp_dir = temp_dir
     t.summary_json = summary_json or {}
     t.created_by = created_by
+    t.owner_tenant_id = owner_tenant_id
+    t.owner_user_id = owner_user_id
     t.created_at = created_at or datetime(2026, 1, 1, tzinfo=UTC)
     t.confirmed_at = confirmed_at
     t.finished_at = finished_at
@@ -227,6 +231,37 @@ async def test_get_task_found(async_client):
     data = resp.json()
     assert data["task_id"] == "abc123"
     assert data["status"] == "draft"
+    assert data["owner_tenant_id"] == "hq"
+    assert data["owner_user_id"] == "local-user"
+
+
+async def test_get_task_uses_actor_tenant_filter(async_client):
+    from app.core.db import get_session
+
+    task = _mock_task(owner_tenant_id="subsidiary-a", owner_user_id="sub-user")
+
+    async def override_session():
+        mock = AsyncMock()
+        yield mock
+
+    with patch("app.api.tasks._task_repo") as mock_repo:
+        mock_repo.get = AsyncMock(return_value=task)
+        app.dependency_overrides[get_session] = override_session
+
+        async with async_client as client:
+            resp = await client.get(
+                "/api/v1/tasks/abc123",
+                headers={
+                    "X-Actor-Tenant": "subsidiary-a",
+                    "X-Actor-User": "sub-user",
+                    "X-Actor-Role": "subsidiary_viewer",
+                },
+            )
+
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert mock_repo.get.await_args.kwargs["tenant_id"] == "subsidiary-a"
 
 
 # ── Test 5: POST /api/v1/tasks — folder payload too large ───────────────────
@@ -473,6 +508,9 @@ async def test_upload_task_can_publish_object_source_reference(async_client, tmp
     staged_event = mock_event_repo.append.await_args_list[0]
     assert staged_event.args[2] == "task_staged_source"
     assert staged_event.args[3] == {
+        "actor_tenant_id": "hq",
+        "actor_user_id": "local-user",
+        "actor_role": "hq_uploader",
         "type": "object",
         "bucket": "auto-upload-staging",
         "key": "staged/tasks/abc123/archive.zip",
@@ -558,6 +596,7 @@ async def test_create_task_new(async_client, tmp_path):
     )
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
@@ -581,6 +620,7 @@ async def test_create_task_new(async_client, tmp_path):
             temp_dir=str(tmp_path / "new001"),
         )
         mock_repo.get = AsyncMock(return_value=updated_task)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
 
         async def override_session():
             yield mock_session_obj
@@ -598,6 +638,30 @@ async def test_create_task_new(async_client, tmp_path):
     assert resp.status_code == 201
     data = resp.json()
     assert data["task_id"] == "new001"
+    assert mock_repo.create.await_args.kwargs["owner_tenant_id"] == "hq"
+    assert mock_repo.create.await_args.kwargs["owner_user_id"] == "local-user"
+
+
+async def test_create_task_rejects_subsidiary_viewer(async_client):
+    from app.core.db import get_session
+
+    async def override_session():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_session] = override_session
+    async with async_client as client:
+        resp = await client.post(
+            "/api/v1/tasks",
+            headers={
+                "X-Actor-Tenant": "subsidiary-a",
+                "X-Actor-User": "sub-user",
+                "X-Actor-Role": "subsidiary_viewer",
+            },
+            files=[("files", ("acme/test.txt", b"hello", "text/plain"))],
+        )
+    app.dependency_overrides.clear()
+
+    assert resp.status_code == 403
 
 
 async def test_create_task_accepts_folder_files(async_client, tmp_path):
@@ -611,6 +675,7 @@ async def test_create_task_accepts_folder_files(async_client, tmp_path):
 
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
@@ -623,6 +688,7 @@ async def test_create_task_accepts_folder_files(async_client, tmp_path):
         mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
         mock_repo.create = AsyncMock(return_value=created_task)
         mock_repo.get = AsyncMock(return_value=created_task)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
 
         mock_session_obj = AsyncMock()
         mock_session_obj.flush = AsyncMock()
@@ -664,6 +730,7 @@ async def test_create_task_keeps_user_original_zip_separate(async_client, tmp_pa
 
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
         patch("app.api.tasks.get_settings") as mock_settings_fn,
     ):
         mock_s = MagicMock()
@@ -676,6 +743,7 @@ async def test_create_task_keeps_user_original_zip_separate(async_client, tmp_pa
         mock_repo.get_by_idempotency_key = AsyncMock(return_value=None)
         mock_repo.create = AsyncMock(return_value=created_task)
         mock_repo.get = AsyncMock(return_value=created_task)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
 
         mock_session_obj = AsyncMock()
         mock_session_obj.flush = AsyncMock()
@@ -746,9 +814,13 @@ async def test_confirm_task(async_client):
     task = _mock_task(status="classified")
     confirmed_task = _mock_task(status="confirmed")
 
-    with patch("app.api.tasks._task_repo") as mock_repo:
+    with (
+        patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
+    ):
         mock_repo.get = AsyncMock(return_value=task)
         mock_repo.update_status = AsyncMock(return_value=confirmed_task)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
 
         mock_session_obj = AsyncMock()
         mock_session_obj.commit = AsyncMock()
@@ -766,6 +838,15 @@ async def test_confirm_task(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "confirmed"
+    mock_repo.update_status.assert_awaited_once()
+    assert mock_repo.update_status.await_args.kwargs["tenant_id"] == "hq"
+    event_args = mock_event_repo.append.await_args.args
+    assert event_args[2] == "confirmed"
+    assert event_args[3] == {
+        "actor_tenant_id": "hq",
+        "actor_user_id": "local-user",
+        "actor_role": "hq_uploader",
+    }
 
 
 # ── Test 9: POST /api/v1/tasks/{id}/upload — wrong status ────────────────────
@@ -791,6 +872,27 @@ async def test_upload_task_wrong_status(async_client):
     assert resp.status_code == 422
 
 
+async def test_upload_task_rejects_subsidiary_viewer(async_client):
+    from app.core.db import get_session
+
+    async def override_session():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_session] = override_session
+    async with async_client as client:
+        resp = await client.post(
+            "/api/v1/tasks/abc123/upload",
+            headers={
+                "X-Actor-Tenant": "subsidiary-a",
+                "X-Actor-User": "sub-user",
+                "X-Actor-Role": "subsidiary_viewer",
+            },
+        )
+    app.dependency_overrides.clear()
+
+    assert resp.status_code == 403
+
+
 # ── Test 10: POST /api/v1/tasks/{id}/upload — confirmed task ─────────────────
 
 async def test_upload_task_confirmed(async_client):
@@ -800,9 +902,11 @@ async def test_upload_task_confirmed(async_client):
 
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
         patch("app.api.tasks.run_task") as mock_run_task,
     ):
         mock_repo.get = AsyncMock(return_value=task)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
         mock_run_task.return_value = None
 
         async def override_session():
@@ -818,6 +922,13 @@ async def test_upload_task_confirmed(async_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "uploading"
+    event_args = mock_event_repo.append.await_args.args
+    assert event_args[2] == "task_upload_requested"
+    assert event_args[3] == {
+        "actor_tenant_id": "hq",
+        "actor_user_id": "local-user",
+        "actor_role": "hq_uploader",
+    }
 
 
 async def test_upload_task_returns_conflict_when_idempotency_claim_exists(async_client):
@@ -859,9 +970,11 @@ async def test_retry_task(async_client):
     with (
         patch("app.api.tasks._task_repo") as mock_repo,
         patch("app.api.tasks._item_repo") as mock_item_repo,
+        patch("app.api.tasks._event_repo") as mock_event_repo,
     ):
         mock_repo.get = AsyncMock(return_value=task)
         mock_item_repo.batch_reset_failed = AsyncMock(return_value=3)
+        mock_event_repo.append = AsyncMock(return_value=MagicMock())
 
         mock_session_obj = AsyncMock()
         mock_session_obj.commit = AsyncMock()
@@ -881,6 +994,7 @@ async def test_retry_task(async_client):
     assert data["reset_count"] == 3
     assert data["status"] == "confirmed"
     assert task.status == "confirmed"
+    assert mock_item_repo.batch_reset_failed.await_args.kwargs["tenant_id"] == "hq"
 
 
 # ── Test 12: GET /api/v1/tasks/{id}/preview ──────────────────────────────────
@@ -931,7 +1045,11 @@ async def test_progress_sse(async_client):
         await bus.publish("stream01", {"type": "test_event", "value": 42})
         await bus.close_task("stream01")
 
-    with patch("app.api.tasks.get_bus", return_value=bus):
+    with (
+        patch("app.api.tasks.get_bus", return_value=bus),
+        patch("app.api.tasks._task_repo") as mock_repo,
+    ):
+        mock_repo.get = AsyncMock(return_value=_mock_task(task_id="stream01"))
         task = asyncio.create_task(publish_and_close())
 
         async with async_client as client:

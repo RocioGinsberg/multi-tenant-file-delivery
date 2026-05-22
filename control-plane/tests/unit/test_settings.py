@@ -26,6 +26,14 @@ class TestDefaultValues:
         for var in (
             "ENV",
             "DATABASE_URL",
+            "AUTH_ALLOW_DEV_HEADERS",
+            "AUTH_DEFAULT_ACTOR_ENABLED",
+            "AUTH_DEFAULT_TENANT_ID",
+            "AUTH_DEFAULT_USER_ID",
+            "AUTH_DEFAULT_ROLE",
+            "AUTH_ACTOR_TENANT_HEADER",
+            "AUTH_ACTOR_USER_HEADER",
+            "AUTH_ACTOR_ROLE_HEADER",
             "S3_ENDPOINT_URL",
             "S3_BUCKET_NAME",
             "S3_REGION",
@@ -62,6 +70,14 @@ class TestDefaultValues:
 
         assert s.env == "development"
         assert s.database_url == "sqlite+aiosqlite:///./control_plane.db"
+        assert s.auth_allow_dev_headers is True
+        assert s.auth_default_actor_enabled is True
+        assert s.auth_default_tenant_id == "hq"
+        assert s.auth_default_user_id == "local-user"
+        assert s.auth_default_role == "hq_uploader"
+        assert s.auth_actor_tenant_header == "X-Actor-Tenant"
+        assert s.auth_actor_user_header == "X-Actor-User"
+        assert s.auth_actor_role_header == "X-Actor-Role"
         assert s.s3_endpoint_url == "http://localhost:9000"
         assert s.s3_bucket_name == "auto-upload-dev"
         assert s.s3_region == "us-east-1"
@@ -98,6 +114,11 @@ class TestDotEnvOverride:
         # Remove any ambient env vars so only the .env file speaks
         for var in (
             "ENV",
+            "AUTH_ALLOW_DEV_HEADERS",
+            "AUTH_DEFAULT_ACTOR_ENABLED",
+            "AUTH_DEFAULT_TENANT_ID",
+            "AUTH_DEFAULT_USER_ID",
+            "AUTH_DEFAULT_ROLE",
             "S3_BUCKET_NAME",
             "WORKER_MAX_TARGET_CONCURRENT",
             "REDIS_URL",
@@ -121,6 +142,11 @@ class TestDotEnvOverride:
         env_file = tmp_path / ".env"
         env_file.write_text(
             "ENV=staging\n"
+            "AUTH_ALLOW_DEV_HEADERS=false\n"
+            "AUTH_DEFAULT_ACTOR_ENABLED=false\n"
+            "AUTH_DEFAULT_TENANT_ID=subsidiary-a\n"
+            "AUTH_DEFAULT_USER_ID=sub-user\n"
+            "AUTH_DEFAULT_ROLE=subsidiary_viewer\n"
             "S3_BUCKET_NAME=my-staging-bucket\n"
             "WORKER_MAX_TARGET_CONCURRENT=10\n"
             "REDIS_URL=redis://redis.example.com:6379/2\n"
@@ -144,6 +170,11 @@ class TestDotEnvOverride:
         s = Settings()
 
         assert s.env == "staging"
+        assert s.auth_allow_dev_headers is False
+        assert s.auth_default_actor_enabled is False
+        assert s.auth_default_tenant_id == "subsidiary-a"
+        assert s.auth_default_user_id == "sub-user"
+        assert s.auth_default_role == "subsidiary_viewer"
         assert s.s3_bucket_name == "my-staging-bucket"
         assert s.worker_max_target_concurrent == 10
         assert s.redis_url == "redis://redis.example.com:6379/2"

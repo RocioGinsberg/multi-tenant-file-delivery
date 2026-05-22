@@ -1,20 +1,22 @@
 # Data Model
 
-> 本文记录目标态数据模型。当前 Phase 1/2 只实现了任务链路的简化表；Phase 3 之后逐步迁移到真实数据库并补齐多租户、workspace、dedup、审计。
+> 本文记录目标态数据模型。当前 Phase 1/2 只实现了任务链路的简化表；Phase 3 之后逐步迁移到真实数据库并补齐多租户、审计，以及后续 workspace / dedup 扩展表。
 
 ## 当前实现
 
-控制面当前使用 SQLAlchemy 模型维护任务闭环：
+控制面当前使用 SQLAlchemy 模型维护任务闭环和 Phase 6 身份基线：
 
 | 表 | 用途 |
 |---|---|
-| `task` | 分发任务主表，记录状态、源归档、分类摘要、确认和完成时间 |
+| `tenant` | HQ / subsidiary 租户基线 |
+| `app_user` | 平台内置用户基线，记录所属租户和角色 |
+| `task` | 分发任务主表，记录 owner tenant/user、状态、源归档、分类摘要、确认和完成时间 |
 | `task_item` | 单文件投递项，记录源路径、目标、目标路径、sink 状态和错误 |
-| `task_event` | 任务事件流，用于审计状态变化和调试 |
+| `task_event` | 任务事件流，用于审计状态变化和调试；关键写操作在 payload 中记录 actor attribution |
 
 Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.results.v1` 后由控制面消费并回写 `task` / `task_item`。Phase 3 / 3.x 已把 MySQL 作为本地 compose 主数据库目标，并通过 source reference 让 worker 从 staging object storage 读取源文件。Phase 4 / 5 新增 Redis 能力层和 observability，不改变当前业务表结构。
 
-当前模型尚未持久化 `tenant` / `user` / `role`，task 也尚未按租户过滤；这是 Phase 6 的主线。
+Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user 和 repo tenant filter 落到控制面写路径。Workspace、dedup、sink credential 加密和完整 audit_log 仍留到 Phase 6.5 / Phase 7。
 
 ## 目标态模型
 
@@ -23,7 +25,7 @@ Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.resu
 | 表 | 说明 | 关键字段 |
 |---|---|---|
 | `tenant` | HQ 和子公司租户 | `id`, `name`, `type`, `parent_tenant_id` |
-| `user` | 用户，属于某个租户 | `id`, `tenant_id`, `email`, `role` |
+| `app_user` | 平台用户，属于某个租户 | `id`, `tenant_id`, `email`, `role` |
 | `sink_credential` | sink 凭证，仅 HQ 持有 | `id`, `tenant_id`, `sink_type`, `encrypted_blob` |
 
 ### 分发规则与 Workspace
@@ -41,9 +43,9 @@ Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.resu
 
 | 表 | 说明 | 关键字段 |
 |---|---|---|
-| `task` | 分发任务 | `id`, `owner_tenant_id`, `user_id`, `status`, `registry_version_id`, `idempotency_key` |
+| `task` | 分发任务 | `id`, `owner_tenant_id`, `owner_user_id`, `status`, `registry_version_id`, `idempotency_key` |
 | `task_item` | 单文件投递项 | `id`, `task_id`, `src_path`, `target_workspace_id`, `dst_path`, `file_hash`, `delivery_status`, `sink_name` |
-| `task_event` | 状态事件流 | `id`, `task_id`, `attempt_id`, `event_type`, `payload`, `created_at` |
+| `task_event` | 状态事件流 | `id`, `task_id`, `attempt_id`, `event_type`, `payload`, `actor_user_id`, `actor_tenant_id`, `actor_role`, `created_at` |
 
 ### 审计与通知
 
@@ -65,10 +67,10 @@ Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.resu
 - `audit_log` 写入应走异步链路，避免阻塞主写路径。
 - `multipart_session.expires_at` 用于清理超期未完成 multipart session，避免对端长期计费。
 
-## Phase 6 关注点
+## Phase 6 落地情况
 
-- 新增 `tenant` / `user` 基线表，并把 HQ / subsidiary 角色落到可测试模型。
-- `task` / `task_item` / `task_event` 需要关联 owner tenant 和 actor user；repo 层默认按 actor tenant / role 过滤。
+- 已新增 `tenant` / `app_user` 基线表，并把 HQ / subsidiary 角色落到可测试模型。
+- `task` 已持久化 owner tenant/user；`task_item` / `task_event` 通过 task join 做 tenant-aware 查询。
 - 默认开发 actor 只用于本地测试兼容，生产模式需要显式身份。
-- audit 入口先覆盖关键写操作；完整读审计随 Phase 6.5 子公司读视图补齐。
+- task_event payload 已覆盖 create / classify / confirm / upload / retry / queue 等关键写操作的 actor attribution；完整读审计随 Phase 6.5 子公司读视图补齐。
 - Workspace / `workspace_object` / `physical_object` / dedup 不进入 Phase 6 主线，避免把多租户鉴权和读路径模型合并成一个过大的阶段。

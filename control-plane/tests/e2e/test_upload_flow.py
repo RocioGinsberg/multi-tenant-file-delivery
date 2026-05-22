@@ -102,6 +102,14 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
     mock_settings.worker_auto_adjust_concurrent = False
     mock_settings.cors_origins = "*"
     mock_settings.env = "test"
+    mock_settings.auth_allow_dev_headers = True
+    mock_settings.auth_default_actor_enabled = True
+    mock_settings.auth_default_tenant_id = "hq"
+    mock_settings.auth_default_user_id = "local-user"
+    mock_settings.auth_default_role = "hq_uploader"
+    mock_settings.auth_actor_tenant_header = "X-Actor-Tenant"
+    mock_settings.auth_actor_user_header = "X-Actor-User"
+    mock_settings.auth_actor_role_header = "X-Actor-Role"
 
     monkeypatch.setattr("app.api.tasks.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.services.task_runner.get_settings", lambda: mock_settings)

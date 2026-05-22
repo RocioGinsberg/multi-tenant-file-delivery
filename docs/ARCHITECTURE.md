@@ -3,6 +3,8 @@
 > 当前实现架构说明。产品范围见 [PDR](./PDR.md)，阶段进度见 [ROADMAP](./ROADMAP.md)，方案评审见 [RFC](./RFC/)。
 
 ## 目录
+- [系统架构图](#系统架构图)
+- [可观测拓扑图](#可观测拓扑图)
 - [写路径详细时序图](#写路径详细时序图)
 - [读路径详细时序图](#读路径详细时序图) — Phase 6.5 后写
 - [关键不变量与一致性边界](#关键不变量与一致性边界) — Phase 6.5 后写
@@ -19,9 +21,51 @@
 
 **Phase 6 Current**：多租户 + 鉴权进入当前阶段。Phase 6 会先落地 tenant / user / role 基线、request actor context、仓储层 tenant filter、HQ / 子公司权限边界和 audit 入口，为 Phase 6.5 workspace 读视图提供身份与隔离前提。
 
+## 系统架构图
+
+当前主链路已经从“控制面本地上传”演进为 control-plane 编排、Kafka durable transport、data-plane 执行、object storage 暂存源文件的跨组件形态：
+
+```mermaid
+flowchart LR
+    hq[HQ uploader] --> web[Web upload UI]
+    web --> cp[control-plane FastAPI]
+
+    cp --> db[(task / task_item / task_event)]
+    cp --> redis[(Redis progress / idempotency / lease)]
+    cp -- internal archive --> staging[(MinIO / S3 staging bucket)]
+    cp -- delivery.tasks.v1 + traceparent --> kafka[(Kafka)]
+
+    kafka --> worker[data-plane Go worker]
+    worker --> staging
+    worker --> sink[(mock / S3 / MinIO sink)]
+    worker -- delivery.results.v1 --> kafka
+    kafka --> cp
+
+    cp -- progress / status --> web
+```
+
+Phase 6 会在 control-plane 入口和 repo/service 层加入 actor、tenant、role 边界；Phase 6.5 再把子公司读路径落到 workspace / workspace_object 模型。
+
+## 可观测拓扑图
+
+Phase 5 的本地 observability stack 只做最小闭环：应用暴露 metrics，应用向 collector 上报 spans，Grafana 从 Prometheus 读取 dashboard 数据。
+
+```mermaid
+flowchart LR
+    cp[control-plane] -- Prometheus /metrics --> prometheus[(Prometheus)]
+    worker[data-plane worker] -- Prometheus /metrics --> prometheus
+    cp -- OTLP HTTP traces --> otel[OTel Collector]
+    worker -- OTLP HTTP traces --> otel
+    otel -- Prometheus exporter :9464 --> prometheus
+    prometheus --> grafana[Grafana dashboard]
+    otel -- detailed debug logs --> smoke[Phase 5 smoke]
+```
+
+`control_plane.delivery.task_publish` 与 `data_plane.task.process/source.resolve/sink.upload/result.publish` 通过 delivery task payload 中的 W3C `traceparent` 共享同一 trace。`control_plane.delivery.result_consume/result_apply` 当前是独立 trace；如果后续需要完整闭环，应在 result message 或 result Kafka header 中继续传递 trace context。
+
 ## 写路径详细时序图
 
-当前 Phase 2 写路径：
+当前写路径：
 
 ```text
 HQ user

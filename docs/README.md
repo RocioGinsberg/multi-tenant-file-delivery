@@ -8,7 +8,7 @@
 |---|---|
 | [PDR](./PDR.md) | Product Design Requirements：产品背景、用户、范围、需求、非目标 |
 | [ROADMAP](./ROADMAP.md) | 阶段路线图、当前状态、后续优先级 |
-| [ARCHITECTURE](./ARCHITECTURE.md) | 当前实现架构与写路径细节 |
+| [ARCHITECTURE](./ARCHITECTURE.md) | 当前实现架构图、可观测拓扑与写路径细节 |
 | [DATA_MODEL](./DATA_MODEL.md) | 当前和目标态数据库模型、约束、迁移关注点 |
 | [TECHNICAL_NOTES](./TECHNICAL_NOTES.md) | 技术亮点、工程解释点、开发自检清单 |
 | [COMMIT_TEMPLATE](./COMMIT_TEMPLATE.md) | 提交说明模板，要求记录改动内容和测试 |

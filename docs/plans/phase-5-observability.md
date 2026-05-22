@@ -236,7 +236,8 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 - **实际执行**：主 Agent 实现并审计；子代理额度已满，未派发。
 - **实际变更**：
   - `deploy/grafana/dashboards/phase5-overview.json`：从 scrape-status 单面板扩展到 control-plane HTTP / delivery RED、data-plane task/result rate、worker upload rate/error/p95、result apply error rate。
-  - `README.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`、`docs/plans/README.md`：标记 Phase 5 Done，Phase 6 Current，并补 Phase 5 已完成能力摘要。
+  - `docs/ARCHITECTURE.md`：补系统架构图、可观测拓扑图，并同步当前写路径中的 trace / metrics / Redis 边界。
+  - `README.md`、`docs/README.md`、`docs/PDR.md`、`docs/DATA_MODEL.md`、`docs/ROADMAP.md`、`docs/TECHNICAL_NOTES.md`、`docs/plans/README.md`：标记 Phase 5 Done，Phase 6 Current，并补 Phase 5 已完成能力与 Phase 6 输入。
   - `deploy/README.md`、`control-plane/README.md`、`data-plane/README.md`：补 observability smoke、dashboard 和 collector log runbook。
   - `docs/plans/phase-6-multitenancy-auth.md`：新增 Phase 6 当前阶段计划草案，承接多租户 + 鉴权。
 - **验证**：

@@ -11,6 +11,13 @@
 | Planned | 已规划，未开始 |
 | Deferred | 从前序阶段拆出，等待独立实现 |
 
+## Release / Tag 策略
+
+- 阶段 tag 应打在已合并到主干的 commit 上，而不是仍在开发中的 feature branch 上。
+- 打 tag 前应满足：Phase plan 全部 `[x]`、README / ARCHITECTURE / ROADMAP / component README 同步、关键 smoke 通过、远端分支或 PR 状态可追溯。
+- 推荐用 annotated tag，命名按阶段或预览版本二选一：`phase-5-observability-done` 适合阶段里程碑，`v0.5.0` 适合对外 release 语义。
+- 如果需要在合并前留检查点，可用 `phase-5-observability-rc1` 这类 RC tag；稳定 tag 不应反复移动。
+
 ## 阶段路线
 
 | Phase | 状态 | 目标 | 完成定义 |

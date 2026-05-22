@@ -12,7 +12,9 @@
 | `task_item` | 单文件投递项，记录源路径、目标、目标路径、sink 状态和错误 |
 | `task_event` | 任务事件流，用于审计状态变化和调试 |
 
-Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.results.v1` 后由控制面消费并回写 `task` / `task_item`。
+Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.results.v1` 后由控制面消费并回写 `task` / `task_item`。Phase 3 / 3.x 已把 MySQL 作为本地 compose 主数据库目标，并通过 source reference 让 worker 从 staging object storage 读取源文件。Phase 4 / 5 新增 Redis 能力层和 observability，不改变当前业务表结构。
+
+当前模型尚未持久化 `tenant` / `user` / `role`，task 也尚未按租户过滤；这是 Phase 6 的主线。
 
 ## 目标态模型
 
@@ -63,9 +65,10 @@ Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.resu
 - `audit_log` 写入应走异步链路，避免阻塞主写路径。
 - `multipart_session.expires_at` 用于清理超期未完成 multipart session，避免对端长期计费。
 
-## Phase 3 关注点
+## Phase 6 关注点
 
-- SQLite 迁移到 MySQL 或 PostgreSQL。
-- Alembic migration 成为 schema 变更唯一入口。
-- 本地开发 compose 需要提供真实数据库。
-- 测试保留 SQLite 还是使用容器数据库，需要在 Phase 3 RFC 中确认。
+- 新增 `tenant` / `user` 基线表，并把 HQ / subsidiary 角色落到可测试模型。
+- `task` / `task_item` / `task_event` 需要关联 owner tenant 和 actor user；repo 层默认按 actor tenant / role 过滤。
+- 默认开发 actor 只用于本地测试兼容，生产模式需要显式身份。
+- audit 入口先覆盖关键写操作；完整读审计随 Phase 6.5 子公司读视图补齐。
+- Workspace / `workspace_object` / `physical_object` / dedup 不进入 Phase 6 主线，避免把多租户鉴权和读路径模型合并成一个过大的阶段。

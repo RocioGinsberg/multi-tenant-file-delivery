@@ -30,7 +30,7 @@
 | Phase 4 | Done | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Done | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标；本地 dashboard / smoke |
 | Phase 6 | Current | 多租户 + 鉴权 | 控制面基线已落地：dev header / 默认 actor，tenant / app_user，repo tenant filter，最小 task_event actor attribution |
-| Phase 6.5 | Planned | Workspace + 子公司读视图 | 子公司登录后可浏览和下载自己的 workspace 文件 |
+| Phase 6.5 | Planned | Workspace + 子公司读视图 | 计划已写；子公司登录后可浏览和下载自己的 workspace 文件 |
 | Phase 7 | Planned | 扩 sink + 压测 | OSS / Webhook / mock 异常 sink，BENCHMARKS 写入实测数据 |
 | Phase 8 | Optional | HA 改造 | 多实例和 rolling restart 不丢任务 |
 
@@ -81,3 +81,9 @@ Phase 6 当前落地：
 - task / task_item / task_event 的仓储层访问已收敛到 tenant-aware repo；写路径优先覆盖 RBAC。
 - Phase 6.5 再扩 workspace / 子公司读视图。
 - 避免把 workspace_object、dedup、sink credential 加密全部塞进 Phase 6；这些应拆到 Phase 6.5 / Phase 7。
+
+Phase 6.5 启动输入：
+
+- Phase 6 PR 合并后，`CurrentActor`、tenant filter 和 task_event actor attribution 可作为读路径权限基线。
+- Phase 6.5 先做 metadata-first workspace 读视图：workspace / physical_object / workspace_object、result apply 元数据写入、子公司列表和 presigned download URL。
+- 平台层 dedup、multipart / resume、sink credential 加密和 workspace 管理后台继续留到 Phase 7 或独立后续阶段。

@@ -61,7 +61,7 @@ cp .env.example .env
 | `REDIS_IDEMPOTENCY_TTL_SECONDS` | `60` | create/upload guard claim TTL |
 | `REDIS_LEASE_ENABLED` | `false` | 是否启用 Redis lease；当前用于 result apply 临界区 |
 | `REDIS_LEASE_TTL_SECONDS` | `30` | Redis lease claim TTL |
-| `OBSERVABILITY_ENABLED` | `false` | Phase 5 可观测总开关；5.1 仅作为配置基线 |
+| `OBSERVABILITY_ENABLED` | `false` | 是否启用 OpenTelemetry tracing |
 | `SERVICE_NAME` | `control-plane` | OTel service name |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTel Collector OTLP endpoint |
 | `METRICS_ENABLED` | `false` | 是否启用 Prometheus metrics endpoint |
@@ -158,6 +158,15 @@ curl http://localhost:8000/metrics
 ```
 
 Phase 5.2 暴露 control-plane HTTP、task workflow 和 delivery publish/apply 的低基数字段 RED 指标。默认 `METRICS_ENABLED=false` 时 `/metrics` 返回 404。
+
+OpenTelemetry tracing：
+
+```bash
+OBSERVABILITY_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span，并把当前 trace context 写入 delivery task payload 的 `traceparent` 字段；Kafka transport 同步写 `traceparent` header。
 
 ## API 路由（`/api/v1`）
 

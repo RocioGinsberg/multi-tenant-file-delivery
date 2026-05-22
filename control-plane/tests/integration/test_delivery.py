@@ -4,8 +4,11 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
+from opentelemetry import context, trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models import Base, Task
@@ -24,6 +27,8 @@ from app.services.delivery import (
     consume_delivery_results,
 )
 from app.services.redis_lease import LeaseClaim
+
+TRACEPARENT = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
 
 
 @pytest.fixture
@@ -93,6 +98,61 @@ async def test_build_delivery_task_message_filters_uploadable_items():
     assert payload["bucket_name"] == "auto-upload-dev"
     assert len(payload["items"]) == 1
     assert payload["items"][0]["dst_path"] == "reports/report.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_build_delivery_task_message_injects_current_traceparent():
+    task = SimpleNamespace(
+        id="task-trace",
+        idempotency_key="idem-trace",
+        submission_label="upload.zip",
+        temp_dir="/tmp/task-trace",
+        status="confirmed",
+        created_by="local-user",
+        created_at=None,
+        confirmed_at=None,
+    )
+    span_context = SpanContext(
+        trace_id=0x1234567890ABCDEF1234567890ABCDEF,
+        span_id=0x1234567890ABCDEF,
+        is_remote=False,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        trace_state=TraceState(),
+    )
+    token = context.attach(trace.set_span_in_context(NonRecordingSpan(span_context)))
+    try:
+        with patch("app.services.tracing.tracing_enabled", return_value=True):
+            message = build_delivery_task_message(
+                task=task,
+                upload_items=[],
+                bucket_name="auto-upload-dev",
+            )
+    finally:
+        context.detach(token)
+
+    assert message.traceparent == TRACEPARENT
+
+
+@pytest.mark.asyncio
+async def test_build_delivery_task_message_keeps_traceparent_empty_when_disabled():
+    task = SimpleNamespace(
+        id="task-no-trace",
+        idempotency_key="idem-no-trace",
+        submission_label="upload.zip",
+        temp_dir="/tmp/task-no-trace",
+        status="confirmed",
+        created_by="local-user",
+        created_at=None,
+        confirmed_at=None,
+    )
+
+    message = build_delivery_task_message(
+        task=task,
+        upload_items=[],
+        bucket_name="auto-upload-dev",
+    )
+
+    assert message.traceparent is None
 
 
 @pytest.mark.asyncio
@@ -173,8 +233,8 @@ async def test_kafka_delivery_publisher_sends_json_payload():
         def __init__(self):
             self.sent = []
 
-        async def send_and_wait(self, topic, value, key):
-            self.sent.append((topic, value, key))
+        async def send_and_wait(self, topic, value, **kwargs):
+            self.sent.append((topic, value, kwargs))
 
     task = SimpleNamespace(
         id="task-kafka",
@@ -199,11 +259,51 @@ async def test_kafka_delivery_publisher_sends_json_payload():
     ).publish(message)
 
     assert len(producer.sent) == 1
-    topic, value, key = producer.sent[0]
+    topic, value, kwargs = producer.sent[0]
     payload = json.loads(value.decode("utf-8"))
     assert topic == "delivery.tasks.v1"
-    assert key == b"task-kafka"
+    assert kwargs["key"] == b"task-kafka"
     assert payload["task_id"] == "task-kafka"
+    assert "headers" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_kafka_delivery_publisher_writes_traceparent_header():
+    class FakeProducer:
+        def __init__(self):
+            self.sent = []
+
+        async def send_and_wait(self, topic, value, **kwargs):
+            self.sent.append((topic, value, kwargs))
+
+    task = SimpleNamespace(
+        id="task-kafka-trace",
+        idempotency_key="idem-kafka-trace",
+        submission_label="upload.zip",
+        temp_dir="/tmp/task-kafka-trace",
+        status="confirmed",
+        created_by="local-user",
+        created_at=None,
+        confirmed_at=None,
+    )
+    message = build_delivery_task_message(
+        task=task,
+        upload_items=[],
+        bucket_name="auto-upload-dev",
+        traceparent=TRACEPARENT,
+    )
+    producer = FakeProducer()
+
+    await KafkaDeliveryPublisher(
+        bootstrap_servers="localhost:9092",
+        producer=producer,
+    ).publish(message)
+
+    assert len(producer.sent) == 1
+    _, value, kwargs = producer.sent[0]
+    payload = json.loads(value.decode("utf-8"))
+    assert payload["traceparent"] == TRACEPARENT
+    assert kwargs["headers"] == [("traceparent", TRACEPARENT.encode("ascii"))]
 
 
 @pytest.mark.asyncio

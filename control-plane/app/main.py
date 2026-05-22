@@ -12,11 +12,14 @@ from app.models.base import Base
 from app.services.metrics import metrics_enabled, metrics_middleware, metrics_response
 from app.services.progress_bus import create_progress_bus
 from app.services.redis_client import create_redis_client
+from app.services.tracing import configure_tracing, shutdown_tracing, tracing_middleware
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     from app.api.tasks import init_progress_bus
+
+    configure_tracing(get_settings())
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -29,6 +32,7 @@ async def lifespan(application: FastAPI):
     finally:
         await bus.aclose()
         await async_engine.dispose()
+        shutdown_tracing()
 
 
 app = FastAPI(title="Auto Upload Control Plane", lifespan=lifespan)
@@ -48,6 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.middleware("http")(metrics_middleware)
+app.middleware("http")(tracing_middleware)
 
 from app.api import tasks as tasks_module  # noqa: E402
 

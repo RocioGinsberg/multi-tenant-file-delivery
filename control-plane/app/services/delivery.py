@@ -15,6 +15,7 @@ from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
 from app.services.metrics import record_delivery_event
 from app.services.redis_lease import LeaseClaim, create_redis_lease
+from app.services.tracing import current_traceparent, start_trace_span
 
 
 class DeliveryItemSpec(BaseModel):
@@ -175,7 +176,7 @@ def build_delivery_task_message(
         bucket_name=bucket_name,
         items=items,
         source=source,
-        traceparent=traceparent,
+        traceparent=traceparent if traceparent is not None else current_traceparent(),
         metadata=metadata,
     )
 
@@ -196,71 +197,82 @@ async def apply_delivery_result(
     start = time.perf_counter()
     metric_status = "error"
     try:
-        message = (
-            result
-            if isinstance(result, DeliveryResultMessage)
-            else DeliveryResultMessage.model_validate(result)
-        )
-        task_repo = task_repo or TaskRepo()
-        item_repo = item_repo or ItemRepo()
-        event_repo = event_repo or EventRepo()
+        with start_trace_span(
+            "control_plane.delivery.result_apply",
+            attributes={"delivery.operation": "result_apply", "delivery.transport": "consumer"},
+        ) as span:
+            message = (
+                result
+                if isinstance(result, DeliveryResultMessage)
+                else DeliveryResultMessage.model_validate(result)
+            )
+            if span is not None:
+                span.set_attribute("delivery.task_id", message.task_id)
+                span.set_attribute("delivery.result.status", message.status)
+                span.set_attribute("delivery.result.item_count", len(message.items))
+            task_repo = task_repo or TaskRepo()
+            item_repo = item_repo or ItemRepo()
+            event_repo = event_repo or EventRepo()
 
-        applied_items = 0
-        missing_items: list[str] = []
-        for item in message.items:
-            if item.status == "uploaded":
-                updated = await item_repo.update_upload_status(
-                    session,
-                    item.item_id,
-                    "uploaded",
-                    uploaded_at=message.ended_at,
-                )
-            elif item.status == "failed":
-                updated = await item_repo.update_upload_status(
-                    session,
-                    item.item_id,
-                    "failed",
-                    upload_error=(item.error or message.error or "upload failed")[:1000],
-                )
-            else:
-                missing_items.append(item.item_id)
-                continue
+            applied_items = 0
+            missing_items: list[str] = []
+            for item in message.items:
+                if item.status == "uploaded":
+                    updated = await item_repo.update_upload_status(
+                        session,
+                        item.item_id,
+                        "uploaded",
+                        uploaded_at=message.ended_at,
+                    )
+                elif item.status == "failed":
+                    updated = await item_repo.update_upload_status(
+                        session,
+                        item.item_id,
+                        "failed",
+                        upload_error=(item.error or message.error or "upload failed")[:1000],
+                    )
+                else:
+                    missing_items.append(item.item_id)
+                    continue
 
-            if updated is None:
-                missing_items.append(item.item_id)
-            else:
-                applied_items += 1
+                if updated is None:
+                    missing_items.append(item.item_id)
+                else:
+                    applied_items += 1
 
-        await task_repo.update_status(
-            session,
-            message.task_id,
-            message.status,
-            finished_at=message.ended_at,
-        )
-        await event_repo.append(
-            session,
-            message.task_id,
-            "delivery_result_applied",
-            {
-                "topic": message.topic,
-                "status": message.status,
-                "uploaded": message.uploaded,
-                "failed": message.failed,
-                "processed": message.processed,
-                "applied_items": applied_items,
-                "missing_items": missing_items,
-            },
-        )
-        metric_status = message.status
-        return DeliveryResultApplySummary(
-            task_id=message.task_id,
-            status=message.status,
-            uploaded=message.uploaded,
-            failed=message.failed,
-            processed=message.processed,
-            applied_items=applied_items,
-            missing_items=missing_items,
-        )
+            await task_repo.update_status(
+                session,
+                message.task_id,
+                message.status,
+                finished_at=message.ended_at,
+            )
+            await event_repo.append(
+                session,
+                message.task_id,
+                "delivery_result_applied",
+                {
+                    "topic": message.topic,
+                    "status": message.status,
+                    "uploaded": message.uploaded,
+                    "failed": message.failed,
+                    "processed": message.processed,
+                    "applied_items": applied_items,
+                    "missing_items": missing_items,
+                },
+            )
+            if span is not None:
+                span.set_attribute("delivery.result.applied_items", applied_items)
+                span.set_attribute("delivery.result.missing_items", len(missing_items))
+            metric_status = message.status
+            return DeliveryResultApplySummary(
+                task_id=message.task_id,
+                status=message.status,
+                uploaded=message.uploaded,
+                failed=message.failed,
+                processed=message.processed,
+                applied_items=applied_items,
+                missing_items=missing_items,
+            )
     finally:
         record_delivery_event(
             "result_apply",
@@ -291,16 +303,26 @@ class FileSpoolDeliveryPublisher:
         start = time.perf_counter()
         metric_status = "error"
         try:
-            self._topic_dir.mkdir(parents=True, exist_ok=True)
-            tmp_path = self._topic_dir / f"{message.task_id}.json.tmp"
-            final_path = self._topic_dir / f"{message.task_id}.json"
-            tmp_path.write_text(
-                message.model_dump_json(indent=2, exclude_none=True),
-                encoding="utf-8",
-            )
-            tmp_path.replace(final_path)
-            metric_status = "published"
-            return final_path
+            with start_trace_span(
+                "control_plane.delivery.task_publish",
+                attributes={
+                    "delivery.operation": "task_publish",
+                    "delivery.transport": "file",
+                    "messaging.destination.name": self.topic,
+                    "delivery.task_id": message.task_id,
+                    "delivery.item_count": len(message.items),
+                },
+            ):
+                self._topic_dir.mkdir(parents=True, exist_ok=True)
+                tmp_path = self._topic_dir / f"{message.task_id}.json.tmp"
+                final_path = self._topic_dir / f"{message.task_id}.json"
+                tmp_path.write_text(
+                    message.model_dump_json(indent=2, exclude_none=True),
+                    encoding="utf-8",
+                )
+                tmp_path.replace(final_path)
+                metric_status = "published"
+                return final_path
         finally:
             record_delivery_event(
                 "task_publish",
@@ -322,22 +344,39 @@ class KafkaDeliveryPublisher:
         start = time.perf_counter()
         metric_status = "error"
         try:
-            producer = self.producer or AIOKafkaProducer(
-                bootstrap_servers=self.bootstrap_servers,
-            )
-            should_manage_lifecycle = self.producer is None
-            if should_manage_lifecycle:
-                await producer.start()
-            try:
-                await producer.send_and_wait(
-                    self.topic,
-                    message.model_dump_json(exclude_none=True).encode("utf-8"),
-                    key=message.task_id.encode("utf-8"),
+            with start_trace_span(
+                "control_plane.delivery.task_publish",
+                attributes={
+                    "delivery.operation": "task_publish",
+                    "delivery.transport": "kafka",
+                    "messaging.system": "kafka",
+                    "messaging.destination.name": self.topic,
+                    "delivery.task_id": message.task_id,
+                    "delivery.item_count": len(message.items),
+                },
+            ):
+                producer = self.producer or AIOKafkaProducer(
+                    bootstrap_servers=self.bootstrap_servers,
                 )
-                metric_status = "published"
-            finally:
+                should_manage_lifecycle = self.producer is None
                 if should_manage_lifecycle:
-                    await producer.stop()
+                    await producer.start()
+                try:
+                    send_kwargs: dict[str, Any] = {
+                        "key": message.task_id.encode("utf-8"),
+                    }
+                    headers = _trace_headers(message.traceparent or current_traceparent())
+                    if headers:
+                        send_kwargs["headers"] = headers
+                    await producer.send_and_wait(
+                        self.topic,
+                        message.model_dump_json(exclude_none=True).encode("utf-8"),
+                        **send_kwargs,
+                    )
+                    metric_status = "published"
+                finally:
+                    if should_manage_lifecycle:
+                        await producer.stop()
         finally:
             record_delivery_event(
                 "task_publish",
@@ -442,24 +481,35 @@ async def consume_delivery_results(
     summaries: list[DeliveryResultApplySummary] = []
     lease_client = create_redis_lease()
     try:
-        if hasattr(consumer, "consume_records"):
-            records = await consumer.consume_records()
-        else:
-            records = [
-                DeliveryResultRecord(message=message, ack=_noop_ack)
-                for message in await consumer.consume()
-            ]
-        for record in records:
-            lease = await _acquire_result_apply_lease(lease_client, record.message)
-            if not lease.acquired:
-                continue
-            try:
-                summaries.append(await apply_delivery_result(session, record.message))
-                await record.ack()
-            finally:
-                await lease_client.release(lease)
-        metric_status = "consumed" if records else "empty"
-        return summaries
+        with start_trace_span(
+            "control_plane.delivery.result_consume",
+            attributes={
+                "delivery.operation": "result_consume",
+                "delivery.transport": transport,
+            },
+        ) as span:
+            if hasattr(consumer, "consume_records"):
+                records = await consumer.consume_records()
+            else:
+                records = [
+                    DeliveryResultRecord(message=message, ack=_noop_ack)
+                    for message in await consumer.consume()
+                ]
+            if span is not None:
+                span.set_attribute("delivery.result.records", len(records))
+            for record in records:
+                lease = await _acquire_result_apply_lease(lease_client, record.message)
+                if not lease.acquired:
+                    continue
+                try:
+                    summaries.append(await apply_delivery_result(session, record.message))
+                    await record.ack()
+                finally:
+                    await lease_client.release(lease)
+            if span is not None:
+                span.set_attribute("delivery.result.applied_records", len(summaries))
+            metric_status = "consumed" if records else "empty"
+            return summaries
     finally:
         record_delivery_event(
             "result_consume",
@@ -478,6 +528,12 @@ def _consumer_transport(consumer: Any) -> str:
     if isinstance(consumer, FileSpoolDeliveryResultConsumer):
         return "file"
     return "unknown"
+
+
+def _trace_headers(traceparent: str | None) -> list[tuple[str, bytes]] | None:
+    if not traceparent:
+        return None
+    return [("traceparent", traceparent.encode("ascii"))]
 
 
 async def _acquire_result_apply_lease(

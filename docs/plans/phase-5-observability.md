@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1 已完成；5.2-5.7 待实现）
+> **状态**：Current（5.1-5.3 已完成；5.4-5.7 待实现）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -115,7 +115,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.3 control-plane trace context 注入
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 接入 OpenTelemetry Python SDK，支持 no-op / enabled。
@@ -127,9 +127,18 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - 无 OTel / disabled 时 payload 兼容，`traceparent` 可为空。
   - Kafka/object-source smoke 不回归。
 - **建议执行方**：主 Agent 或 L3 worker；涉及跨语言 contract。
+- **实际执行**：主 Agent 实现并审计。
+- **实际变更**：
+  - `control-plane/pyproject.toml` / `uv.lock`：新增 OpenTelemetry API / SDK / OTLP HTTP exporter。
+  - `control-plane/app/services/tracing.py`：新增 tracing no-op guard、OTLP provider 初始化、HTTP tracing middleware、span helper 和 W3C `traceparent` 注入 helper。
+  - `control-plane/app/main.py`：在 lifespan 中按 `OBSERVABILITY_ENABLED=true` 初始化 tracing，并接入 HTTP server span middleware。
+  - `control-plane/app/services/delivery.py`：delivery task message 默认从当前 context 注入 `traceparent`；file/kafka task publish、result consume、result apply 创建 span；Kafka publisher 同步写 `traceparent` header。
+  - `control-plane/tests/integration/test_delivery.py`：覆盖 enabled active span 注入、disabled 兼容为空、Kafka header 写入。
+  - `control-plane/README.md`：补 tracing 启动方式和 Phase 5.3 行为说明。
 - **验证**：
   - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_delivery.py tests/integration/test_api_tasks.py`
   - `cd control-plane && .venv/bin/python -m ruff check app tests`
+  - `cd control-plane && .venv/bin/python -m pytest`
 
 ### 5.4 data-plane metrics baseline
 

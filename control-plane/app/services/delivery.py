@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
+from app.services.metrics import record_delivery_event
 from app.services.redis_lease import LeaseClaim, create_redis_lease
 
 
@@ -191,70 +193,81 @@ async def apply_delivery_result(
     Transaction ownership stays with the caller. This makes the same function
     usable from local file-spool polling and, later, Kafka consumption.
     """
-    message = (
-        result
-        if isinstance(result, DeliveryResultMessage)
-        else DeliveryResultMessage.model_validate(result)
-    )
-    task_repo = task_repo or TaskRepo()
-    item_repo = item_repo or ItemRepo()
-    event_repo = event_repo or EventRepo()
+    start = time.perf_counter()
+    metric_status = "error"
+    try:
+        message = (
+            result
+            if isinstance(result, DeliveryResultMessage)
+            else DeliveryResultMessage.model_validate(result)
+        )
+        task_repo = task_repo or TaskRepo()
+        item_repo = item_repo or ItemRepo()
+        event_repo = event_repo or EventRepo()
 
-    applied_items = 0
-    missing_items: list[str] = []
-    for item in message.items:
-        if item.status == "uploaded":
-            updated = await item_repo.update_upload_status(
-                session,
-                item.item_id,
-                "uploaded",
-                uploaded_at=message.ended_at,
-            )
-        elif item.status == "failed":
-            updated = await item_repo.update_upload_status(
-                session,
-                item.item_id,
-                "failed",
-                upload_error=(item.error or message.error or "upload failed")[:1000],
-            )
-        else:
-            missing_items.append(item.item_id)
-            continue
+        applied_items = 0
+        missing_items: list[str] = []
+        for item in message.items:
+            if item.status == "uploaded":
+                updated = await item_repo.update_upload_status(
+                    session,
+                    item.item_id,
+                    "uploaded",
+                    uploaded_at=message.ended_at,
+                )
+            elif item.status == "failed":
+                updated = await item_repo.update_upload_status(
+                    session,
+                    item.item_id,
+                    "failed",
+                    upload_error=(item.error or message.error or "upload failed")[:1000],
+                )
+            else:
+                missing_items.append(item.item_id)
+                continue
 
-        if updated is None:
-            missing_items.append(item.item_id)
-        else:
-            applied_items += 1
+            if updated is None:
+                missing_items.append(item.item_id)
+            else:
+                applied_items += 1
 
-    await task_repo.update_status(
-        session,
-        message.task_id,
-        message.status,
-        finished_at=message.ended_at,
-    )
-    await event_repo.append(
-        session,
-        message.task_id,
-        "delivery_result_applied",
-        {
-            "topic": message.topic,
-            "status": message.status,
-            "uploaded": message.uploaded,
-            "failed": message.failed,
-            "processed": message.processed,
-            "applied_items": applied_items,
-            "missing_items": missing_items,
-        },
-    )
-    return DeliveryResultApplySummary(
-        task_id=message.task_id,
-        status=message.status,
-        uploaded=message.uploaded,
-        failed=message.failed,
-        processed=message.processed,
-        applied_items=applied_items,
-        missing_items=missing_items,
-    )
+        await task_repo.update_status(
+            session,
+            message.task_id,
+            message.status,
+            finished_at=message.ended_at,
+        )
+        await event_repo.append(
+            session,
+            message.task_id,
+            "delivery_result_applied",
+            {
+                "topic": message.topic,
+                "status": message.status,
+                "uploaded": message.uploaded,
+                "failed": message.failed,
+                "processed": message.processed,
+                "applied_items": applied_items,
+                "missing_items": missing_items,
+            },
+        )
+        metric_status = message.status
+        return DeliveryResultApplySummary(
+            task_id=message.task_id,
+            status=message.status,
+            uploaded=message.uploaded,
+            failed=message.failed,
+            processed=message.processed,
+            applied_items=applied_items,
+            missing_items=missing_items,
+        )
+    finally:
+        record_delivery_event(
+            "result_apply",
+            "consumer",
+            metric_status,
+            time.perf_counter() - start,
+        )
 
 
 @dataclass(slots=True)
@@ -275,15 +288,26 @@ class FileSpoolDeliveryPublisher:
         self._topic_dir = Path(self.base_dir) / self.topic
 
     async def publish(self, message: DeliveryTaskMessage) -> Path:
-        self._topic_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._topic_dir / f"{message.task_id}.json.tmp"
-        final_path = self._topic_dir / f"{message.task_id}.json"
-        tmp_path.write_text(
-            message.model_dump_json(indent=2, exclude_none=True),
-            encoding="utf-8",
-        )
-        tmp_path.replace(final_path)
-        return final_path
+        start = time.perf_counter()
+        metric_status = "error"
+        try:
+            self._topic_dir.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._topic_dir / f"{message.task_id}.json.tmp"
+            final_path = self._topic_dir / f"{message.task_id}.json"
+            tmp_path.write_text(
+                message.model_dump_json(indent=2, exclude_none=True),
+                encoding="utf-8",
+            )
+            tmp_path.replace(final_path)
+            metric_status = "published"
+            return final_path
+        finally:
+            record_delivery_event(
+                "task_publish",
+                "file",
+                metric_status,
+                time.perf_counter() - start,
+            )
 
 
 @dataclass(slots=True)
@@ -295,21 +319,32 @@ class KafkaDeliveryPublisher:
     producer: Any | None = None
 
     async def publish(self, message: DeliveryTaskMessage) -> None:
-        producer = self.producer or AIOKafkaProducer(
-            bootstrap_servers=self.bootstrap_servers,
-        )
-        should_manage_lifecycle = self.producer is None
-        if should_manage_lifecycle:
-            await producer.start()
+        start = time.perf_counter()
+        metric_status = "error"
         try:
-            await producer.send_and_wait(
-                self.topic,
-                message.model_dump_json(exclude_none=True).encode("utf-8"),
-                key=message.task_id.encode("utf-8"),
+            producer = self.producer or AIOKafkaProducer(
+                bootstrap_servers=self.bootstrap_servers,
             )
-        finally:
+            should_manage_lifecycle = self.producer is None
             if should_manage_lifecycle:
-                await producer.stop()
+                await producer.start()
+            try:
+                await producer.send_and_wait(
+                    self.topic,
+                    message.model_dump_json(exclude_none=True).encode("utf-8"),
+                    key=message.task_id.encode("utf-8"),
+                )
+                metric_status = "published"
+            finally:
+                if should_manage_lifecycle:
+                    await producer.stop()
+        finally:
+            record_delivery_event(
+                "task_publish",
+                "kafka",
+                metric_status,
+                time.perf_counter() - start,
+            )
 
 
 @dataclass(slots=True)
@@ -401,6 +436,9 @@ async def consume_delivery_results(
     consumer: Any,
 ) -> list[DeliveryResultApplySummary]:
     """Read pending local result messages and apply them in order."""
+    start = time.perf_counter()
+    metric_status = "error"
+    transport = _consumer_transport(consumer)
     summaries: list[DeliveryResultApplySummary] = []
     lease_client = create_redis_lease()
     try:
@@ -420,11 +458,26 @@ async def consume_delivery_results(
                 await record.ack()
             finally:
                 await lease_client.release(lease)
+        metric_status = "consumed" if records else "empty"
         return summaries
     finally:
+        record_delivery_event(
+            "result_consume",
+            transport,
+            metric_status,
+            time.perf_counter() - start,
+        )
         await lease_client.aclose()
         if hasattr(consumer, "close"):
             await consumer.close()
+
+
+def _consumer_transport(consumer: Any) -> str:
+    if isinstance(consumer, KafkaDeliveryResultConsumer):
+        return "kafka"
+    if isinstance(consumer, FileSpoolDeliveryResultConsumer):
+        return "file"
+    return "unknown"
 
 
 async def _acquire_result_apply_lease(

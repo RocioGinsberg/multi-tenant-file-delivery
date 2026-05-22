@@ -16,6 +16,7 @@ dependencies = [
     "aiokafka>=0.14.0",
     "asyncmy>=0.2.11",
     "redis>=5.0",
+    "prometheus-client>=0.25.0",
 ]
 
 [dependency-groups]

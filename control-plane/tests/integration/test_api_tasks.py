@@ -118,6 +118,38 @@ async def test_healthz_checks_redis_when_enabled(async_client):
     redis_client.close.assert_awaited_once()
 
 
+async def test_metrics_endpoint_disabled_by_default(async_client):
+    settings = MagicMock()
+    settings.metrics_enabled = False
+
+    with patch("app.services.metrics.get_settings", return_value=settings):
+        async with async_client as client:
+            resp = await client.get("/metrics")
+
+    assert resp.status_code == 404
+
+
+async def test_metrics_endpoint_records_http_requests_when_enabled(async_client):
+    settings = MagicMock()
+    settings.metrics_enabled = True
+
+    with patch("app.services.metrics.get_settings", return_value=settings):
+        async with async_client as client:
+            health_resp = await client.get("/healthz")
+            missing_resp = await client.get("/missing/tenant-specific-resource")
+            metrics_resp = await client.get("/metrics")
+
+    assert health_resp.status_code == 200
+    assert missing_resp.status_code == 404
+    assert metrics_resp.status_code == 200
+    assert "text/plain" in metrics_resp.headers["content-type"]
+    body = metrics_resp.text
+    assert "control_plane_http_requests_total" in body
+    assert 'route="/healthz"' in body
+    assert 'route="unmatched"' in body
+    assert "/missing/tenant-specific-resource" not in body
+
+
 # ── Test 2: GET /api/v1/tasks — empty list ───────────────────────────────────
 
 async def test_list_tasks_empty(async_client):

@@ -87,7 +87,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.2 control-plane metrics baseline
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L2
 - **范围**：
   - 增加 Prometheus client dependency。
@@ -99,8 +99,18 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - 单测覆盖 metrics disabled / enabled。
   - 默认 pytest 不依赖 Prometheus。
 - **建议执行方**：L2 worker；主 Agent review 指标命名和标签基数。
+- **实际执行**：主 Agent 实现并审计。
+- **实际变更**：
+  - `control-plane/pyproject.toml` / `uv.lock`：新增 `prometheus-client`。
+  - `control-plane/app/services/metrics.py`：新增独立 Prometheus registry、HTTP middleware metrics、task workflow metrics、delivery metrics 和 `/metrics` response helper。
+  - `control-plane/app/main.py`：接入 metrics middleware，并在 `METRICS_ENABLED=true` 时开放 configured metrics path。
+  - `control-plane/app/api/tasks.py`：为 create/classify/confirm/upload 记录 task operation RED 指标，覆盖 claim 获取失败等错误路径。
+  - `control-plane/app/services/delivery.py`：为 file/kafka task publish、result consume、result apply 记录 delivery RED 指标。
+  - `control-plane/tests/integration/test_api_tasks.py`：新增 metrics endpoint disabled/enabled 覆盖。
+  - `control-plane/README.md`：补 metrics 启用和 curl 命令。
 - **验证**：
-  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_api_tasks.py::test_metrics_endpoint`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_api_tasks.py::test_metrics_endpoint_disabled_by_default tests/integration/test_api_tasks.py::test_metrics_endpoint_records_http_requests_when_enabled`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_api_tasks.py tests/integration/test_delivery.py`
   - `cd control-plane && .venv/bin/python -m ruff check app tests`
 
 ### 5.3 control-plane trace context 注入

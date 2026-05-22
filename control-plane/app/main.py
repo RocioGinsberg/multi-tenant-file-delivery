@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.core.db import async_engine
 from app.core.settings import get_settings
 from app.models.base import Base
+from app.services.metrics import metrics_enabled, metrics_middleware, metrics_response
 from app.services.progress_bus import create_progress_bus
 from app.services.redis_client import create_redis_client
 
@@ -46,6 +47,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(metrics_middleware)
 
 from app.api import tasks as tasks_module  # noqa: E402
 
@@ -70,3 +72,10 @@ async def healthz() -> dict:
         "env": settings.env,
         "checks": checks,
     }
+
+
+@app.get(_settings.metrics_path, include_in_schema=False)
+async def metrics():
+    if not metrics_enabled():
+        return JSONResponse(status_code=404, content={"detail": "metrics disabled"})
+    return metrics_response()

@@ -150,6 +150,15 @@ curl http://localhost:8000/healthz
 
 `REDIS_HEALTHCHECK_ENABLED=true` 时，`/healthz` 会额外 ping `REDIS_URL`，用于 Phase 4 Redis smoke / readiness 验证。
 
+Prometheus metrics：
+
+```bash
+METRICS_ENABLED=true uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+curl http://localhost:8000/metrics
+```
+
+Phase 5.2 暴露 control-plane HTTP、task workflow 和 delivery publish/apply 的低基数字段 RED 指标。默认 `METRICS_ENABLED=false` 时 `/metrics` 返回 404。
+
 ## API 路由（`/api/v1`）
 
 | 方法 | 路径 | 说明 |

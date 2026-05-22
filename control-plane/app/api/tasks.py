@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from app.services.delivery import (
     build_delivery_task_message,
 )
 from app.services.idempotency_guard import IdempotencyClaim, create_idempotency_guard
+from app.services.metrics import record_task_operation
 from app.services.progress_bus import ProgressBus
 from app.services.staging_source import (
     INTERNAL_ARCHIVE_DIR,
@@ -340,15 +342,18 @@ async def create_task(
     idempotency_key: FormString = None,
     submission_label: FormString = None,
 ):
+    metric_start = time.perf_counter()
+    metric_status = "error"
     settings = get_settings()
 
     key = idempotency_key or str(uuid.uuid4())
-    claim = await _acquire_idempotency_claim(settings, "create_task", key)
-
+    claim: IdempotencyClaim | None = None
     try:
+        claim = await _acquire_idempotency_claim(settings, "create_task", key)
         existing = await _task_repo.get_by_idempotency_key(session, key)
         if existing is not None:
             from fastapi.responses import JSONResponse as _JSONResponse
+            metric_status = "existing"
             return _JSONResponse(
                 status_code=200,
                 content={"task_id": existing.id, "status": existing.status},
@@ -384,12 +389,19 @@ async def create_task(
 
         final = await _task_repo.get(session, task_id)
         from fastapi.responses import JSONResponse
+        metric_status = "created"
         return JSONResponse(
             status_code=201,
             content={"task_id": final.id, "status": final.status},
         )
     finally:
-        await _release_idempotency_claim(settings, claim)
+        record_task_operation(
+            "create_task",
+            metric_status,
+            time.perf_counter() - metric_start,
+        )
+        if claim is not None:
+            await _release_idempotency_claim(settings, claim)
 
 
 @router.post("/tasks/{task_id}/classify")
@@ -397,53 +409,63 @@ async def classify_task(
     task_id: str,
     session: SessionDep,
 ):
+    metric_start = time.perf_counter()
+    metric_status = "error"
     settings = get_settings()
 
-    task = await _task_repo.get(session, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
-
-    original_zip = find_task_archive_path(task.temp_dir)
-    if not os.path.exists(original_zip):
-        raise HTTPException(status_code=422, detail="original.zip not found in task temp_dir")
-
     try:
-        profile = _load_profile(settings.classification_profile_path)
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Profile not found: {settings.classification_profile_path}",
-        ) from exc
+        task = await _task_repo.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
-    with open(original_zip, "rb") as f:
-        zip_bytes = f.read()
+        original_zip = find_task_archive_path(task.temp_dir)
+        if not os.path.exists(original_zip):
+            raise HTTPException(status_code=422, detail="original.zip not found in task temp_dir")
 
-    classified_items, summary = classify_zip(zip_bytes, profile)
+        try:
+            profile = _load_profile(settings.classification_profile_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Profile not found: {settings.classification_profile_path}",
+            ) from exc
 
-    summary_dict = summary.to_dict()
+        with open(original_zip, "rb") as f:
+            zip_bytes = f.read()
 
-    _TASK_ITEM_COLS = {
-        "src_path", "filename", "ext", "file_size", "target_name_raw",
-        "target_name_matched", "document_type", "category_name", "dst_dir",
-        "dst_path", "severity", "error_code", "error_message", "warning_message",
-    }
-    item_dicts = []
-    for item in classified_items:
-        d = {k: v for k, v in item.to_dict().items() if k in _TASK_ITEM_COLS}
-        if d.get("target_name_matched") is None:
-            d["target_name_matched"] = ""
-        item_dicts.append(d)
+        classified_items, summary = classify_zip(zip_bytes, profile)
 
-    await _item_repo.bulk_insert(session, task_id, item_dicts)
+        summary_dict = summary.to_dict()
 
-    task_obj = await _task_repo.get(session, task_id)
-    task_obj.summary_json = summary_dict
-    await session.flush()
+        _TASK_ITEM_COLS = {
+            "src_path", "filename", "ext", "file_size", "target_name_raw",
+            "target_name_matched", "document_type", "category_name", "dst_dir",
+            "dst_path", "severity", "error_code", "error_message", "warning_message",
+        }
+        item_dicts = []
+        for item in classified_items:
+            d = {k: v for k, v in item.to_dict().items() if k in _TASK_ITEM_COLS}
+            if d.get("target_name_matched") is None:
+                d["target_name_matched"] = ""
+            item_dicts.append(d)
 
-    await _task_repo.update_status(session, task_id, "classified")
-    await session.commit()
+        await _item_repo.bulk_insert(session, task_id, item_dicts)
 
-    return {"task_id": task_id, "summary": summary_dict}
+        task_obj = await _task_repo.get(session, task_id)
+        task_obj.summary_json = summary_dict
+        await session.flush()
+
+        await _task_repo.update_status(session, task_id, "classified")
+        await session.commit()
+
+        metric_status = "classified"
+        return {"task_id": task_id, "summary": summary_dict}
+    finally:
+        record_task_operation(
+            "classify_task",
+            metric_status,
+            time.perf_counter() - metric_start,
+        )
 
 
 @router.get("/tasks/{task_id}/preview")
@@ -468,18 +490,28 @@ async def confirm_task(
     task_id: str,
     session: SessionDep,
 ):
-    task = await _task_repo.get(session, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+    metric_start = time.perf_counter()
+    metric_status = "error"
+    try:
+        task = await _task_repo.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
 
-    updated = await _task_repo.update_status(
-        session,
-        task_id,
-        "confirmed",
-        confirmed_at=datetime.now(UTC),
-    )
-    await session.commit()
-    return {"task_id": task_id, "status": updated.status}
+        updated = await _task_repo.update_status(
+            session,
+            task_id,
+            "confirmed",
+            confirmed_at=datetime.now(UTC),
+        )
+        await session.commit()
+        metric_status = "confirmed"
+        return {"task_id": task_id, "status": updated.status}
+    finally:
+        record_task_operation(
+            "confirm_task",
+            metric_status,
+            time.perf_counter() - metric_start,
+        )
 
 
 @router.post("/tasks/{task_id}/upload")
@@ -488,20 +520,37 @@ async def upload_task(
     background_tasks: BackgroundTasks,
     session: SessionDep,
 ):
+    metric_start = time.perf_counter()
+    metric_status = "error"
     task = await _task_repo.get(session, task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+        try:
+            raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+        finally:
+            record_task_operation(
+                "upload_task",
+                metric_status,
+                time.perf_counter() - metric_start,
+            )
 
     if task.status != "confirmed":
-        raise HTTPException(
-            status_code=422,
-            detail=f"Task must be in 'confirmed' status to upload, got {task.status!r}",
-        )
+        try:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Task must be in 'confirmed' status to upload, got {task.status!r}",
+            )
+        finally:
+            record_task_operation(
+                "upload_task",
+                metric_status,
+                time.perf_counter() - metric_start,
+            )
 
     settings = get_settings()
-    upload_claim = await _acquire_idempotency_claim(settings, "upload_task", task_id)
+    upload_claim: IdempotencyClaim | None = None
     delivery_backend = getattr(settings, "delivery_backend", "python")
     try:
+        upload_claim = await _acquire_idempotency_claim(settings, "upload_task", task_id)
         if delivery_backend == "go-worker":
             # Phase 2 bridge: the control plane owns classification and task state,
             # while the data plane only receives uploadable item specs.
@@ -568,15 +617,23 @@ async def upload_task(
                 "upload_items": len(upload_items),
             })
             await session.commit()
+            metric_status = "queued"
             return {"task_id": task_id, "status": "queued"}
 
         background_tasks.add_task(run_task, task_id)
+        metric_status = "uploading"
         return {"task_id": task_id, "status": "uploading"}
     finally:
-        if delivery_backend == "go-worker":
-            await _release_idempotency_claim(settings, upload_claim)
-        elif not getattr(settings, "redis_idempotency_enabled", False):
-            await _release_idempotency_claim(settings, upload_claim)
+        record_task_operation(
+            "upload_task",
+            metric_status,
+            time.perf_counter() - metric_start,
+        )
+        if upload_claim is not None:
+            if delivery_backend == "go-worker":
+                await _release_idempotency_claim(settings, upload_claim)
+            elif not getattr(settings, "redis_idempotency_enabled", False):
+                await _release_idempotency_claim(settings, upload_claim)
 
 
 @router.post("/tasks/{task_id}/retry")

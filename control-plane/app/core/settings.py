@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     # ── Database ──
     database_url: str = "sqlite+aiosqlite:///./control_plane.db"
 
+    # ── Auth / actor context (Phase 6) ──
+    auth_allow_dev_headers: bool = True
+    auth_default_actor_enabled: bool = True
+    auth_default_tenant_id: str = "hq"
+    auth_default_user_id: str = "local-user"
+    auth_default_role: str = "hq_uploader"
+    auth_actor_tenant_header: str = "X-Actor-Tenant"
+    auth_actor_user_header: str = "X-Actor-User"
+    auth_actor_role_header: str = "X-Actor-Role"
+
     # ── S3-compatible object storage ──
     s3_endpoint_url: str = "http://localhost:9000"
     s3_bucket_name: str = "auto-upload-dev"

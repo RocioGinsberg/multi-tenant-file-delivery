@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task
 
-
+DEFAULT_OWNER_TENANT_ID = "hq"
+DEFAULT_OWNER_USER_ID = "local-user"
 class TaskRepo:
     """Repository for task persistence.
 
@@ -25,6 +26,8 @@ class TaskRepo:
         temp_dir: str = "",
         summary_json: dict[str, Any] | None = None,
         created_by: str = "local-user",
+        owner_tenant_id: str = DEFAULT_OWNER_TENANT_ID,
+        owner_user_id: str = DEFAULT_OWNER_USER_ID,
         status: str = "draft",
     ) -> Task:
         task = Task(
@@ -33,6 +36,8 @@ class TaskRepo:
             temp_dir=temp_dir,
             summary_json=summary_json or {},
             created_by=created_by,
+            owner_tenant_id=owner_tenant_id,
+            owner_user_id=owner_user_id,
             status=status,
         )
         session.add(task)
@@ -40,17 +45,30 @@ class TaskRepo:
         await session.refresh(task)
         return task
 
-    async def get(self, session: AsyncSession, task_id: str) -> Task | None:
-        return await session.get(Task, task_id)
+    async def get(
+        self,
+        session: AsyncSession,
+        task_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> Task | None:
+        query = select(Task).where(Task.id == task_id)
+        if tenant_id is not None:
+            query = query.where(Task.owner_tenant_id == tenant_id)
+        result = await session.execute(query)
+        return result.scalars().first()
 
     async def get_by_idempotency_key(
         self,
         session: AsyncSession,
         idempotency_key: str,
+        *,
+        tenant_id: str | None = None,
     ) -> Task | None:
-        result = await session.execute(
-            select(Task).where(Task.idempotency_key == idempotency_key)
-        )
+        query = select(Task).where(Task.idempotency_key == idempotency_key)
+        if tenant_id is not None:
+            query = query.where(Task.owner_tenant_id == tenant_id)
+        result = await session.execute(query)
         return result.scalar_one_or_none()
 
     async def update_status(
@@ -59,10 +77,15 @@ class TaskRepo:
         task_id: str,
         status: str,
         *,
+        tenant_id: str | None = None,
         confirmed_at: datetime | None = None,
         finished_at: datetime | None = None,
     ) -> Task | None:
-        task = await session.get(Task, task_id)
+        query = select(Task).where(Task.id == task_id)
+        if tenant_id is not None:
+            query = query.where(Task.owner_tenant_id == tenant_id)
+        result = await session.execute(query)
+        task = result.scalar_one_or_none()
         if task is None:
             return None
 
@@ -81,11 +104,12 @@ class TaskRepo:
         *,
         limit: int = 50,
         offset: int = 0,
+        tenant_id: str | None = None,
     ) -> list[Task]:
+        query = select(Task)
+        if tenant_id is not None:
+            query = query.where(Task.owner_tenant_id == tenant_id)
         result = await session.execute(
-            select(Task)
-            .order_by(Task.created_at.desc(), Task.id.desc())
-            .limit(limit)
-            .offset(offset)
+            query.order_by(Task.created_at.desc(), Task.id.desc()).limit(limit).offset(offset)
         )
         return list(result.scalars().all())

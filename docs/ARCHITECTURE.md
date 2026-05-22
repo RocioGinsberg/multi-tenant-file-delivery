@@ -19,7 +19,7 @@
 
 **Phase 5 Done**：本地可观测三件套已接入。`deploy/docker-compose.yml` 提供 OTel Collector、Prometheus 和 Grafana；control-plane `/metrics` 暴露 HTTP / task / delivery RED 指标，data-plane `-metrics-enabled` 暴露 task consume、source read、sink upload、result publish 和 limiter RED 指标。control-plane 在 delivery task payload 和 Kafka header 写入 W3C `traceparent`，Go worker 从 payload 恢复 remote parent，并为 task process、source resolve、sink upload、result publish 继续创建 spans。Phase 5 smoke 覆盖 control-plane -> Kafka -> data-plane -> result apply，并验证 collector 日志里的同 trace ID。
 
-**Phase 6 Current**：多租户 + 鉴权进入当前阶段。Phase 6 会先落地 tenant / user / role 基线、request actor context、仓储层 tenant filter、HQ / 子公司权限边界和 audit 入口，为 Phase 6.5 workspace 读视图提供身份与隔离前提。
+**Phase 6 Current**：多租户 + 鉴权进入当前阶段。控制面已落地 dev header / 默认 actor、tenant / app_user / role 基线、task owner tenant/user、仓储层 tenant filter、HQ / 子公司权限边界和最小 task_event actor attribution，为 Phase 6.5 workspace 读视图提供身份与隔离前提。
 
 ## 系统架构图
 
@@ -44,7 +44,7 @@ flowchart LR
     cp -- progress / status --> web
 ```
 
-Phase 6 会在 control-plane 入口和 repo/service 层加入 actor、tenant、role 边界；Phase 6.5 再把子公司读路径落到 workspace / workspace_object 模型。
+Phase 6 在 control-plane 入口和 repo/service 层加入 actor、tenant、role 边界，并让 task / task_item / task_event 先带上最小 owner / actor 归属；Phase 6.5 再把子公司读路径落到 workspace / workspace_object 模型。
 
 ## 可观测拓扑图
 

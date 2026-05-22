@@ -71,6 +71,8 @@ class TaskDetailResponse(BaseModel):
     task_id: str
     status: str
     idempotency_key: str
+    owner_tenant_id: str
+    owner_user_id: str
     submission_label: str
     temp_dir: str
     summary_json: dict

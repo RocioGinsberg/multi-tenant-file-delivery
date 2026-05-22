@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import TaskItem
+from app.models import Task, TaskItem
 
 
 class ItemRepo:
@@ -33,12 +33,15 @@ class ItemRepo:
         self,
         session: AsyncSession,
         task_id: str,
+        *,
+        tenant_id: str | None = None,
     ) -> list[TaskItem]:
-        result = await session.execute(
-            select(TaskItem)
-            .where(TaskItem.task_id == task_id)
-            .order_by(TaskItem.src_path.asc(), TaskItem.id.asc())
-        )
+        query = select(TaskItem).where(TaskItem.task_id == task_id)
+        if tenant_id is not None:
+            query = query.join(Task, Task.id == TaskItem.task_id).where(
+                Task.owner_tenant_id == tenant_id
+            )
+        result = await session.execute(query.order_by(TaskItem.src_path.asc(), TaskItem.id.asc()))
         return list(result.scalars().all())
 
     async def update_upload_status(
@@ -60,19 +63,45 @@ class ItemRepo:
         await session.flush()
         return item
 
-    async def count_by_status(self, session: AsyncSession, task_id: str) -> dict[str, int]:
-        result = await session.execute(
-            select(TaskItem.upload_status, func.count(TaskItem.id))
-            .where(TaskItem.task_id == task_id)
-            .group_by(TaskItem.upload_status)
+    async def count_by_status(
+        self,
+        session: AsyncSession,
+        task_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> dict[str, int]:
+        query = select(TaskItem.upload_status, func.count(TaskItem.id)).where(
+            TaskItem.task_id == task_id
         )
+        if tenant_id is not None:
+            query = query.join(Task, Task.id == TaskItem.task_id).where(
+                Task.owner_tenant_id == tenant_id
+            )
+        result = await session.execute(query.group_by(TaskItem.upload_status))
         return {status: count for status, count in result.all()}
 
-    async def batch_reset_failed(self, session: AsyncSession, task_id: str) -> int:
+    async def batch_reset_failed(
+        self,
+        session: AsyncSession,
+        task_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> int:
+        query = update(TaskItem).where(
+            TaskItem.task_id == task_id,
+            TaskItem.upload_status == "failed",
+        )
+        if tenant_id is not None:
+            query = query.where(
+                TaskItem.task_id.in_(
+                    select(Task.id).where(
+                        Task.id == task_id,
+                        Task.owner_tenant_id == tenant_id,
+                    )
+                )
+            )
         result = await session.execute(
-            update(TaskItem)
-            .where(TaskItem.task_id == task_id, TaskItem.upload_status == "failed")
-            .values(upload_status="pending", upload_error="", uploaded_at=None)
+            query.values(upload_status="pending", upload_error="", uploaded_at=None)
         )
         await session.flush()
         return result.rowcount or 0

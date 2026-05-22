@@ -23,8 +23,18 @@ async def session() -> AsyncIterator[AsyncSession]:
     await engine.dispose()
 
 
-async def _create_task(session: AsyncSession, idempotency_key: str = "idem-event") -> Task:
-    task = Task(idempotency_key=idempotency_key)
+async def _create_task(
+    session: AsyncSession,
+    idempotency_key: str = "idem-event",
+    *,
+    owner_tenant_id: str = "hq",
+    owner_user_id: str = "local-user",
+) -> Task:
+    task = Task(
+        idempotency_key=idempotency_key,
+        owner_tenant_id=owner_tenant_id,
+        owner_user_id=owner_user_id,
+    )
     session.add(task)
     await session.flush()
     return task
@@ -48,6 +58,28 @@ async def test_event_repo_append_and_list_by_task_orders_events(session: AsyncSe
     assert events[0].payload_json == {}
     assert events[1].payload_json == {"ok": 2}
     assert missing_events == []
+
+
+@pytest.mark.asyncio
+async def test_event_repo_list_by_task_honors_tenant_filter(session: AsyncSession):
+    repo = EventRepo()
+    hq_task = await _create_task(session, "idem-event-hq", owner_tenant_id="hq")
+    sub_task = await _create_task(
+        session,
+        "idem-event-sub",
+        owner_tenant_id="subsidiary-a",
+        owner_user_id="sub-user",
+    )
+    hq_event = await repo.append(session, hq_task.id, "task_created")
+    sub_event = await repo.append(session, sub_task.id, "task_created")
+
+    visible_events = await repo.list_by_task(session, hq_task.id, tenant_id="hq")
+    hidden_events = await repo.list_by_task(session, hq_task.id, tenant_id="subsidiary-a")
+    sub_events = await repo.list_by_task(session, sub_task.id, tenant_id="subsidiary-a")
+
+    assert [event.id for event in visible_events] == [hq_event.id]
+    assert hidden_events == []
+    assert [event.id for event in sub_events] == [sub_event.id]
 
 
 @pytest.mark.asyncio

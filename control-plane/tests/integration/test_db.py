@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.models import Base, Task
+from app.models import AppUser, Base, Task, Tenant
 
 
 @pytest.mark.asyncio
@@ -21,8 +21,10 @@ async def test_engine_can_connect():
 
 
 def test_models_are_registered():
-    """Verify all three ORM models are registered on Base.metadata."""
+    """Verify ORM models are registered on Base.metadata."""
     table_names = set(Base.metadata.tables.keys())
+    assert "tenant" in table_names
+    assert "app_user" in table_names
     assert "task" in table_names
     assert "task_item" in table_names
     assert "task_event" in table_names
@@ -65,6 +67,8 @@ def test_alembic_upgrade_creates_tables(tmp_path):
     assert "task" in existing
     assert "task_item" in existing
     assert "task_event" in existing
+    assert "tenant" in existing
+    assert "app_user" in existing
 
 
 @pytest.mark.asyncio
@@ -79,6 +83,15 @@ async def test_create_task_via_orm():
     idempotency_key = "test-idem-key-001"
 
     async with session_maker() as session:
+        session.add(Tenant(id="hq", name="HQ", tenant_type="hq"))
+        session.add(
+            AppUser(
+                id="local-user",
+                tenant_id="hq",
+                display_name="Local User",
+                role="hq_uploader",
+            )
+        )
         task = Task(
             idempotency_key=idempotency_key,
             submission_label="test_upload.zip",
@@ -102,3 +115,5 @@ async def test_create_task_via_orm():
     assert fetched.submission_label == "test_upload.zip"
     assert fetched.status == "draft"
     assert fetched.created_by == "local-user"
+    assert fetched.owner_tenant_id == "hq"
+    assert fetched.owner_user_id == "local-user"

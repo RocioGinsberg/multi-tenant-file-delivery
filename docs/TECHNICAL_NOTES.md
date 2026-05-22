@@ -58,7 +58,9 @@ Sink 通过 capability 声明能力，例如是否支持 multipart、resume、ch
 
 ### OTel 跨语言 trace
 
-目标链路是 Python 接收请求，向 Kafka 注入 trace context，Go worker 提取上下文，再写 sink。Jaeger 中应该能看到 Python -> Kafka -> Go -> sink 的完整 trace。
+目标链路是 Python 接收请求，向 Kafka 注入 trace context，Go worker 提取上下文，再写 sink。Phase 5 已落地为 W3C `traceparent`：control-plane 写入 delivery task payload 和 Kafka header，data-plane 从 payload 恢复 remote parent，collector detailed debug logs 可看到 publish 与 data-plane process/upload/result publish 共享同一 trace ID。
+
+当前 result consume / result apply 还不继承 data-plane result trace；如果需要完整闭环 trace，需要让 result message 或 Kafka result header 继续携带 trace context。
 
 ## 明确不做
 

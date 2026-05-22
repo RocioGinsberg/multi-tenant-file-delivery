@@ -216,6 +216,9 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_redis_lease
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
   tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
 
+# Phase 5 observability smoke（自动启动 Docker 依赖并验证 metrics + trace context）
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observability_docker.py
+
 # source reference bridge（需要 MinIO running）
 RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
   tests/integration/test_phase2_bridge.py::test_source_reference_file_spool_bridge_round_trip

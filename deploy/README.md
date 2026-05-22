@@ -91,7 +91,11 @@ Prometheus 默认抓取：
 
 `host.docker.internal` 由 compose 映射到 Docker host，适合 control-plane / data-plane 作为本机进程运行、Prometheus 在容器内抓取的开发场景。control-plane 需要以 `METRICS_ENABLED=true` 启动才会开放 `/metrics`；data-plane 需要以 `-metrics-enabled -metrics-listen-addr :8081` 启动才会开放 `/metrics`。
 
-Grafana 会自动配置 Prometheus datasource，并加载 `Phase 5 Observability Overview` 最小 dashboard。
+Grafana 会自动配置 Prometheus datasource，并加载 `Phase 5 Observability Overview` dashboard。该 dashboard 覆盖 service scrape status、control-plane HTTP / delivery RED、data-plane task/result rate、worker upload rate/error/p95、result apply error rate。trace 详情当前通过 collector detailed debug logs 查看：
+
+```bash
+docker compose logs --no-color --since 5m otel-collector
+```
 
 ### 停止
 

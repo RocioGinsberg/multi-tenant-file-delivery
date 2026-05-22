@@ -51,7 +51,9 @@
 
 **Phase 4（完成）**：Redis 能力层已闭合。Redis compose / health smoke、跨实例 progress pub/sub、短 TTL idempotency guard、result apply lease、data-plane Redis fixed-window limiter 和 Kafka/object source Phase 4 smoke 已落地；Redis 不替代 Kafka 的 durable task/result transport。
 
-**Phase 5（当前）**：可观测三件套。目标是补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板。
+**Phase 5（完成）**：可观测三件套已闭合。control-plane / data-plane 都支持 Prometheus metrics；delivery task payload 注入 W3C `traceparent`；Go worker 能恢复 trace context；本地 compose 提供 OTel Collector、Prometheus、Grafana 和 Phase 5 smoke。
+
+**Phase 6（当前）**：多租户 + 鉴权。目标是补齐 tenant / user / RBAC / request context 基线，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

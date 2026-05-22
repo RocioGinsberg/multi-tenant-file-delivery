@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1-5.6 已完成；5.7 待实现）
+> **状态**：Done（5.1-5.7 已完成）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -223,7 +223,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.7 Dashboard、runbook 与阶段收口
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 补 Grafana dashboard：control-plane RED、data-plane RED、worker upload rate/error、result apply error。
@@ -233,9 +233,18 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - 新开发者能按文档启动 observability stack 并跑 smoke。
   - Phase 5 plan 中每项状态和实际验证命令同步。
 - **建议执行方**：L1 worker 或主 Agent。
+- **实际执行**：主 Agent 实现并审计；子代理额度已满，未派发。
+- **实际变更**：
+  - `deploy/grafana/dashboards/phase5-overview.json`：从 scrape-status 单面板扩展到 control-plane HTTP / delivery RED、data-plane task/result rate、worker upload rate/error/p95、result apply error rate。
+  - `README.md`、`docs/ARCHITECTURE.md`、`docs/ROADMAP.md`、`docs/plans/README.md`：标记 Phase 5 Done，Phase 6 Current，并补 Phase 5 已完成能力摘要。
+  - `deploy/README.md`、`control-plane/README.md`、`data-plane/README.md`：补 observability smoke、dashboard 和 collector log runbook。
+  - `docs/plans/phase-6-multitenancy-auth.md`：新增 Phase 6 当前阶段计划草案，承接多租户 + 鉴权。
 - **验证**：
+  - `python -m json.tool deploy/grafana/dashboards/phase5-overview.json >/tmp/phase5-dashboard.json`
   - `cd deploy && docker compose config`
-  - 文档-only 部分可不跑全量测试；若改 dashboard JSON，至少确认 compose config。
+  - `cd control-plane && .venv/bin/python -m ruff check app tests`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./...`
+  - `cd control-plane && .venv/bin/python -m pytest tests/integration/test_observability_docker.py`
 
 ## 四、建议执行顺序
 

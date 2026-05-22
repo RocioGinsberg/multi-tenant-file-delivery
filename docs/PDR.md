@@ -93,18 +93,19 @@
 
 - HQ 可完成上传 -> 分类 -> 确认 -> 数据面上传 -> 状态回写闭环。
 - 数据面支持 file-spool 和 Kafka 两种 transport。
-- 本地可通过 Docker 启动 Kafka / MinIO 进行集成验证。
+- 本地可通过 Docker 启动 Kafka / MinIO / Redis / observability stack 进行集成验证。
+- Python -> Kafka -> Go -> sink 链路有 trace context、RED 指标和本地 dashboard。
 - 关键设计有 RFC / ADR 可追溯。
 - 每个 Phase 有明确完成定义和测试记录。
 
-## 7. 下一阶段草案：Redis 能力层
+## 7. 当前阶段草案：多租户 + 鉴权
 
-Phase 3 / 3.x 已完成 MySQL、source reference、Kafka source-reference e2e、GC、幂等和最小 DLQ。下一阶段不替代 Kafka，而是在 Kafka durable transport 旁边补 Redis 共享能力层。
+Phase 4 Redis 能力层和 Phase 5 可观测三件套已完成。当前阶段进入多租户 + 鉴权，目标是先把身份、租户和权限边界落到控制面写路径，再进入 Phase 6.5 的 workspace / 子公司读视图。
 
-下一阶段目标：
+当前阶段目标：
 
-- 进度事件从单进程内存 bus 演进到 Redis pub/sub，可支持多个 control-plane 实例。
-- 任务创建和上传触发增加短 TTL 幂等保护，减少重复点击或并发请求造成的重复副作用。
-- 关键临界区引入 Redis lease，给后续多 consumer / 多调度器留出安全边界。
-- worker 或发布入口引入 Redis limiter，先提供最小跨实例 backpressure 能力。
-- Redis Docker tests 保持 opt-in，默认开发测试仍可不启动 Redis。
+- 新增 tenant / user / role 基线模型。
+- 控制面 API 能构造当前 actor，并按角色执行最小 RBAC。
+- task / task_item / task_event 访问默认带 tenant filter，避免跨租户可见。
+- 关键写操作记录 actor attribution，为后续 audit_log 和读审计铺路。
+- 默认开发 actor 保持本地 smoke 可跑，生产模式再要求显式身份。

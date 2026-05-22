@@ -150,6 +150,12 @@ go run ./cmd/worker \
   -sink mock
 ```
 
+For the full Phase 5 smoke, run from `control-plane` with Docker available:
+
+```bash
+RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observability_docker.py
+```
+
 Docker Redis limiter smoke：
 ```bash
 RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \

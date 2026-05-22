@@ -213,6 +213,22 @@ async def apply_delivery_result(
             task_repo = task_repo or TaskRepo()
             item_repo = item_repo or ItemRepo()
             event_repo = event_repo or EventRepo()
+            task = await task_repo.get(session, message.task_id)
+            if task is None:
+                missing_items = [item.item_id for item in message.items]
+                if span is not None:
+                    span.set_attribute("delivery.result.applied_items", 0)
+                    span.set_attribute("delivery.result.missing_items", len(missing_items))
+                metric_status = "missing_task"
+                return DeliveryResultApplySummary(
+                    task_id=message.task_id,
+                    status=message.status,
+                    uploaded=message.uploaded,
+                    failed=message.failed,
+                    processed=message.processed,
+                    applied_items=0,
+                    missing_items=missing_items,
+                )
 
             applied_items = 0
             missing_items: list[str] = []
@@ -222,6 +238,8 @@ async def apply_delivery_result(
                         session,
                         item.item_id,
                         "uploaded",
+                        task_id=message.task_id,
+                        tenant_id=task.owner_tenant_id,
                         uploaded_at=message.ended_at,
                     )
                 elif item.status == "failed":
@@ -229,6 +247,8 @@ async def apply_delivery_result(
                         session,
                         item.item_id,
                         "failed",
+                        task_id=message.task_id,
+                        tenant_id=task.owner_tenant_id,
                         upload_error=(item.error or message.error or "upload failed")[:1000],
                     )
                 else:
@@ -244,6 +264,7 @@ async def apply_delivery_result(
                 session,
                 message.task_id,
                 message.status,
+                tenant_id=task.owner_tenant_id,
                 finished_at=message.ended_at,
             )
             await event_repo.append(

@@ -137,6 +137,62 @@ async def test_item_repo_update_upload_status_returns_none_for_missing_item(
 
 
 @pytest.mark.asyncio
+async def test_item_repo_update_upload_status_honors_task_and_tenant_filters(
+    session: AsyncSession,
+):
+    repo = ItemRepo()
+    hq_task = await _create_task(session, "idem-update-hq", owner_tenant_id="hq")
+    sub_task = await _create_task(
+        session,
+        "idem-update-sub",
+        owner_tenant_id="subsidiary-a",
+        owner_user_id="sub-user",
+    )
+    hq_item = (
+        await repo.bulk_insert(
+            session,
+            hq_task.id,
+            [{"src_path": "hq.xlsx", "filename": "hq.xlsx"}],
+        )
+    )[0]
+    sub_item = (
+        await repo.bulk_insert(
+            session,
+            sub_task.id,
+            [{"src_path": "sub.xlsx", "filename": "sub.xlsx"}],
+        )
+    )[0]
+
+    wrong_task = await repo.update_upload_status(
+        session,
+        sub_item.id,
+        "uploaded",
+        task_id=hq_task.id,
+        tenant_id="hq",
+    )
+    wrong_tenant = await repo.update_upload_status(
+        session,
+        hq_item.id,
+        "uploaded",
+        task_id=hq_task.id,
+        tenant_id="subsidiary-a",
+    )
+    visible = await repo.update_upload_status(
+        session,
+        hq_item.id,
+        "uploaded",
+        task_id=hq_task.id,
+        tenant_id="hq",
+    )
+
+    assert wrong_task is None
+    assert wrong_tenant is None
+    assert visible is not None
+    assert visible.upload_status == "uploaded"
+    assert sub_item.upload_status == "pending"
+
+
+@pytest.mark.asyncio
 async def test_item_repo_count_by_status_groups_task_items_only(session: AsyncSession):
     repo = ItemRepo()
     task = await _create_task(session, "idem-count-a")

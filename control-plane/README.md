@@ -44,6 +44,14 @@ cp .env.example .env
 | `S3_ACCESS_KEY_ID` | `minioadmin` | MinIO root user |
 | `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
+| `AUTH_ALLOW_DEV_HEADERS` | `true` | 是否允许通过开发 header 指定当前 actor |
+| `AUTH_DEFAULT_ACTOR_ENABLED` | `true` | 未提供 actor header 时是否使用默认本地 actor |
+| `AUTH_DEFAULT_TENANT_ID` | `hq` | 默认本地 actor 的 tenant |
+| `AUTH_DEFAULT_USER_ID` | `local-user` | 默认本地 actor 的 user |
+| `AUTH_DEFAULT_ROLE` | `hq_uploader` | 默认本地 actor 的角色 |
+| `AUTH_ACTOR_TENANT_HEADER` | `X-Actor-Tenant` | 开发 actor tenant header 名称 |
+| `AUTH_ACTOR_USER_HEADER` | `X-Actor-User` | 开发 actor user header 名称 |
+| `AUTH_ACTOR_ROLE_HEADER` | `X-Actor-Role` | 开发 actor role header 名称 |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
 | `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
 | `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
@@ -128,6 +136,8 @@ cd control-plane
 alembic upgrade head
 ```
 
+应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入。
+
 MySQL 本地 compose：
 
 ```bash
@@ -175,7 +185,7 @@ Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span
 | `POST` | `/tasks` | 上传文件夹，创建 task（multipart/form-data，多文件字段名 `files`，保留相对路径） |
 | `POST` | `/tasks/{id}/classify` | 调用分类引擎，写入 task_item |
 | `GET` | `/tasks/{id}/preview` | 返回分类结果（items + summary） |
-| `POST` | `/tasks/{id}/confirm` | 确认，status → confirmed |
+| `POST` | `/tasks/{id}/confirm` | 确认已分类且无阻断错误的 task，status → confirmed |
 | `POST` | `/tasks/{id}/upload` | 触发后台上传（BackgroundTasks） |
 | `GET` | `/tasks/{id}/progress` | SSE 实时进度流（text/event-stream） |
 | `POST` | `/tasks/{id}/retry` | 重置 failed items → pending |

@@ -404,6 +404,64 @@ async def test_apply_delivery_result_is_stable_for_duplicate_result(
 
 
 @pytest.mark.asyncio
+async def test_apply_delivery_result_does_not_update_items_from_another_task(
+    session: AsyncSession,
+):
+    item_repo = ItemRepo()
+    task = Task(idempotency_key="idem-result-owner", status="queued")
+    other_task = Task(idempotency_key="idem-result-other", status="queued")
+    session.add_all([task, other_task])
+    await session.flush()
+    other_item = (
+        await item_repo.bulk_insert(
+            session,
+            other_task.id,
+            [{"src_path": "other.xlsx", "filename": "other.xlsx"}],
+        )
+    )[0]
+
+    summary = await apply_delivery_result(
+        session,
+        DeliveryResultMessage(
+            task_id=task.id,
+            status="uploaded",
+            uploaded=1,
+            failed=0,
+            processed=1,
+            started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+            ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+            items=[{"item_id": other_item.id, "status": "uploaded"}],
+        ),
+    )
+
+    assert summary.applied_items == 0
+    assert summary.missing_items == [other_item.id]
+    assert other_item.upload_status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_apply_delivery_result_returns_missing_items_for_missing_task(
+    session: AsyncSession,
+):
+    summary = await apply_delivery_result(
+        session,
+        DeliveryResultMessage(
+            task_id="missing-task",
+            status="uploaded",
+            uploaded=1,
+            failed=0,
+            processed=1,
+            started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+            ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+            items=[{"item_id": "item-1", "status": "uploaded"}],
+        ),
+    )
+
+    assert summary.applied_items == 0
+    assert summary.missing_items == ["item-1"]
+
+
+@pytest.mark.asyncio
 async def test_file_spool_delivery_result_consumer_reads_messages(tmp_path):
     result_dir = tmp_path / "delivery.results.v1"
     result_dir.mkdir()

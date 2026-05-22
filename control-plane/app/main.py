@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 
 from app.core.db import async_engine
 from app.core.settings import get_settings
-from app.models.base import Base
 from app.services.metrics import metrics_enabled, metrics_middleware, metrics_response
 from app.services.progress_bus import create_progress_bus
 from app.services.redis_client import create_redis_client
@@ -20,9 +19,6 @@ async def lifespan(application: FastAPI):
     from app.api.tasks import init_progress_bus
 
     configure_tracing(get_settings())
-
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     bus = create_progress_bus(get_settings())
     init_progress_bus(bus)

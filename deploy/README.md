@@ -110,9 +110,10 @@ docker compose down -v     # 清除数据（含 volume）
 
 ```
 S3_ENDPOINT_URL=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
-S3_BUCKET=auto-upload-dev
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+S3_BUCKET_NAME=auto-upload-dev
+STAGING_BUCKET_NAME=auto-upload-staging
 ```
 
 本地启动 MinIO 后，直接运行 control-plane 无需修改任何配置。

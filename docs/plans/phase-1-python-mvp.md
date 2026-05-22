@@ -61,7 +61,7 @@
 - **依赖**：1.1, 1.2
 - **范围**：
   - `control-plane/app/core/db.py`：SQLAlchemy 2.0 async + aiosqlite engine + sessionmaker
-  - `control-plane/app/models/task.py`、`task_item.py`、`task_event.py`：三张表，参考 PDR / ROADMAP 的 MVP 范围（去掉 tenant_id / workspace_id 字段，简化版）
+  - `control-plane/app/models/task.py`、`task_item.py`、`task_event.py`：三张表，参考 PRD / ROADMAP 的 MVP 范围（去掉 tenant_id / workspace_id 字段，简化版）
   - `control-plane/alembic.ini` + `control-plane/alembic/env.py` + 第一份 migration
 - **完整字段表**（已定）：
   - `task`：`id, status, idempotency_key, source_archive_name, temp_dir, summary_json, created_by, created_at, confirmed_at, finished_at`

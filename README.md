@@ -16,7 +16,7 @@
 ## 项目导览
 
 > **文档总索引**：[docs/README.md](./docs/README.md)
-> **产品需求（PDR）**：[docs/PDR.md](./docs/PDR.md)
+> **产品需求（PRD）**：[docs/PRD.md](./docs/PRD.md)
 > **路线图**：[docs/ROADMAP.md](./docs/ROADMAP.md)
 > **架构详解**：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 > **数据模型**：[docs/DATA_MODEL.md](./docs/DATA_MODEL.md)
@@ -34,7 +34,7 @@
 ├── web/                   前端（HQ 上传台 + 子公司观测窗口）
 ├── deploy/                docker-compose、Grafana、Prometheus、OTel 配置
 ├── proto/                 跨语言消息/接口定义（备用，主用 Kafka JSON）
-├── docs/                  PDR / RFC / ADR / Roadmap / Data Model / Plans
+├── docs/                  PRD / RFC / ADR / Roadmap / Data Model / Plans
 ```
 
 ## 当前阶段
@@ -53,7 +53,9 @@
 
 **Phase 5（完成）**：可观测三件套已闭合。control-plane / data-plane 都支持 Prometheus metrics；delivery task payload 注入 W3C `traceparent`；Go worker 能恢复 trace context；本地 compose 提供 OTel Collector、Prometheus、Grafana 和 Phase 5 smoke。
 
-**Phase 6（当前）**：多租户 + 鉴权。目标是补齐 dev header / 默认 actor、tenant / app_user、task owner tenant/user、repo tenant filter 和最小 task_event actor attribution，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
+**Phase 6（完成）**：多租户 + 鉴权。已补齐 dev header / 默认 actor、tenant / app_user、task owner tenant/user、repo tenant filter 和最小 task_event actor attribution，让 HQ 与子公司用户隔离成为后续 workspace 读视图的前置条件。
+
+**Phase 6.5（当前）**：Workspace + 子公司读视图。目标是在 Phase 6 身份与隔离基线上补齐 workspace 元数据、投递结果映射和子公司只读浏览 / 下载路径，形成最小完整平台闭环。
 
 详细阶段计划见 [docs/ROADMAP.md](./docs/ROADMAP.md) 和 [docs/plans/](./docs/plans/)。
 

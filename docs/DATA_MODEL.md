@@ -69,8 +69,9 @@ Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user �
 
 ## Phase 6 落地情况
 
-- 已新增 `tenant` / `app_user` 基线表，并把 HQ / subsidiary 角色落到可测试模型。
+- 已新增 `tenant` / `app_user` 基线表，并把 HQ / subsidiary 角色落到可测试模型；应用启动不再自动建表，默认 `hq` / `local-user` seed 由 Alembic migration 写入。
 - `task` 已持久化 owner tenant/user；`task_item` / `task_event` 通过 task join 做 tenant-aware 查询。
+- delivery result apply 已按 `task_id` 和 owner tenant 绑定更新 item，避免跨 task item 被 result message 误更新。
 - 默认开发 actor 只用于本地测试兼容，生产模式需要显式身份。
 - task_event payload 已覆盖 create / classify / confirm / upload / retry / queue 等关键写操作的 actor attribution；完整读审计随 Phase 6.5 子公司读视图补齐。
 - Workspace / `workspace_object` / `physical_object` / dedup 不进入 Phase 6 主线，避免把多租户鉴权和读路径模型合并成一个过大的阶段。

@@ -50,12 +50,27 @@ class ItemRepo:
         item_id: str,
         upload_status: str,
         *,
+        task_id: str | None = None,
+        tenant_id: str | None = None,
         upload_error: str = "",
         uploaded_at: datetime | None = None,
     ) -> TaskItem | None:
-        item = await session.get(TaskItem, item_id)
-        if item is None:
-            return None
+        if task_id is None and tenant_id is None:
+            item = await session.get(TaskItem, item_id)
+            if item is None:
+                return None
+        else:
+            query = select(TaskItem).where(TaskItem.id == item_id)
+            if task_id is not None:
+                query = query.where(TaskItem.task_id == task_id)
+            if tenant_id is not None:
+                query = query.join(Task, Task.id == TaskItem.task_id).where(
+                    Task.owner_tenant_id == tenant_id
+                )
+            result = await session.execute(query)
+            item = result.scalar_one_or_none()
+            if item is None:
+                return None
 
         item.upload_status = upload_status
         item.upload_error = upload_error

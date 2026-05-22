@@ -1,6 +1,6 @@
 # Phase 6 — 多租户 + 鉴权
 
-> **状态**：Current（控制面实现已通过本地验证；等待最终 smoke / 合并决策）
+> **状态**：Done（Phase 6 / 6.5 plan PR 已合并；tag-prep review 已修复 result apply 任务绑定、confirm 状态检查和启动迁移边界）
 > **目标**：补齐 tenant / app_user / role / request actor context，让 HQ 与子公司用户隔离成为平台默认边界。
 > **完成定义**：控制面 API 可识别当前 actor；task / item / event 访问走 tenant-aware repo；task_event 至少记录最小 actor attribution；HQ 与子公司角色有最小 RBAC；测试覆盖跨租户不可见、越权写入拒绝、默认开发 actor 兼容路径。
 > **前序计划**：[Phase 5 — 可观测三件套](./phase-5-observability.md)
@@ -93,7 +93,7 @@ Phase 6 的原则：先做平台内置的最小身份模型和仓储层隔离；
 
 ### 6.5 Phase 6 smoke and docs
 
-- **状态**：`[~]`
+- **状态**：`[x]`
 - **L 等级**：L1
 - **范围**：
   - 增加 opt-in 或普通 integration smoke，覆盖两个 tenant 的隔离边界。
@@ -136,9 +136,21 @@ cd control-plane
 DATABASE_URL=sqlite+aiosqlite:////tmp/phase6_alembic_check_20260522.db .venv/bin/python -m alembic upgrade head
 ```
 
+tag-prep review 验证：
+
+```bash
+cd control-plane
+.venv/bin/python -m pytest tests/unit/test_auth.py tests/integration/test_task_repo.py tests/integration/test_item_repo.py tests/integration/test_event_repo.py tests/integration/test_api_tasks.py tests/integration/test_delivery.py tests/e2e/test_upload_flow.py
+.venv/bin/python -m ruff check app tests
+
+cd ../data-plane
+GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./...
+```
+
 ## 五、风险与降级
 
 - **隐式越权**：repo 层必须默认 tenant-aware；不能只在路由层过滤。
 - **测试兼容性**：默认 actor 只用于开发和测试；生产模式需要显式身份。
+- **迁移边界**：应用启动不自动建表；新库必须先跑 Alembic，默认 `hq` / `local-user` seed 由 migration 写入。
 - **模型膨胀**：workspace、physical object、sink credential 不进入 Phase 6 主线。
 - **审计不完整**：先覆盖关键写操作，读审计在 Phase 6.5 子公司读视图中补齐。

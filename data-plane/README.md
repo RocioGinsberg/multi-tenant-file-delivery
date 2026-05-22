@@ -1,15 +1,15 @@
 # Data Plane（Go）
 
-高并发流式文件投递、多 sink 协议适配、平台层 dedup precheck。
+高并发文件投递、多 sink 协议适配和 worker 侧限流 / 观测基础。
 
 ## 当前状态
-**Phase 2 completed**。当前已具备 worker 入口、任务消息模型、文件 source、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、transport 抽象、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。
+**Phase 5 completed / Phase 6 control-plane baseline merged**。当前已具备 worker 入口、任务消息模型、文件 source、object source resolver、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、Redis fixed-window limiter、Prometheus metrics、OpenTelemetry tracing、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。平台层 dedup 仍是 Phase 6.5 / Phase 7 的元数据能力，不在当前 data-plane 路径中执行 precheck。
 
 当前 worker 的本地闭环：
 1. 扫描 `delivery.tasks.v1` inbox 目录里的 `.json` 任务。
 2. 反序列化为 `DeliveryTask`。
 3. 过滤 `upload_status=pending` 且 `severity=ok/warning` 的 item。
-4. 用 `FileSource` 从 `temp_dir + src_path` 打开文件。
+4. 用 `FileSource` 从 `temp_dir + src_path` 打开文件，或用 object source resolver 从 staged archive 打开文件。
 5. 调用 `Sink.Upload`；当前支持 `mock` 和 `s3`。
 6. sink 返回 `key/size/sha256` receipt。
 7. worker 写出 `delivery.results.v1/{task_id}.json`，其中 `items[]` 带 item 级 `status/key/size/sha256/error`。

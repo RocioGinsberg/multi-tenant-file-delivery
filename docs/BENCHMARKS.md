@@ -1,7 +1,7 @@
 # Benchmarks
 
 每组实验包含：场景描述、参数、结果数据、结论。压测目标来自
-[ROADMAP](./ROADMAP.md) 的后续阶段和 [PDR](./PDR.md) 的成功标准。
+[ROADMAP](./ROADMAP.md) 的后续阶段和 [PRD](./PRD.md) 的成功标准。
 
 ## Phase 3.x baseline: Go pipeline mock sink
 

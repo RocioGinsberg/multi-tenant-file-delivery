@@ -141,7 +141,14 @@ Then scrape:
 curl http://localhost:8081/metrics
 ```
 
-Tracing flags are still parsed and validated as placeholders until Phase 5.5.
+Phase 5.5 tracing also defaults disabled. When `-tracing-enabled` is set, the worker exports spans to the OTLP HTTP endpoint, extracts W3C `traceparent` from delivery task payloads, and creates spans for task consume/process, source resolve, pipeline item, sink upload, limiter acquire, and result publish:
+```bash
+go run ./cmd/worker \
+  -tracing-enabled \
+  -tracing-service-name data-plane-worker \
+  -tracing-otlp-endpoint http://localhost:4318 \
+  -sink mock
+```
 
 Docker Redis limiter smoke：
 ```bash

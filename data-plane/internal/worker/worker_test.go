@@ -17,6 +17,8 @@ import (
 	"smh_auto_upload/data-plane/internal/transport"
 )
 
+const testTraceparent = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+
 func TestRunProcessesInboxTaskAndWritesResult(t *testing.T) {
 	dir := t.TempDir()
 	inboxDir := filepath.Join(dir, "inbox")
@@ -71,6 +73,48 @@ func TestRunProcessesInboxTaskAndWritesResult(t *testing.T) {
 	}
 	if string(data) != "hello" {
 		t.Fatalf("unexpected object data: %q", string(data))
+	}
+}
+
+func TestRunProcessesTaskWithTraceparent(t *testing.T) {
+	dir := t.TempDir()
+	inboxDir := filepath.Join(dir, "inbox")
+	resultsDir := filepath.Join(dir, "results")
+	tempDir := filepath.Join(dir, "task")
+	if err := os.MkdirAll(inboxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "report.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	task := message.DeliveryTask{
+		TaskID:      "task-trace",
+		TempDir:     tempDir,
+		BucketName:  "auto-upload-dev",
+		Traceparent: testTraceparent,
+		CreatedAt:   time.Date(2026, 5, 17, 10, 0, 0, 0, time.UTC),
+		Items: []message.DeliveryItem{{
+			ItemID:       "item-1",
+			SrcPath:      "report.txt",
+			DstPath:      "reports/report.txt",
+			Severity:     "ok",
+			UploadStatus: "pending",
+		}},
+	}
+	writeTaskFile(t, inboxDir, task)
+
+	w := New(Config{InboxDir: inboxDir, ResultsDir: resultsDir, SinkName: "mock", Once: true}, sink.NewMockSink())
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+
+	result := readResultFile(t, resultsDir, "task-trace")
+	if result.Status != "uploaded" || result.Uploaded != 1 {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 

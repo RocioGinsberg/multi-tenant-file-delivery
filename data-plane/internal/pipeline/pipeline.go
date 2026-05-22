@@ -11,6 +11,9 @@ import (
 	dmetrics "smh_auto_upload/data-plane/internal/metrics"
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
+	dtracing "smh_auto_upload/data-plane/internal/tracing"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Result struct {
@@ -112,11 +115,33 @@ func processItem(
 	beforeUpload func(context.Context, message.DeliveryTask, message.DeliveryItem) error,
 	recorder dmetrics.Recorder,
 ) message.DeliveryResultItem {
+	itemCtx, itemSpan := dtracing.Tracer().Start(
+		ctx,
+		"data_plane.pipeline.item",
+		trace.WithAttributes(
+			dtracing.String("delivery.task_id", task.TaskID),
+			dtracing.String("delivery.item_id", item.ItemID),
+			dtracing.String("delivery.item.severity", item.Severity),
+		),
+	)
+	defer itemSpan.End()
+
 	sourceName := sourceKindForTask(task)
 	resolveStart := time.Now()
-	src, err := resolver.Resolve(ctx, task, item)
+	resolveCtx, resolveSpan := dtracing.Tracer().Start(
+		itemCtx,
+		"data_plane.source.resolve",
+		trace.WithAttributes(
+			dtracing.String("delivery.source", sourceName),
+			dtracing.String("delivery.task_id", task.TaskID),
+			dtracing.String("delivery.item_id", item.ItemID),
+		),
+	)
+	src, err := resolver.Resolve(resolveCtx, task, item)
 	if err != nil {
 		recorder.ObserveSourceRead(sourceName, dmetrics.StatusError, time.Since(resolveStart))
+		dtracing.EndWithError(resolveSpan, err)
+		dtracing.SetPartialFailure(itemSpan, err)
 		return message.DeliveryResultItem{
 			ItemID: item.ItemID,
 			Status: "failed",
@@ -124,9 +149,12 @@ func processItem(
 		}
 	}
 	sourceName = sourceKindFromPath(src.Path(), sourceName)
+	resolveSpan.SetAttributes(dtracing.String("delivery.source", sourceName))
+	resolveSpan.End()
 	src = dmetrics.WrapSource(sourceName, src, recorder)
 	if beforeUpload != nil {
-		if err := beforeUpload(ctx, task, item); err != nil {
+		if err := beforeUpload(itemCtx, task, item); err != nil {
+			dtracing.SetPartialFailure(itemSpan, err)
 			return message.DeliveryResultItem{
 				ItemID: item.ItemID,
 				Status: "failed",
@@ -134,20 +162,34 @@ func processItem(
 			}
 		}
 	}
+	uploadCtx, uploadSpan := dtracing.Tracer().Start(
+		itemCtx,
+		"data_plane.sink.upload",
+		trace.WithAttributes(
+			dtracing.String("delivery.task_id", task.TaskID),
+			dtracing.String("delivery.item_id", item.ItemID),
+			dtracing.String("delivery.sink", sinkImpl.Name()),
+		),
+	)
 	uploadStart := time.Now()
-	receipt, err := sinkImpl.Upload(ctx, src, sink.Meta{
+	receipt, err := sinkImpl.Upload(uploadCtx, src, sink.Meta{
 		TaskID:  task.TaskID,
 		ItemID:  item.ItemID,
 		DstPath: item.DstPath,
 	})
 	recorder.ObserveSinkUpload(sinkImpl.Name(), dmetrics.StatusFromError(err), time.Since(uploadStart))
 	if err != nil {
+		dtracing.EndWithError(uploadSpan, err)
+		dtracing.SetPartialFailure(itemSpan, err)
 		return message.DeliveryResultItem{
 			ItemID: item.ItemID,
 			Status: "failed",
 			Error:  err.Error(),
 		}
 	}
+	uploadSpan.SetAttributes(dtracing.Int64("delivery.upload.size", receipt.Size))
+	uploadSpan.End()
+	itemSpan.SetAttributes(dtracing.String("delivery.item.status", "uploaded"))
 	return message.DeliveryResultItem{
 		ItemID: item.ItemID,
 		Status: "uploaded",

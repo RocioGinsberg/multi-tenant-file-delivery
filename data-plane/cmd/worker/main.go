@@ -16,6 +16,7 @@ import (
 	dmetrics "smh_auto_upload/data-plane/internal/metrics"
 	"smh_auto_upload/data-plane/internal/sink"
 	"smh_auto_upload/data-plane/internal/source"
+	dtracing "smh_auto_upload/data-plane/internal/tracing"
 	"smh_auto_upload/data-plane/internal/transport"
 	"smh_auto_upload/data-plane/internal/worker"
 )
@@ -48,7 +49,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	startupCheckTimeout := flags.Duration("startup-check-timeout", 3*time.Second, "timeout for startup dependency checks")
 	metricsEnabled := flags.Bool("metrics-enabled", false, "enable Prometheus metrics endpoint")
 	metricsListenAddr := flags.String("metrics-listen-addr", ":8081", "listen address for Prometheus metrics endpoint")
-	tracingEnabled := flags.Bool("tracing-enabled", false, "enable OpenTelemetry tracing (placeholder; no-op in Phase 5.1)")
+	tracingEnabled := flags.Bool("tracing-enabled", false, "enable OpenTelemetry tracing")
 	tracingServiceName := flags.String("tracing-service-name", "data-plane-worker", "OpenTelemetry service name")
 	tracingOTLPEndpoint := flags.String("tracing-otlp-endpoint", "http://localhost:4318", "OpenTelemetry OTLP endpoint")
 	sinkName := flags.String("sink", "mock", "sink implementation: mock, s3")
@@ -134,6 +135,21 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		log.Printf("metrics endpoint listening on %s", metricsServer.Addr())
 		metricsRecorder = prometheusRecorder
 	}
+	tracingProvider, err := dtracing.Configure(ctx, dtracing.Config{
+		Enabled:     *tracingEnabled,
+		ServiceName: *tracingServiceName,
+		Endpoint:    *tracingOTLPEndpoint,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tracing: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := tracingProvider.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown tracing provider: %v", err)
+		}
+	}()
 	checkCtx := ctx
 	var cancelCheck context.CancelFunc
 	if *startupCheck {

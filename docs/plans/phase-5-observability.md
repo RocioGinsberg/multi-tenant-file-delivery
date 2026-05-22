@@ -1,6 +1,6 @@
 # Phase 5 — 可观测三件套
 
-> **状态**：Current（5.1-5.4 已完成；5.5-5.7 待实现）
+> **状态**：Current（5.1-5.5 已完成；5.6-5.7 待实现）
 > **目标**：补齐 Python control-plane -> Kafka -> Go data-plane -> sink 的 trace context、RED 指标和本地运行面板，让跨组件问题能被定位，而不是只能靠日志和 smoke。
 > **完成定义**：本地 compose 可启动 Prometheus、Grafana、OpenTelemetry Collector；control-plane 和 data-plane 暴露 Prometheus metrics；Kafka task message 携带 W3C trace context；Go worker 能从消息恢复 trace；Phase 5 smoke 能证明一次 object-source 任务在 trace / metrics / dashboard 维度可观测。
 > **前序计划**：[Phase 4 — Redis 能力层](./phase-4-redis-capabilities.md)
@@ -168,7 +168,7 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
 
 ### 5.5 data-plane trace context 提取与 sink spans
 
-- **状态**：`[ ]`
+- **状态**：`[x]`
 - **L 等级**：L3
 - **范围**：
   - 接入 OpenTelemetry Go SDK，支持 OTLP endpoint 和 no-op。
@@ -180,9 +180,18 @@ Phase 5 的原则：先做最小闭环，默认本地低成本运行；不要求
   - Kafka/object-source smoke 可在日志或 collector debug exporter 中看到同一 trace ID。
   - 无 traceparent 时 worker 正常处理任务。
 - **建议执行方**：主 Agent 或 L3 worker；涉及跨语言 contract 和 worker critical path。
+- **实际执行**：主 Agent 实现并审计。
+- **实际变更**：
+  - `data-plane/internal/tracing/`：新增 OTel provider 初始化、OTLP HTTP exporter、W3C traceparent extraction helper、span error/status helper。
+  - `data-plane/cmd/worker/main.go`：`-tracing-enabled` 时初始化 tracing provider；默认关闭保持 no-op。
+  - `data-plane/internal/worker/worker.go`：为 task consume/process、limiter acquire、result publish 创建 span；从 `DeliveryTask.Traceparent` 恢复 remote parent。
+  - `data-plane/internal/pipeline/pipeline.go`：为 pipeline item、source resolve、sink upload 创建 span；item failure / partial_failed 路径标记 error status。
+  - `data-plane/internal/tracing/tracing_test.go`、`data-plane/internal/worker/worker_test.go`：覆盖 traceparent remote parent 提取、空 traceparent 兼容、带 traceparent 任务正常处理。
+  - `data-plane/README.md`：补 tracing 启动方式和 span 覆盖范围。
+- **备注**：
+  - Phase 5.5 使用 payload `traceparent` 作为稳定跨语言路径；Kafka header 提取可在 5.6 smoke 或后续 transport 增强中补齐。
 - **验证**：
-  - `cd data-plane && GOTOOLCHAIN=local GOCACHE=/tmp/smh_go_cache go test ./...`
-  - `cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke`
+  - `cd data-plane && GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache go test ./...`
 
 ### 5.6 Phase 5 observability smoke
 

@@ -7,7 +7,7 @@ English / [中文](README_ZH.md)
 [Docs](docs/) · [Roadmap](docs/ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Changelog](CHANGELOG.md)
 
 [![python](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)](control-plane/pyproject.toml)
-[![go](https://img.shields.io/badge/go-1.22-blue?style=flat-square)](data-plane/go.mod)
+[![go](https://img.shields.io/badge/go-1.25-blue?style=flat-square)](data-plane/go.mod)
 [![status](https://img.shields.io/badge/status-v0.1.0--rc-orange?style=flat-square)](docs/ROADMAP.md)
 [![license](https://img.shields.io/badge/license-TBD-lightgrey?style=flat-square)](#license)
 
@@ -111,7 +111,7 @@ METRICS_ENABLED=true OBSERVABILITY_ENABLED=true \
 
 ```bash
 cd ../data-plane
-GOCACHE=/tmp/smh_go_cache go run ./cmd/worker \
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go run ./cmd/worker \
   -transport file \
   -source-mode file \
   -sink mock \
@@ -188,7 +188,7 @@ cd control-plane
 .venv/bin/python -m pytest
 
 cd ../data-plane
-GOCACHE=/tmp/smh_go_cache go test ./...
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go test ./...
 ```
 
 Docker opt-in tests use `RUN_DOCKER_TESTS=1`; MySQL-specific tests use `RUN_MYSQL_TESTS=1`.

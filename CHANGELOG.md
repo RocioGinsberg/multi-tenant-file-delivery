@@ -15,6 +15,7 @@ Versioning starts when the first public tag is cut.
 ### Changed
 - Root documentation is now organized as a public project entry point instead of a phase log.
 - `docs/ROADMAP.md` marks the next release target as `v0.1.0`.
+- Public-readiness dependency hardening upgrades the Go data-plane baseline to Go 1.25 and switches the control-plane MySQL async driver from `asyncmy` to `aiomysql`.
 
 ### Release Notes
 - Before publishing, select a root license, generate the final demo GIF, merge the audit hardening branch into `main`, and run release smoke.

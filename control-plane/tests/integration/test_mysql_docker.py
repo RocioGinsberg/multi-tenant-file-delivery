@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import command
 
 MYSQL_DATABASE_URL = (
-    "mysql+asyncmy://control_plane:control_plane@localhost:3306/"
+    "mysql+aiomysql://control_plane:control_plane@localhost:3306/"
     "control_plane?charset=utf8mb4"
 )
 

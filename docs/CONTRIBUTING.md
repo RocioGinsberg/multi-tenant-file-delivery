@@ -42,7 +42,7 @@ Data plane:
 
 ```bash
 cd data-plane
-GOCACHE=/tmp/smh_go_cache go test ./...
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go test ./...
 ```
 
 Docker integration:

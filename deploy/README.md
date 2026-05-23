@@ -58,7 +58,7 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest \
   tests/integration/test_phase2_bridge.py::test_phase4_redis_kafka_object_source_smoke
 
 cd ../data-plane
-RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=auto GOPATH=/tmp/smh_go_path \
   GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
   go test ./internal/limiter -run TestRedisLimiterDocker -count=1
 ```

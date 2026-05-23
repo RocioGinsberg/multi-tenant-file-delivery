@@ -22,7 +22,7 @@ Changed:
 - docs/plans: record completed scope and verification.
 
 Tests:
-- cd data-plane && GOCACHE=/tmp/smh_go_cache go test ./...
+- cd data-plane && GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go test ./...
 - cd control-plane && .venv/bin/python -m ruff check tests/integration/test_phase2_bridge.py
 - cd control-plane && RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_phase2_bridge.py::test_duplicate_source_reference_kafka_task_keeps_final_state_stable
 

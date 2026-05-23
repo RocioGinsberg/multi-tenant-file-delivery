@@ -102,7 +102,7 @@ METRICS_ENABLED=true OBSERVABILITY_ENABLED=true \
 
 ```bash
 cd ../data-plane
-GOCACHE=/tmp/smh_go_cache go run ./cmd/worker \
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go run ./cmd/worker \
   -transport file \
   -source-mode file \
   -sink mock \
@@ -179,7 +179,7 @@ cd control-plane
 .venv/bin/python -m pytest
 
 cd ../data-plane
-GOCACHE=/tmp/smh_go_cache go test ./...
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go test ./...
 ```
 
 Docker opt-in 测试使用 `RUN_DOCKER_TESTS=1`；MySQL 测试使用 `RUN_MYSQL_TESTS=1`。

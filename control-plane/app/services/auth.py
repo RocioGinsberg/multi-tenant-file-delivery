@@ -18,6 +18,10 @@ TASK_WRITER_ROLES = {
     "hq_admin",
     "hq_uploader",
 }
+HQ_ROLES = {
+    "hq_admin",
+    "hq_uploader",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +32,11 @@ class CurrentActor:
 
     @property
     def is_hq(self) -> bool:
-        return self.tenant_id == "hq"
+        return self.role in HQ_ROLES
+
+    @property
+    def workspace_access_scope(self) -> str:
+        return "owner" if self.is_hq else "target"
 
     @property
     def can_write_tasks(self) -> bool:

@@ -430,7 +430,7 @@ async def test_apply_delivery_result_creates_workspace_metadata_idempotently(
         session,
         "ws-a",
         tenant_id="subsidiary-a",
-        is_hq=False,
+        access_scope="target",
     )
     events = await EventRepo().list_by_task(session, task.id)
 

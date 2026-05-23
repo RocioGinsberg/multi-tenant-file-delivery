@@ -30,7 +30,7 @@
 | Phase 4 | Done | Redis 能力层 | pub/sub 进度、限流、幂等和分布式锁 |
 | Phase 5 | Done | 可观测 | Python -> Kafka -> Go -> sink 的 trace 和 RED 指标；本地 dashboard / smoke |
 | Phase 6 | Done | 多租户 + 鉴权 | 控制面基线已落地并合并：dev header / 默认 actor，tenant / app_user，repo tenant filter，最小 task_event actor attribution；tag-prep review 修复 result apply 任务绑定和 confirm 状态检查 |
-| Phase 6.5 | Done | Workspace + 子公司读视图 | workspace / physical_object / workspace_object 元数据、result apply 读模型、子公司只读 API、download URL 和最小前端视图已落地 |
+| Phase 6.5 | Done | Workspace + 子公司读视图 | workspace / physical_object / workspace_object 元数据、result apply 读模型、子公司只读 API、download URL 和最小前端视图已落地；tag 前 DDD audit hardening 通过独立 stacked PR 收敛 |
 | Phase 7 | Planned | 扩 sink + 压测 | OSS / Webhook / mock 异常 sink，BENCHMARKS 写入实测数据 |
 | Phase 8 | Optional | HA 改造 | 多实例和 rolling restart 不丢任务 |
 
@@ -76,6 +76,7 @@
 
 Phase 6.5 已落地，首次 tag 前建议：
 
+- 合并 `audit/phase65-ddd-review-hardening`，收敛 DDD 通用语言、默认 go-worker 闭环、workspace 幂等约束和读路径 smoke。
 - 补 README 最终 demo GIF，展示 HQ 上传 -> data-plane 投递 -> 子公司 workspace 查看 / 下载。
 - 跑 tag 前 smoke：control-plane full pytest / ruff、data-plane go test、SQLite + MySQL migration、Docker observability 或最小全链路 smoke。
 - tag 打在 Phase 6.5 合并到 `main` 后的 commit 上。

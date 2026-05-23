@@ -54,7 +54,7 @@ cp .env.example .env
 | `AUTH_ACTOR_USER_HEADER` | `X-Actor-User` | 开发 actor user header 名称 |
 | `AUTH_ACTOR_ROLE_HEADER` | `X-Actor-Role` | 开发 actor role header 名称 |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
-| `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
+| `DELIVERY_BACKEND` | `go-worker` | 上传后端：`go-worker` outbox 为最小完整平台默认路径；`python` 仅保留 Phase 1 legacy 直传兼容 |
 | `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
 | `DELIVERY_SOURCE_MODE` | `file` | `go-worker` 模式下的 source：`file` 或 `object` |
 | `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
@@ -137,7 +137,7 @@ cd control-plane
 alembic upgrade head
 ```
 
-应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入；Phase 6.5 的 demo subsidiary actor 和 `aishide` / `xinyanhaijia` workspace seed 由 `0003_phase65_workspace_read_view.py` 写入。
+应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入；Phase 6.5 的 demo subsidiary actor 和 `aishide` / `xinyanhaijia` workspace seed 由 `0003_phase65_workspace_read_view.py` 写入，作为本地 demo bootstrap 数据。
 
 MySQL 本地 compose：
 

@@ -76,10 +76,7 @@ control-plane FastAPI
   │  OBSERVABILITY_ENABLED=true 时创建 HTTP / delivery spans
   │  METRICS_ENABLED=true 时记录 HTTP / task / delivery RED 指标
   │
-  ├─ delivery_backend=python
-  │    └─ 保留 Phase 1 Python 直传路径
-  │
-  └─ delivery_backend=go-worker
+  ├─ delivery_backend=go-worker（默认最小完整平台路径）
        │
        ├─ 查询 task / task_item
        ├─ 过滤 upload_status=pending 且 severity=ok/warning 的 item
@@ -95,6 +92,9 @@ control-plane FastAPI
        ├─ delivery_transport=kafka:
        │    └─ publish delivery.tasks.v1 + traceparent header
        └─ task.status -> queued
+
+  └─ delivery_backend=python
+       └─ 保留 Phase 1 legacy 直传路径；不生成 workspace read model
 
 Go data-plane worker
   │
@@ -141,13 +141,13 @@ control-plane FastAPI
        └─ 记录 workspace_object_download_url_issued task_event
 ```
 
-HQ actor 读取 workspace 时使用 `workspace.owner_tenant_id == actor.tenant_id`；子公司 actor 使用 `workspace.target_tenant_id == actor.tenant_id`。越权访问不暴露资源存在性，统一返回 404。
+HQ 角色读取 workspace 时使用 owner scope：`workspace.owner_tenant_id == actor.tenant_id`；子公司角色使用 target scope：`workspace.target_tenant_id == actor.tenant_id`。HQ 判断来自 actor role，不再把 `tenant_id == "hq"` 当成领域规则。越权访问不暴露资源存在性，统一返回 404。
 
 ## 关键不变量与一致性边界
 
-- `workspace.target_key` 对应分类结果中的 `task_item.target_name_matched`；result apply 不重新读取 profile。
-- `workspace_object.task_item_id` 唯一，重复 delivery result apply 不会重复生成同一逻辑文件。
+- `workspace.target_key` 是 workspace target key，对应分类结果中的 canonical `task_item.target_name_matched`；result apply 不重新读取 profile。
+- `workspace_object.task_id` / `workspace_object.task_item_id` 非空；`task_item_id` 唯一，重复 delivery result apply 不会重复生成同一逻辑文件。
 - `physical_object` 在 Phase 6.5 只是 sink receipt 元数据；不做 dedup 命中、refcount GC 或跨 workspace 合并。
 - presigned URL helper 只能在 workspace/object 权限检查成功后调用；测试覆盖未授权 actor 不触发 presign。
-- 下载 URL 签发审计暂落来源 `task_event`；完整 `audit_log` 表留 Phase 7。
+- 下载 URL 签发审计暂落来源 `task_event`；由于 Phase 6.5 的 workspace object 必须来自 task item，读审计可追溯回来源 task。完整 `audit_log` 表留 Phase 7。
 - 在真实负载下补 worker 并发调度、backpressure 和重试策略。

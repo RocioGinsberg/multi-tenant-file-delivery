@@ -2,12 +2,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Literal, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PhysicalObject, Workspace, WorkspaceObject
+
+WorkspaceAccessScope = Literal["owner", "target"]
+
+
+class WorkspaceTaskSource(Protocol):
+    id: str
+    owner_tenant_id: str
+    owner_user_id: str
+
+
+class WorkspaceItemSource(Protocol):
+    id: str
+    filename: str
+    file_size: int
+    target_name_matched: str | None
+    dst_path: str
+    uploaded_at: datetime | None
+
+
+class WorkspaceResultReceipt(Protocol):
+    key: str | None
+    size: int | None
+    sha256: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,17 +47,17 @@ class WorkspaceObjectWriteResult:
 
 
 class WorkspaceRepo:
-    """Repository for Phase 6.5 workspace metadata and read access."""
+    """Repository for workspace metadata persistence and scoped queries."""
 
     async def list_workspaces(
         self,
         session: AsyncSession,
         *,
         tenant_id: str,
-        is_hq: bool,
+        access_scope: WorkspaceAccessScope,
     ) -> list[Workspace]:
         query = select(Workspace)
-        if is_hq:
+        if access_scope == "owner":
             query = query.where(Workspace.owner_tenant_id == tenant_id)
         else:
             query = query.where(Workspace.target_tenant_id == tenant_id)
@@ -47,10 +70,10 @@ class WorkspaceRepo:
         workspace_id: str,
         *,
         tenant_id: str,
-        is_hq: bool,
+        access_scope: WorkspaceAccessScope,
     ) -> Workspace | None:
         query = select(Workspace).where(Workspace.id == workspace_id)
-        if is_hq:
+        if access_scope == "owner":
             query = query.where(Workspace.owner_tenant_id == tenant_id)
         else:
             query = query.where(Workspace.target_tenant_id == tenant_id)
@@ -78,13 +101,13 @@ class WorkspaceRepo:
         workspace_id: str,
         *,
         tenant_id: str,
-        is_hq: bool,
+        access_scope: WorkspaceAccessScope,
     ) -> list[WorkspaceObjectRecord] | None:
         workspace = await self.get_workspace(
             session,
             workspace_id,
             tenant_id=tenant_id,
-            is_hq=is_hq,
+            access_scope=access_scope,
         )
         if workspace is None:
             return None
@@ -111,7 +134,7 @@ class WorkspaceRepo:
         object_id: str,
         *,
         tenant_id: str,
-        is_hq: bool,
+        access_scope: WorkspaceAccessScope,
     ) -> WorkspaceObjectRecord | None:
         query = (
             select(WorkspaceObject, PhysicalObject, Workspace)
@@ -119,7 +142,7 @@ class WorkspaceRepo:
             .join(Workspace, Workspace.id == WorkspaceObject.workspace_id)
             .where(WorkspaceObject.id == object_id)
         )
-        if is_hq:
+        if access_scope == "owner":
             query = query.where(Workspace.owner_tenant_id == tenant_id)
         else:
             query = query.where(Workspace.target_tenant_id == tenant_id)
@@ -157,9 +180,9 @@ class WorkspaceRepo:
         self,
         session: AsyncSession,
         *,
-        task: Any,
-        item: Any,
-        result_item: Any,
+        task: WorkspaceTaskSource,
+        item: WorkspaceItemSource,
+        result_item: WorkspaceResultReceipt,
         bucket_name: str,
         uploaded_at: datetime | None,
     ) -> WorkspaceObjectWriteResult | None:

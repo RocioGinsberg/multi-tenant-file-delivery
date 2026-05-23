@@ -979,15 +979,19 @@ async def test_upload_task_confirmed(async_client):
         mock_event_repo.append = AsyncMock(return_value=MagicMock())
         mock_run_task.return_value = None
 
+        mock_settings = MagicMock()
+        mock_settings.delivery_backend = "python"
+
         async def override_session():
             yield AsyncMock()
 
-        app.dependency_overrides[get_session] = override_session
+        with patch("app.api.tasks.get_settings", return_value=mock_settings):
+            app.dependency_overrides[get_session] = override_session
 
-        async with async_client as client:
-            resp = await client.post("/api/v1/tasks/abc123/upload")
+            async with async_client as client:
+                resp = await client.post("/api/v1/tasks/abc123/upload")
 
-        app.dependency_overrides.clear()
+            app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()

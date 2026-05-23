@@ -102,6 +102,8 @@
 
 Phase 6.5 Workspace + 子公司读视图已完成，平台具备最小完整闭环。下一阶段进入 Phase 7，目标是在当前 S3 / MinIO 基线之上扩展 sink 能力并补压测数据。
 
+最小完整闭环以 `DELIVERY_BACKEND=go-worker` 为默认路径：HQ 写路径发布 delivery task，Go data-plane 上传并返回 result receipt，control-plane result apply 生成 workspace read model。Phase 1 的 Python 直传路径保留为 legacy 兼容，不承担子公司读视图生成职责。
+
 当前阶段目标：
 
 - 增加 OSS / Webhook / 异常 mock sink 适配。

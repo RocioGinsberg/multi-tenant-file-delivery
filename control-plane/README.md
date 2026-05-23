@@ -1,6 +1,6 @@
 # Control Plane（Python FastAPI）
 
-业务逻辑、分类引擎、任务编排与 S3/MinIO 上传。
+业务逻辑、分类引擎、任务编排、workspace 读模型和 S3/MinIO 下载授权。
 
 ## 目录结构
 
@@ -183,7 +183,7 @@ Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/tasks` | 上传文件夹，创建 task（multipart/form-data，多文件字段名 `files`，保留相对路径） |
+| `POST` | `/tasks` | 上传文件夹，创建 task（multipart/form-data，多文件字段名 `files`，保留相对路径；不提供用户侧 zip 上传通道） |
 | `POST` | `/tasks/{id}/classify` | 调用分类引擎，写入 task_item |
 | `GET` | `/tasks/{id}/preview` | 返回分类结果（items + summary） |
 | `POST` | `/tasks/{id}/confirm` | 确认已分类且无阻断错误的 task，status → confirmed |

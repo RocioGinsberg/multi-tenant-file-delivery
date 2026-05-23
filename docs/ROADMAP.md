@@ -13,10 +13,12 @@
 
 ## Release / Tag 策略
 
+- **下一次目标 tag**：`v0.1.0`。语义是“Phase 0-6.5 最小完整平台公开预览版”：HQ 文件夹上传、分类、go-worker 投递、result apply、workspace 读模型、子公司只读视图、Redis 能力层和观测闭环。
 - 阶段 tag 应打在已合并到主干的 commit 上，而不是仍在开发中的 feature branch 上。
-- 打 tag 前应满足：Phase plan 全部 `[x]`、README / ARCHITECTURE / ROADMAP / component README 同步、关键 smoke 通过、远端分支或 PR 状态可追溯。
-- 推荐用 annotated tag，命名按阶段或预览版本二选一：`phase-5-observability-done` 适合阶段里程碑，`v0.5.0` 适合对外 release 语义。
+- 打 tag 前应满足：Phase plan 全部 `[x]`、README / README_ZH / CHANGELOG / ARCHITECTURE / ROADMAP / component README 同步、demo GIF 生成、关键 smoke 通过、远端分支或 PR 状态可追溯。
+- 对公开 release 推荐用 annotated semantic tag，例如 `v0.1.0`；阶段内部检查点才使用 `phase-5-observability-done` 或 `phase-5-observability-rc1`。
 - 如果需要在合并前留检查点，可用 `phase-5-observability-rc1` 这类 RC tag；稳定 tag 不应反复移动。
+- 公开仓库必须先选择并提交根目录 `LICENSE`，否则 README 只能标记 license 为 TBD。
 
 ## 阶段路线
 
@@ -77,7 +79,8 @@
 Phase 6.5 已落地，首次 tag 前建议：
 
 - 合并 `audit/phase65-ddd-review-hardening`，收敛 DDD 通用语言、默认 go-worker 闭环、workspace 幂等约束和读路径 smoke。
-- 补 README 最终 demo GIF，展示 HQ 上传 -> data-plane 投递 -> 子公司 workspace 查看 / 下载。
+- 补根目录 `LICENSE`，并在 README badge / release note 中同步许可证。
+- 生成 README 最终 demo GIF，展示 HQ 上传 -> data-plane 投递 -> 子公司 workspace 查看 / 下载。
 - 跑 tag 前 smoke：control-plane full pytest / ruff、data-plane go test、SQLite + MySQL migration、Docker observability 或最小全链路 smoke。
 - tag 打在 Phase 6.5 合并到 `main` 后的 commit 上。
 

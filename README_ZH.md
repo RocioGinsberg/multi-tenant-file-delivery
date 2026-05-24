@@ -204,4 +204,4 @@ Docker opt-in 测试使用 `RUN_DOCKER_TESTS=1`；MySQL 测试使用 `RUN_MYSQL_
 
 ## License
 
-当前还没有选择开源许可证。公开仓库或发布 release tag 前应在根目录补充 `LICENSE`。
+本项目使用 [MIT License](LICENSE)。

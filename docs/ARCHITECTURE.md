@@ -11,7 +11,7 @@
 - [失败模式与恢复策略](#失败模式与恢复策略) — Phase 4 后写
 
 ## 当前状态
-**Release candidate**：Phase 0-6.5 组成首次公开 `v0.1.0` 的最小完整平台：HQ 文件夹上传、分类预览、go-worker 投递、result apply、workspace 读模型、子公司只读视图、Redis 能力层和观测闭环。公开 release 前仍需补根目录 license、最终 demo GIF 和 tag 前 smoke。
+**Release candidate**：Phase 0-6.5 组成首次公开 `v0.1.0` 的最小完整平台：HQ 文件夹上传、分类预览、go-worker 投递、result apply、workspace 读模型、子公司只读视图、Redis 能力层和观测闭环。公开 release 前仍需确认 MIT license、最终 demo GIF 和 tag 前 smoke。
 
 **v1**：Phase 2 已完成。Go 数据面通过统一 transport 接口支持 file-spool 和 Kafka；本地默认 file-spool，Kafka adapter 已通过 Docker broker 集成测试。当前 sink 支持 mock 与 S3 / MinIO 单段 PUT，结果事件可回写控制面 task / item 状态。
 

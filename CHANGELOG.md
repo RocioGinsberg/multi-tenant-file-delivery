@@ -11,6 +11,7 @@ Versioning starts when the first public tag is cut.
 - Public README split into English `README.md` and Chinese `README_ZH.md`.
 - Demo generation helper at `examples/demo.sh`; generated media path is `docs/media/demo.gif`.
 - Public contribution guide at `docs/CONTRIBUTING.md`.
+- Root MIT license.
 
 ### Changed
 - Root documentation is now organized as a public project entry point instead of a phase log.
@@ -18,7 +19,7 @@ Versioning starts when the first public tag is cut.
 - Public-readiness dependency hardening upgrades the Go data-plane baseline to Go 1.25 and switches the control-plane MySQL async driver from `asyncmy` to `aiomysql`.
 
 ### Release Notes
-- Before publishing, select a root license, generate the final demo GIF, merge the audit hardening branch into `main`, and run release smoke.
+- Before publishing, merge the audit hardening branch into `main`, confirm demo media, and run release smoke.
 
 ## [0.1.0-rc] - Pending
 
@@ -39,7 +40,6 @@ First public release candidate. The implementation covers Phase 0 through Phase 
 - **Design records**: PRD, architecture, data model, RFCs, ADRs, phase plans, benchmark notes, and sink protocol notes.
 
 ### Known Gaps
-- No root open-source license has been selected yet.
 - S3 multipart, resume, OSS/Webhook/SFTP sinks, platform-level dedup, refcount GC, sink credential encryption, and full audit log table are deferred.
 - Result consume/apply currently starts a separate trace; result messages do not yet continue the worker trace context back to the control plane.
 - The static UI is a local demo surface, not a production identity provider or frontend build pipeline.

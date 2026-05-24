@@ -9,7 +9,7 @@ English / [中文](README_ZH.md)
 [![python](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)](control-plane/pyproject.toml)
 [![go](https://img.shields.io/badge/go-1.25-blue?style=flat-square)](data-plane/go.mod)
 [![status](https://img.shields.io/badge/status-v0.1.0--rc-orange?style=flat-square)](docs/ROADMAP.md)
-[![license](https://img.shields.io/badge/license-TBD-lightgrey?style=flat-square)](#license)
+[![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 </div>
 
@@ -213,4 +213,4 @@ Docker opt-in tests use `RUN_DOCKER_TESTS=1`; MySQL-specific tests use `RUN_MYSQ
 
 ## License
 
-No open-source license has been selected yet. Add a root `LICENSE` before making the repository public or publishing a release tag.
+This project is licensed under the [MIT License](LICENSE).

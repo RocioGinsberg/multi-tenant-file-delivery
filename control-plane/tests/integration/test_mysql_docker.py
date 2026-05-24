@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import command
 
 MYSQL_DATABASE_URL = (
-    "mysql+asyncmy://control_plane:control_plane@localhost:3306/"
+    "mysql+aiomysql://control_plane:control_plane@localhost:3306/"
     "control_plane?charset=utf8mb4"
 )
 
@@ -40,7 +40,15 @@ def test_mysql_alembic_upgrade_creates_core_tables():
         os.environ.pop("DATABASE_URL", None)
         get_settings.cache_clear()
 
-    assert {"alembic_version", "task", "task_item", "task_event"} <= tables
+    assert {
+        "alembic_version",
+        "task",
+        "task_item",
+        "task_event",
+        "workspace",
+        "physical_object",
+        "workspace_object",
+    } <= tables
 
 
 async def _get_table_names(db_url: str) -> set[str]:

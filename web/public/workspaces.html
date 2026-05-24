@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link href="/css/tailwind.css" rel="stylesheet"/>
+<link href="/css/portal.css" rel="stylesheet"/>
+<title>Auto Upload — 子公司视图</title>
+<style>
+.workspace-page{padding-top:0}
+.page-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-top:32px;margin-bottom:18px}
+.hero-kicker{font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--c-text-3);margin-bottom:10px}
+.hero-title{font-family:var(--font-display);font-size:36px;font-weight:800;line-height:1;color:var(--c-text);margin:0}
+.hero-subtitle{max-width:720px;font-size:14px;line-height:1.7;color:var(--c-text-2);margin:10px 0 0}
+.workspace-grid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px}
+.panel{background:linear-gradient(180deg,rgba(255,252,245,.95),rgba(250,246,237,.96));border:1px solid var(--c-border);border-radius:18px;padding:16px;box-shadow:var(--shadow-sm)}
+.panel-title{font-family:var(--font-display);font-size:20px;font-weight:800;color:var(--c-text);margin:0 0 12px}
+.actor-bar{display:flex;gap:8px;flex-wrap:wrap}
+.actor-btn{padding:8px 12px;border-radius:999px;border:1px solid rgba(22,19,15,.1);background:rgba(255,252,245,.8);font-size:12px;font-weight:800;cursor:pointer;color:var(--c-text-2)}
+.actor-btn.active{background:var(--c-ink);color:#f9f6ee;border-color:var(--c-ink)}
+.workspace-list{display:flex;flex-direction:column;gap:8px}
+.workspace-item{width:100%;text-align:left;border:1px solid rgba(22,19,15,.08);background:rgba(255,252,245,.82);border-radius:12px;padding:12px;cursor:pointer}
+.workspace-item.active{border-color:rgba(180,234,88,.7);background:rgba(180,234,88,.14)}
+.workspace-name{font-size:14px;font-weight:800;color:var(--c-text)}
+.workspace-meta{font-size:12px;color:var(--c-text-3);margin-top:4px}
+.object-table{width:100%;font-size:13px;border-collapse:collapse}
+.object-table th{text-align:left;padding:8px;border-bottom:1px solid rgba(22,19,15,.1);font-weight:800;color:var(--c-text-3);font-size:12px}
+.object-table td{padding:9px 8px;border-bottom:1px solid rgba(22,19,15,.06);vertical-align:top}
+.path-cell{font-size:12px;color:var(--c-text-3);max-width:300px;word-break:break-all}
+.hash-cell{font-size:11px;color:var(--c-text-3);font-family:var(--font-mono);max-width:180px;word-break:break-all}
+.cmd-btn{padding:7px 12px;border-radius:999px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid transparent;background:var(--c-accent);color:var(--c-ink)}
+.cmd-btn.secondary{background:rgba(255,252,245,.84);border-color:rgba(22,19,15,.1);color:var(--c-text)}
+.empty{border:1px dashed rgba(22,19,15,.16);border-radius:14px;padding:24px;text-align:center;color:var(--c-text-3);font-size:13px}
+.toast-line{font-size:12px;color:var(--c-text-3);margin-top:10px;word-break:break-all}
+@media(max-width:860px){.workspace-grid{grid-template-columns:1fr}.hero-title{font-size:30px}}
+</style>
+</head>
+<body>
+<header class="hdr"></header>
+
+<main class="workspace-page max-w-6xl mx-auto px-4 py-6">
+<section class="page-hero">
+  <div>
+    <div class="hero-kicker">Workspace</div>
+    <h1 class="hero-title">子公司文件视图</h1>
+    <p class="hero-subtitle">当前 actor 可见的 workspace 文件与下载入口。</p>
+  </div>
+  <div class="actor-bar">
+    <button class="actor-btn" data-actor="subsidiary-a">子公司 A</button>
+    <button class="actor-btn" data-actor="subsidiary-b">子公司 B</button>
+    <button class="actor-btn" data-actor="hq">HQ</button>
+  </div>
+</section>
+
+<section class="workspace-grid">
+  <aside class="panel">
+    <h2 class="panel-title">Workspaces</h2>
+    <div id="workspace-list" class="workspace-list"></div>
+  </aside>
+
+  <section class="panel">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+      <h2 id="object-title" class="panel-title" style="margin:0">Objects</h2>
+      <button class="cmd-btn secondary" onclick="loadWorkspaces()">刷新</button>
+    </div>
+    <div id="object-body" class="empty">请选择 workspace</div>
+    <div id="download-info" class="toast-line"></div>
+  </section>
+</section>
+</main>
+
+<script src="/js/utils/dom.js"></script>
+<script src="/js/utils/format.js"></script>
+<script src="/js/utils/api.js"></script>
+<script src="/js/components/nav.js"></script>
+<script src="/js/components/toast.js"></script>
+<div id="app-toast"></div>
+<script>
+PortalNav.render();
+const API = '/api/v1';
+const esc = PortalDom.esc;
+const fmtBytes = PortalFormat.fmtBytes;
+const showToast = PortalToast.makeFloatingToast('app-toast', {
+  duration: 3000,
+  baseStyle: `
+    position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:10px;
+    font-size:13px;font-weight:600;z-index:200;opacity:0;
+    transform:translateY(8px);transition:all .25s;pointer-events:none;
+    max-width:360px;line-height:1.4;
+  `,
+});
+
+const actors = {
+  'subsidiary-a': {
+    tenant: 'subsidiary-a',
+    user: 'subsidiary-a-viewer',
+    role: 'subsidiary_viewer',
+  },
+  'subsidiary-b': {
+    tenant: 'subsidiary-b',
+    user: 'subsidiary-b-viewer',
+    role: 'subsidiary_viewer',
+  },
+  hq: {
+    tenant: 'hq',
+    user: 'local-user',
+    role: 'hq_uploader',
+  },
+};
+let currentActorKey = 'subsidiary-a';
+let currentWorkspaceId = null;
+
+function actorHeaders() {
+  const actor = actors[currentActorKey];
+  return {
+    'X-Actor-Tenant': actor.tenant,
+    'X-Actor-User': actor.user,
+    'X-Actor-Role': actor.role,
+  };
+}
+
+function setActor(actorKey) {
+  currentActorKey = actorKey;
+  currentWorkspaceId = null;
+  document.querySelectorAll('.actor-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.actor === actorKey);
+  });
+  loadWorkspaces();
+}
+
+async function loadWorkspaces() {
+  PortalNav.setConn(false);
+  document.getElementById('download-info').textContent = '';
+  const list = document.getElementById('workspace-list');
+  list.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    const data = await PortalApi.getJson(`${API}/workspaces`, {headers: actorHeaders()});
+    PortalNav.setConn(true);
+    const workspaces = data.workspaces || [];
+    if (!workspaces.length) {
+      list.innerHTML = '<div class="empty">暂无 workspace</div>';
+      renderObjects(null, []);
+      return;
+    }
+    list.innerHTML = workspaces.map(workspace => `
+      <button class="workspace-item ${workspace.id === currentWorkspaceId ? 'active' : ''}"
+        onclick="selectWorkspace('${esc(workspace.id)}')">
+        <div class="workspace-name">${esc(workspace.name)}</div>
+        <div class="workspace-meta">${esc(workspace.target_tenant_id)} · ${esc(workspace.target_key)}</div>
+      </button>
+    `).join('');
+    if (!currentWorkspaceId) {
+      selectWorkspace(workspaces[0].id);
+    }
+  } catch (error) {
+    PortalNav.setConn(false);
+    list.innerHTML = '<div class="empty">加载失败</div>';
+    showToast(`加载 workspace 失败${error.status ? ` (${error.status})` : ''}`, 'err');
+  }
+}
+
+async function selectWorkspace(workspaceId) {
+  currentWorkspaceId = workspaceId;
+  document.querySelectorAll('.workspace-item').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes(workspaceId));
+  });
+  const body = document.getElementById('object-body');
+  body.className = 'empty';
+  body.textContent = '加载中...';
+  try {
+    const data = await PortalApi.getJson(
+      `${API}/workspaces/${encodeURIComponent(workspaceId)}/objects`,
+      {headers: actorHeaders()},
+    );
+    renderObjects(workspaceId, data.objects || []);
+  } catch (error) {
+    body.className = 'empty';
+    body.textContent = PortalApi.errorMessage(error, '加载对象失败');
+  }
+}
+
+function renderObjects(workspaceId, objects) {
+  document.getElementById('object-title').textContent = workspaceId ? `Objects · ${workspaceId}` : 'Objects';
+  const body = document.getElementById('object-body');
+  if (!workspaceId) {
+    body.className = 'empty';
+    body.textContent = '请选择 workspace';
+    return;
+  }
+  if (!objects.length) {
+    body.className = 'empty';
+    body.textContent = '暂无文件';
+    return;
+  }
+  body.className = '';
+  body.innerHTML = `
+    <table class="object-table">
+      <thead>
+        <tr>
+          <th>文件</th>
+          <th>路径</th>
+          <th>大小</th>
+          <th>SHA-256</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${objects.map(object => `
+          <tr>
+            <td>${esc(object.display_name)}</td>
+            <td class="path-cell">${esc(object.dst_path)}</td>
+            <td>${fmtBytes(object.physical_object.size_bytes || 0)}</td>
+            <td class="hash-cell">${esc(object.physical_object.sha256 || '')}</td>
+            <td><button class="cmd-btn" onclick="downloadObject('${esc(object.id)}')">下载</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function downloadObject(objectId) {
+  const info = document.getElementById('download-info');
+  info.textContent = '';
+  try {
+    const data = await PortalApi.sendJson(
+      `${API}/workspace-objects/${encodeURIComponent(objectId)}/download-url`,
+      {method: 'POST', headers: actorHeaders()},
+    );
+    info.textContent = `URL TTL ${data.expires_in_seconds}s · ${data.url}`;
+    window.open(data.url, '_blank', 'noopener');
+  } catch (error) {
+    showToast(PortalApi.errorMessage(error, '签发下载 URL 失败'), 'err');
+  }
+}
+
+document.querySelectorAll('.actor-btn').forEach(btn => {
+  btn.addEventListener('click', () => setActor(btn.dataset.actor));
+});
+setActor(currentActorKey);
+</script>
+</body>
+</html>

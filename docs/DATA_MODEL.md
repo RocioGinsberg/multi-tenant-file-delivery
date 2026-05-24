@@ -13,10 +13,13 @@
 | `task` | 分发任务主表，记录 owner tenant/user、状态、源归档、分类摘要、确认和完成时间 |
 | `task_item` | 单文件投递项，记录源路径、目标、目标路径、sink 状态和错误 |
 | `task_event` | 任务事件流，用于审计状态变化和调试；关键写操作在 payload 中记录 actor attribution |
+| `workspace` | HQ 拥有、面向一个 target tenant / target key 的逻辑读容器 |
+| `physical_object` | result receipt 对应的 sink object 元数据，不在 Phase 6.5 做 dedup 命中 |
+| `workspace_object` | 子公司可见的逻辑文件，绑定 workspace、physical object 和来源 task item |
 
 Phase 2 增加了 Go data-plane result consumer，数据面写出 `delivery.results.v1` 后由控制面消费并回写 `task` / `task_item`。Phase 3 / 3.x 已把 MySQL 作为本地 compose 主数据库目标，并通过 source reference 让 worker 从 staging object storage 读取源文件。Phase 4 / 5 新增 Redis 能力层和 observability，不改变当前业务表结构。
 
-Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user 和 repo tenant filter 落到控制面写路径。Workspace、dedup、sink credential 加密和完整 audit_log 仍留到 Phase 6.5 / Phase 7。
+Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user 和 repo tenant filter 落到控制面写路径。Phase 6.5 已落 workspace 元数据、result apply 读模型映射和子公司读 API；平台 dedup 命中、sink credential 加密和完整 audit_log 仍留 Phase 7。
 
 ## 目标态模型
 
@@ -75,3 +78,11 @@ Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user �
 - 默认开发 actor 只用于本地测试兼容，生产模式需要显式身份。
 - task_event payload 已覆盖 create / classify / confirm / upload / retry / queue 等关键写操作的 actor attribution；完整读审计随 Phase 6.5 子公司读视图补齐。
 - Workspace / `workspace_object` / `physical_object` / dedup 不进入 Phase 6 主线，避免把多租户鉴权和读路径模型合并成一个过大的阶段。
+
+## Phase 6.5 落地情况
+
+- `workspace.target_key` 是 workspace target key，显式映射分类结果里的 canonical `task_item.target_name_matched`，result apply 不重新加载 profile。
+- 成功且带 sink receipt key 的 result item 会写入 `physical_object` 和 `workspace_object`；`workspace_object.task_id` / `workspace_object.task_item_id` 非空，`workspace_object.task_item_id` 唯一约束保证重复 result apply 不重复建读对象。
+- HQ 通过 owner tenant 读 workspace；子公司通过 target tenant 读 workspace / object，越权读和下载返回 404。
+- 下载由控制面鉴权后签发短 TTL S3 / MinIO presigned GET URL，并把 `workspace_object_download_url_issued` 写入来源 task event。
+- migration seed 提供本地 demo subsidiary actor 以及 `aishide` / `xinyanhaijia` workspace；这是 demo bootstrap 数据，后续可拆到显式 seed 脚本。平台层 dedup、refcount GC 和完整 audit_log 继续留 Phase 7。

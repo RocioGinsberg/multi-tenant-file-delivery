@@ -87,6 +87,7 @@ class TestDefaultValues:
         assert s.worker_max_file_concurrent == 5
         assert s.worker_auto_adjust_concurrent is True
         assert s.task_dir_base == "/tmp/auto_upload_tasks"
+        assert s.delivery_backend == "go-worker"
         assert s.classification_profile_path == "../profiles/hq_subsidiary_reports_v1/profile.json"
         assert s.max_internal_archive_bytes == 524_288_000
         assert s.max_folder_payload_bytes == 1_073_741_824

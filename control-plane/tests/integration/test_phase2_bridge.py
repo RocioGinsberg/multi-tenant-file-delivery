@@ -28,6 +28,20 @@ from app.services.delivery import (
 from app.services.progress_bus import create_progress_bus
 from app.services.staging_source import stage_task_archive, task_archive_path
 
+GO_RUN_TIMEOUT_SECONDS = 120
+
+
+def _go_test_env(**extra: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update({
+        "GOTOOLCHAIN": "auto",
+        "GOPATH": "/tmp/smh_go_path",
+        "GOMODCACHE": "/tmp/smh_go_mod_cache",
+        "GOCACHE": "/tmp/smh_go_cache",
+    })
+    env.update(extra)
+    return env
+
 
 @pytest.fixture
 async def session() -> AsyncIterator[AsyncSession]:
@@ -97,12 +111,6 @@ async def test_phase2_file_spool_bridge_round_trip(
     task_message_path = await publisher.publish(message)
     assert task_message_path.exists()
 
-    env = os.environ.copy()
-    env.update({
-        "GOPATH": "/tmp/smh_go_path",
-        "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
-        "GOCACHE": "/tmp/smh_go_cache",
-    })
     run_result = subprocess.run(
         [
             "go",
@@ -116,11 +124,11 @@ async def test_phase2_file_spool_bridge_round_trip(
             "mock",
         ],
         cwd=data_plane_dir,
-        env=env,
+        env=_go_test_env(),
         text=True,
         capture_output=True,
         check=False,
-        timeout=30,
+        timeout=GO_RUN_TIMEOUT_SECONDS,
     )
     assert run_result.returncode == 0, run_result.stderr
 
@@ -223,12 +231,6 @@ async def test_source_reference_file_spool_bridge_round_trip(
 
     assert task_message_path.exists()
 
-    env = os.environ.copy()
-    env.update({
-        "GOPATH": "/tmp/smh_go_path",
-        "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
-        "GOCACHE": "/tmp/smh_go_cache",
-    })
     run_result = subprocess.run(
         [
             "go",
@@ -253,11 +255,11 @@ async def test_source_reference_file_spool_bridge_round_trip(
             "-s3-path-style=true",
         ],
         cwd=data_plane_dir,
-        env=env,
+        env=_go_test_env(),
         text=True,
         capture_output=True,
         check=False,
-        timeout=60,
+        timeout=GO_RUN_TIMEOUT_SECONDS,
     )
     assert run_result.returncode == 0, run_result.stderr
 
@@ -363,12 +365,6 @@ async def test_source_reference_kafka_bridge_round_trip(
                 os.environ[key] = value
         get_settings.cache_clear()
 
-    env = os.environ.copy()
-    env.update({
-        "GOPATH": "/tmp/smh_go_path",
-        "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
-        "GOCACHE": "/tmp/smh_go_cache",
-    })
     run_result = subprocess.run(
         [
             "go",
@@ -399,11 +395,11 @@ async def test_source_reference_kafka_bridge_round_trip(
             "-s3-path-style=true",
         ],
         cwd=data_plane_dir,
-        env=env,
+        env=_go_test_env(),
         text=True,
         capture_output=True,
         check=False,
-        timeout=60,
+        timeout=GO_RUN_TIMEOUT_SECONDS,
     )
     assert run_result.returncode == 0, run_result.stderr
 
@@ -516,12 +512,6 @@ async def test_duplicate_source_reference_kafka_task_keeps_final_state_stable(
                 os.environ[key] = value
         get_settings.cache_clear()
 
-    env = os.environ.copy()
-    env.update({
-        "GOPATH": "/tmp/smh_go_path",
-        "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
-        "GOCACHE": "/tmp/smh_go_cache",
-    })
     run_result = subprocess.run(
         [
             "go",
@@ -554,11 +544,11 @@ async def test_duplicate_source_reference_kafka_task_keeps_final_state_stable(
             "-s3-path-style=true",
         ],
         cwd=data_plane_dir,
-        env=env,
+        env=_go_test_env(),
         text=True,
         capture_output=True,
         check=False,
-        timeout=60,
+        timeout=GO_RUN_TIMEOUT_SECONDS,
     )
     assert run_result.returncode == 0, run_result.stderr
 
@@ -688,13 +678,6 @@ async def test_phase4_redis_kafka_object_source_smoke(
             topic=task_topic,
         ).publish(message)
 
-        env = os.environ.copy()
-        env.update({
-            "GOPATH": "/tmp/smh_go_path",
-            "GOMODCACHE": "/tmp/smh_go_path/pkg/mod",
-            "GOCACHE": "/tmp/smh_go_cache",
-            "REDIS_URL": redis_url,
-        })
         run_result = subprocess.run(
             [
                 "go",
@@ -734,11 +717,11 @@ async def test_phase4_redis_kafka_object_source_smoke(
                 "1s",
             ],
             cwd=data_plane_dir,
-            env=env,
+            env=_go_test_env(REDIS_URL=redis_url),
             text=True,
             capture_output=True,
             check=False,
-            timeout=60,
+            timeout=GO_RUN_TIMEOUT_SECONDS,
         )
         assert run_result.returncode == 0, run_result.stderr
 

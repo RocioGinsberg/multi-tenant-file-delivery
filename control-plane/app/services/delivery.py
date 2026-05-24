@@ -10,9 +10,11 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.settings import get_settings
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
+from app.repos.workspace_repo import WorkspaceRepo
 from app.services.metrics import record_delivery_event
 from app.services.redis_lease import LeaseClaim, create_redis_lease
 from app.services.tracing import current_traceparent, start_trace_span
@@ -188,6 +190,7 @@ async def apply_delivery_result(
     task_repo: TaskRepo | None = None,
     item_repo: ItemRepo | None = None,
     event_repo: EventRepo | None = None,
+    workspace_repo: WorkspaceRepo | None = None,
 ) -> DeliveryResultApplySummary:
     """Apply a data-plane result event to persisted task/item state.
 
@@ -213,6 +216,7 @@ async def apply_delivery_result(
             task_repo = task_repo or TaskRepo()
             item_repo = item_repo or ItemRepo()
             event_repo = event_repo or EventRepo()
+            workspace_repo = workspace_repo or WorkspaceRepo()
             task = await task_repo.get(session, message.task_id)
             if task is None:
                 missing_items = [item.item_id for item in message.items]
@@ -230,8 +234,11 @@ async def apply_delivery_result(
                     missing_items=missing_items,
                 )
 
+            bucket_name = get_settings().s3_bucket_name
             applied_items = 0
             missing_items: list[str] = []
+            workspace_objects_created = 0
+            workspace_mapping_missing: list[str] = []
             for item in message.items:
                 if item.status == "uploaded":
                     updated = await item_repo.update_upload_status(
@@ -242,6 +249,19 @@ async def apply_delivery_result(
                         tenant_id=task.owner_tenant_id,
                         uploaded_at=message.ended_at,
                     )
+                    if updated is not None:
+                        workspace_result = await workspace_repo.record_uploaded_item(
+                            session,
+                            task=task,
+                            item=updated,
+                            result_item=item,
+                            bucket_name=bucket_name,
+                            uploaded_at=message.ended_at,
+                        )
+                        if workspace_result is None and item.key:
+                            workspace_mapping_missing.append(item.item_id)
+                        elif workspace_result is not None and workspace_result.created:
+                            workspace_objects_created += 1
                 elif item.status == "failed":
                     updated = await item_repo.update_upload_status(
                         session,
@@ -279,8 +299,20 @@ async def apply_delivery_result(
                     "processed": message.processed,
                     "applied_items": applied_items,
                     "missing_items": missing_items,
+                    "workspace_objects_created": workspace_objects_created,
+                    "workspace_mapping_missing": workspace_mapping_missing,
                 },
             )
+            if workspace_mapping_missing:
+                await event_repo.append(
+                    session,
+                    message.task_id,
+                    "workspace_mapping_missing",
+                    {
+                        "item_ids": workspace_mapping_missing,
+                        "reason": "No workspace found for item target key",
+                    },
+                )
             if span is not None:
                 span.set_attribute("delivery.result.applied_items", applied_items)
                 span.set_attribute("delivery.result.missing_items", len(missing_items))

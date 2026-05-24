@@ -27,7 +27,7 @@
 
 ### 写路径
 
-1. HQ 选择文件夹上传，多文件路径保持相对目录结构。
+1. HQ 选择文件夹上传，多文件路径保持相对目录结构；用户侧不要求也不保留 zip 上传通道。
 2. 控制面运行 classification profile。
 3. HQ 预览分类结果并确认。
 4. 控制面发布 `delivery.tasks.v1`。
@@ -98,14 +98,15 @@
 - 关键设计有 RFC / ADR 可追溯。
 - 每个 Phase 有明确完成定义和测试记录。
 
-## 7. 当前阶段草案：Workspace + 子公司读视图
+## 7. 当前阶段草案：扩 sink + 压测
 
-Phase 6 多租户 + 鉴权基线已完成并合并。当前阶段进入 Phase 6.5，目标是在身份、租户和权限边界之上补齐 workspace 元数据、投递结果映射和子公司只读浏览 / 下载路径。
+Phase 6.5 Workspace + 子公司读视图已完成，平台具备最小完整闭环。下一阶段进入 Phase 7，目标是在当前 S3 / MinIO 基线之上扩展 sink 能力并补压测数据。
+
+最小完整闭环以 `DELIVERY_BACKEND=go-worker` 为默认路径：HQ 写路径发布 delivery task，Go data-plane 上传并返回 result receipt，control-plane result apply 生成 workspace read model。Phase 1 的 Python 直传路径保留为 legacy 兼容，不承担子公司读视图生成职责。
 
 当前阶段目标：
 
-- 新增 workspace / physical_object / workspace_object 元数据模型。
-- 控制面在 result apply 后建立可读的 workspace object 视图。
-- 子公司 actor 只能列出、查看和下载自己租户可见的 workspace 文件。
-- 下载由控制面鉴权后签发短 TTL presigned URL。
-- 记录下载 URL 签发审计，为后续完整 audit_log 铺路。
+- 增加 OSS / Webhook / 异常 mock sink 适配。
+- 补 S3 / MinIO 更完整的失败模式测试。
+- 写入 BENCHMARKS 实测吞吐、延迟、失败率和资源占用。
+- 基于 workspace / physical object 元数据评估平台层 dedup、refcount GC 和 sink credential 加密的拆分顺序。

@@ -305,7 +305,7 @@ async def _start_data_plane_worker(
 ) -> tuple[str, asyncio.subprocess.Process]:
     env = os.environ.copy()
     env.update({
-        "GOTOOLCHAIN": "local",
+        "GOTOOLCHAIN": "auto",
         "GOPATH": "/tmp/smh_go_path",
         "GOMODCACHE": "/tmp/smh_go_mod_cache",
         "GOCACHE": "/tmp/smh_go_cache",

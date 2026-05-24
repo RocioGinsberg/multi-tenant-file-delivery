@@ -110,6 +110,7 @@ async def async_client(mem_engine, tmp_path, monkeypatch):
     mock_settings.auth_actor_tenant_header = "X-Actor-Tenant"
     mock_settings.auth_actor_user_header = "X-Actor-User"
     mock_settings.auth_actor_role_header = "X-Actor-Role"
+    mock_settings.delivery_backend = "python"
 
     monkeypatch.setattr("app.api.tasks.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.services.task_runner.get_settings", lambda: mock_settings)

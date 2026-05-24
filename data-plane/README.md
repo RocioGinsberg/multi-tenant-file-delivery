@@ -2,6 +2,8 @@
 
 高并发文件投递、多 sink 协议适配和 worker 侧限流 / 观测基础。
 
+> Requires Go 1.25+ after public-readiness dependency hardening.
+
 ## 当前状态
 **Phase 5 completed / Phase 6 control-plane baseline merged**。当前已具备 worker 入口、任务消息模型、文件 source、object source resolver、mock sink、S3/MinIO 单段 PUT sink、本地 outbox bridge、Kafka transport adapter、Redis fixed-window limiter、Prometheus metrics、OpenTelemetry tracing、上传 receipt SHA-256，以及 message / source / sink / transport / pipeline / worker / CLI 测试。平台层 dedup 仍是 Phase 6.5 / Phase 7 的元数据能力，不在当前 data-plane 路径中执行 precheck。
 
@@ -158,7 +160,7 @@ RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_observabili
 
 Docker Redis limiter smoke：
 ```bash
-RUN_DOCKER_TESTS=1 GOTOOLCHAIN=local GOPATH=/tmp/smh_go_path \
+RUN_DOCKER_TESTS=1 GOTOOLCHAIN=auto GOPATH=/tmp/smh_go_path \
   GOMODCACHE=/tmp/smh_go_mod_cache GOCACHE=/tmp/smh_go_cache \
   go test ./internal/limiter -run TestRedisLimiterDocker -count=1
 ```
@@ -189,7 +191,7 @@ RUN_DOCKER_TESTS=1 KAFKA_BROKERS=localhost:9092 go test ./internal/transport
 ## 测试
 ```bash
 cd data-plane
-GOCACHE=/tmp/smh_go_cache go test ./...
+GOTOOLCHAIN=auto GOCACHE=/tmp/smh_go_cache go test ./...
 ```
 
 当前覆盖：

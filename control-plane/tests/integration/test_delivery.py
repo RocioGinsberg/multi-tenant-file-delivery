@@ -11,9 +11,10 @@ from opentelemetry import context, trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.models import Base, Task
+from app.models import AppUser, Base, Task, Tenant, Workspace
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
+from app.repos.workspace_repo import WorkspaceRepo
 from app.services.delivery import (
     DeliveryResultMessage,
     DeliveryResultRecord,
@@ -361,8 +362,89 @@ async def test_apply_delivery_result_updates_task_and_items(session: AsyncSessio
     assert updated_items[0].upload_error == "missing source"
     assert updated_items[1].upload_status == "uploaded"
     assert updated_items[1].uploaded_at == ended_at
-    assert events[-1].event_type == "delivery_result_applied"
-    assert events[-1].payload_json["uploaded"] == 1
+    applied_event = next(
+        event for event in events if event.event_type == "delivery_result_applied"
+    )
+    assert applied_event.payload_json["uploaded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_apply_delivery_result_creates_workspace_metadata_idempotently(
+    session: AsyncSession,
+):
+    item_repo = ItemRepo()
+    workspace_repo = WorkspaceRepo()
+    session.add_all([
+        Tenant(id="subsidiary-a", name="Subsidiary A", tenant_type="subsidiary"),
+        AppUser(id="sub-a-user", tenant_id="subsidiary-a", role="subsidiary_viewer"),
+        Workspace(
+            id="ws-a",
+            name="Subsidiary A",
+            owner_tenant_id="hq",
+            target_tenant_id="subsidiary-a",
+            target_key="aishide",
+        ),
+    ])
+    task = Task(
+        idempotency_key="idem-workspace-result",
+        status="queued",
+        owner_tenant_id="hq",
+        owner_user_id="local-user",
+    )
+    session.add(task)
+    await session.flush()
+    item = (
+        await item_repo.bulk_insert(
+            session,
+            task.id,
+            [{
+                "src_path": "aishide/report.xlsx",
+                "filename": "report.xlsx",
+                "file_size": 5,
+                "target_name_matched": "aishide",
+                "dst_path": "reports/report.xlsx",
+            }],
+        )
+    )[0]
+    message = DeliveryResultMessage(
+        task_id=task.id,
+        status="uploaded",
+        uploaded=1,
+        failed=0,
+        processed=1,
+        started_at=datetime(2026, 5, 17, 11, 59, tzinfo=UTC),
+        ended_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+        items=[{
+            "item_id": item.id,
+            "status": "uploaded",
+            "key": "reports/report.xlsx",
+            "size": 5,
+            "sha256": "abc",
+        }],
+    )
+
+    await apply_delivery_result(session, message)
+    await apply_delivery_result(session, message)
+
+    visible = await workspace_repo.list_objects(
+        session,
+        "ws-a",
+        tenant_id="subsidiary-a",
+        access_scope="target",
+    )
+    events = await EventRepo().list_by_task(session, task.id)
+
+    assert visible is not None
+    assert len(visible) == 1
+    assert visible[0].workspace_object.task_item_id == item.id
+    assert visible[0].physical_object.bucket == "auto-upload-dev"
+    assert visible[0].physical_object.object_key == "reports/report.xlsx"
+    applied_events = [
+        event for event in events if event.event_type == "delivery_result_applied"
+    ]
+    assert sorted(
+        event.payload_json["workspace_objects_created"] for event in applied_events
+    ) == [0, 1]
 
 
 @pytest.mark.asyncio

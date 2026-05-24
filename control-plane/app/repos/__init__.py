@@ -3,5 +3,6 @@ from __future__ import annotations
 from app.repos.event_repo import EventRepo
 from app.repos.item_repo import ItemRepo
 from app.repos.task_repo import TaskRepo
+from app.repos.workspace_repo import WorkspaceRepo
 
-__all__ = ["TaskRepo", "ItemRepo", "EventRepo"]
+__all__ = ["TaskRepo", "ItemRepo", "EventRepo", "WorkspaceRepo"]

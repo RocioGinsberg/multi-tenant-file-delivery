@@ -51,8 +51,10 @@ app.middleware("http")(metrics_middleware)
 app.middleware("http")(tracing_middleware)
 
 from app.api import tasks as tasks_module  # noqa: E402
+from app.api import workspaces as workspaces_module  # noqa: E402
 
 app.include_router(tasks_module.router, prefix="/api/v1")
+app.include_router(workspaces_module.router, prefix="/api/v1")
 
 
 @app.get("/healthz", response_class=JSONResponse)

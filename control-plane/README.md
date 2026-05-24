@@ -1,6 +1,6 @@
 # Control Plane（Python FastAPI）
 
-业务逻辑、分类引擎、任务编排与 S3/MinIO 上传。
+业务逻辑、分类引擎、任务编排、workspace 读模型和 S3/MinIO 下载授权。
 
 ## 目录结构
 
@@ -8,10 +8,10 @@
 app/
   api/           FastAPI 路由（/api/v1）
   core/          配置（pydantic-settings）、数据库（SQLAlchemy 2.0 async）
-  models/        SQLAlchemy ORM 模型（task / task_item / task_event）
+  models/        SQLAlchemy ORM 模型（task / task_item / task_event / workspace）
   schemas/       Pydantic v2 response schemas
   services/      classifier、classification_profile、delivery、staging_source、progress_bus、task_runner
-  repos/         数据访问层（task_repo / item_repo / event_repo）
+  repos/         数据访问层（task_repo / item_repo / event_repo / workspace_repo）
 alembic/         DB migrations（SQLite test，MySQL dev/prod target）
 tests/           pytest 单测 + e2e 集成测试
 _legacy/         v0 历史代码（参考用，不参与构建）
@@ -43,6 +43,7 @@ cp .env.example .env
 | `STAGING_BUCKET_NAME` | `auto-upload-staging` | source reference 暂存 bucket |
 | `S3_ACCESS_KEY_ID` | `minioadmin` | MinIO root user |
 | `S3_SECRET_ACCESS_KEY` | `minioadmin` | MinIO root password |
+| `WORKSPACE_DOWNLOAD_URL_TTL_SECONDS` | `300` | Phase 6.5 workspace 下载 URL TTL |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./control_plane.db` | 开发用 SQLite |
 | `AUTH_ALLOW_DEV_HEADERS` | `true` | 是否允许通过开发 header 指定当前 actor |
 | `AUTH_DEFAULT_ACTOR_ENABLED` | `true` | 未提供 actor header 时是否使用默认本地 actor |
@@ -53,7 +54,7 @@ cp .env.example .env
 | `AUTH_ACTOR_USER_HEADER` | `X-Actor-User` | 开发 actor user header 名称 |
 | `AUTH_ACTOR_ROLE_HEADER` | `X-Actor-Role` | 开发 actor role header 名称 |
 | `CLASSIFICATION_PROFILE_PATH` | `../profiles/hq_subsidiary_reports_v1/profile.json` | 分类 profile |
-| `DELIVERY_BACKEND` | `python` | 上传后端：`python` 直传或 `go-worker` outbox |
+| `DELIVERY_BACKEND` | `go-worker` | 上传后端：`go-worker` outbox 为最小完整平台默认路径；`python` 仅保留 Phase 1 legacy 直传兼容 |
 | `DELIVERY_TRANSPORT` | `file` | `go-worker` 模式下的 transport：`file` 或 `kafka` |
 | `DELIVERY_SOURCE_MODE` | `file` | `go-worker` 模式下的 source：`file` 或 `object` |
 | `DELIVERY_OUTBOX_BASE` | `/tmp/auto_upload_outbox` | `go-worker` 模式下的本地任务 outbox |
@@ -108,13 +109,13 @@ RUN_DOCKER_TESTS=1 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 | Profile | Control-plane 关键 env | Worker 启动参数 | 依赖 |
 |---|---|---|---|
 | Local file-spool | `DATABASE_URL=sqlite+aiosqlite:///./control_plane.db`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=file`<br>`DELIVERY_SOURCE_MODE=file`<br>`DELIVERY_OUTBOX_BASE=/tmp/auto_upload_outbox` | `-transport file`<br>`-source-mode file`<br>`-sink mock` | 无外部 broker；worker 与 API 共享本机 outbox 和任务工作目录 |
-| Docker object source | `DATABASE_URL=mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=file`<br>`DELIVERY_SOURCE_MODE=object`<br>`S3_ENDPOINT_URL=http://localhost:9000`<br>`S3_BUCKET_NAME=auto-upload-dev`<br>`STAGING_BUCKET_NAME=auto-upload-staging` | `-transport file`<br>`-source-mode object`<br>`-s3-endpoint http://localhost:9000`<br>`-s3-bucket auto-upload-dev`<br>`-sink mock` 或 `-sink s3` | `docker compose up -d mysql minio minio-init` |
-| Production-like Kafka | `DATABASE_URL=mysql+asyncmy://...`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=kafka`<br>`DELIVERY_SOURCE_MODE=object`<br>`KAFKA_BOOTSTRAP_SERVERS=<broker:9092>`<br>`KAFKA_TASK_TOPIC=delivery.tasks.v1`<br>`KAFKA_RESULT_TOPIC=delivery.results.v1`<br>`S3_ENDPOINT_URL=<s3 endpoint>`<br>`S3_BUCKET_NAME=<target bucket>`<br>`STAGING_BUCKET_NAME=<staging bucket>` | `-transport kafka`<br>`-kafka-brokers <broker:9092>`<br>`-kafka-dlq-topic delivery.tasks.dlq.v1`<br>`-source-mode object`<br>`-sink s3`<br>`-s3-endpoint <s3 endpoint>`<br>`-s3-bucket <target bucket>`<br>`-staging-bucket <staging bucket>`<br>`-item-concurrency 4` | MySQL、Kafka、S3-compatible object storage；task/result/DLQ topic 预先创建 |
+| Docker object source | `DATABASE_URL=mysql+aiomysql://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=file`<br>`DELIVERY_SOURCE_MODE=object`<br>`S3_ENDPOINT_URL=http://localhost:9000`<br>`S3_BUCKET_NAME=auto-upload-dev`<br>`STAGING_BUCKET_NAME=auto-upload-staging` | `-transport file`<br>`-source-mode object`<br>`-s3-endpoint http://localhost:9000`<br>`-s3-bucket auto-upload-dev`<br>`-sink mock` 或 `-sink s3` | `docker compose up -d mysql minio minio-init` |
+| Production-like Kafka | `DATABASE_URL=mysql+aiomysql://...`<br>`DELIVERY_BACKEND=go-worker`<br>`DELIVERY_TRANSPORT=kafka`<br>`DELIVERY_SOURCE_MODE=object`<br>`KAFKA_BOOTSTRAP_SERVERS=<broker:9092>`<br>`KAFKA_TASK_TOPIC=delivery.tasks.v1`<br>`KAFKA_RESULT_TOPIC=delivery.results.v1`<br>`S3_ENDPOINT_URL=<s3 endpoint>`<br>`S3_BUCKET_NAME=<target bucket>`<br>`STAGING_BUCKET_NAME=<staging bucket>` | `-transport kafka`<br>`-kafka-brokers <broker:9092>`<br>`-kafka-dlq-topic delivery.tasks.dlq.v1`<br>`-source-mode object`<br>`-sink s3`<br>`-s3-endpoint <s3 endpoint>`<br>`-s3-bucket <target bucket>`<br>`-staging-bucket <staging bucket>`<br>`-item-concurrency 4` | MySQL、Kafka、S3-compatible object storage；task/result/DLQ topic 预先创建 |
 
 Production-like 最小环境变量示例：
 
 ```bash
-export DATABASE_URL='mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4'
+export DATABASE_URL='mysql+aiomysql://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4'
 export DELIVERY_BACKEND=go-worker
 export DELIVERY_TRANSPORT=kafka
 export DELIVERY_SOURCE_MODE=object
@@ -136,12 +137,12 @@ cd control-plane
 alembic upgrade head
 ```
 
-应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入。
+应用启动不会自动创建或 seed 数据表；新库必须先运行 Alembic migration。Phase 6 的默认 `hq` / `local-user` 本地 actor seed 由 `0002_phase6_multitenancy_auth.py` 写入；Phase 6.5 的 demo subsidiary actor 和 `aishide` / `xinyanhaijia` workspace seed 由 `0003_phase65_workspace_read_view.py` 写入，作为本地 demo bootstrap 数据。
 
 MySQL 本地 compose：
 
 ```bash
-DATABASE_URL='mysql+asyncmy://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4' \
+DATABASE_URL='mysql+aiomysql://control_plane:control_plane@localhost:3306/control_plane?charset=utf8mb4' \
   .venv/bin/python -m alembic upgrade head
 ```
 
@@ -182,7 +183,7 @@ Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/tasks` | 上传文件夹，创建 task（multipart/form-data，多文件字段名 `files`，保留相对路径） |
+| `POST` | `/tasks` | 上传文件夹，创建 task（multipart/form-data，多文件字段名 `files`，保留相对路径；不提供用户侧 zip 上传通道） |
 | `POST` | `/tasks/{id}/classify` | 调用分类引擎，写入 task_item |
 | `GET` | `/tasks/{id}/preview` | 返回分类结果（items + summary） |
 | `POST` | `/tasks/{id}/confirm` | 确认已分类且无阻断错误的 task，status → confirmed |
@@ -191,6 +192,10 @@ Phase 5.3 为 HTTP request、delivery publish、result consume/apply 创建 span
 | `POST` | `/tasks/{id}/retry` | 重置 failed items → pending |
 | `GET` | `/tasks/{id}` | task 详情 |
 | `GET` | `/tasks` | task 列表（limit/offset 分页） |
+| `GET` | `/workspaces` | 当前 actor 可见 workspace 列表 |
+| `GET` | `/workspaces/{id}/objects` | 当前 actor 可见 workspace 文件列表 |
+| `GET` | `/workspace-objects/{id}` | workspace 文件详情 |
+| `POST` | `/workspace-objects/{id}/download-url` | 鉴权后签发短 TTL S3 / MinIO 下载 URL |
 
 ## 运行测试
 
@@ -250,5 +255,5 @@ python -m app.jobs.cleanup_staging_sources --retention-days 7 --bucket-name auto
 
 ## 前端
 
-静态前端位于 `../web/public/index.html`，直接用浏览器打开或通过 nginx/静态服务器伺服。
+静态前端写路径位于 `../web/public/index.html`，Phase 6.5 子公司读视图位于 `../web/public/workspaces.html`；直接用浏览器打开或通过 nginx/静态服务器伺服。
 API 请求默认打到同域的 `/api/v1`，dev 环境可用 nginx 反向代理到 `localhost:8000`。

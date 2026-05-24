@@ -70,6 +70,7 @@ Sink 通过 capability 声明能力，例如是否支持 multipart、resume、ch
 - 不把所有服务改成同一种语言。
 - 不依赖 sink 自身权限系统作为平台授权来源。
 - 不在首版做 OIDC / SAML / SSO federation。
+- 不让用户打包 zip 后上传；公开写路径是文件夹选择，内部 archive 只是平台自己的 source staging 实现细节。
 
 ## 开发自检
 

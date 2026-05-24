@@ -21,29 +21,29 @@
   ],
   "targets": {
     "aishide": {
-      "label": "爱施德",
-      "aliases": ["酷爱"],
+      "label": "合作方A",
+      "aliases": [],
       "strip_number_prefix": true
     },
     "xinyanhaijia": {
-      "label": "新燕海佳",
-      "aliases": ["新燕海华"],
+      "label": "合作方B",
+      "aliases": [],
       "strip_number_prefix": true
     }
   },
   "document_types": {
     "feniao_bill": {
-      "label": "蜂鸟账单",
+      "label": "配送账单",
       "category": "订单"
     },
     "timeout_picking_assessment": {
-      "label": "超时拣货考核",
+      "label": "运营考核",
       "category": "考核"
     }
   },
   "description_mapping": {
-    "蜂鸟配送费明细": "feniao_bill",
-    "抖音美团配送费账单": "feniao_bill"
+    "配送费明细": "feniao_bill",
+    "平台配送费账单": "feniao_bill"
   },
   "suffix_priority": {
     ".zip": "timeout_picking_assessment"

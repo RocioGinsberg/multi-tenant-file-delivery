@@ -40,11 +40,11 @@ sample_root = work_dir / "sample-folder"
 sample_root.mkdir(parents=True, exist_ok=True)
 (sample_root / "订单").mkdir(exist_ok=True)
 (sample_root / "考核").mkdir(exist_ok=True)
-(sample_root / "订单" / "蜂鸟配送费明细-爱施德.csv").write_text(
+(sample_root / "订单" / "配送费报表-合作方A.csv").write_text(
     "date,amount\n2026-05-24,1280.50\n",
     encoding="utf-8",
 )
-(sample_root / "考核" / "超时拣货考核-新燕海佳.zip").write_text(
+(sample_root / "考核" / "运营考核结果-合作方B.zip").write_text(
     "demo payload\n",
     encoding="utf-8",
 )
@@ -107,8 +107,8 @@ frames = [
           <table>
             <thead><tr><th>File</th><th>Target</th><th>Document</th><th>Destination</th><th>Status</th></tr></thead>
             <tbody>
-              <tr><td>蜂鸟配送费明细-爱施德.csv</td><td>爱施德</td><td>feniao_bill</td><td>订单/feniao_bill/...</td><td class=ok>ok</td></tr>
-              <tr><td>超时拣货考核-新燕海佳.zip</td><td>新燕海佳</td><td>timeout_picking_assessment</td><td>考核/timeout_picking_assessment/...</td><td class=warn>warning</td></tr>
+              <tr><td>配送费报表-合作方A.csv</td><td>合作方A</td><td>delivery_fee</td><td>订单/delivery_fee/...</td><td class=ok>ok</td></tr>
+              <tr><td>运营考核结果-合作方B.zip</td><td>合作方B</td><td>kpi_assessment</td><td>考核/kpi_assessment/...</td><td class=warn>warning</td></tr>
             </tbody>
           </table>
         </div>
@@ -142,15 +142,15 @@ frames = [
         <div class=top><div class=brand>Workspace Read View</div><div class=pill>subsidiary_viewer</div></div>
         <div class=grid>
           <div class=sidebar>
-            <div class="workspace active"><strong>爱施德 workspace</strong><div class=muted>target tenant: subsidiary-a</div></div>
-            <div class=workspace><strong>新燕海佳 workspace</strong><div class=muted>target tenant: subsidiary-b</div></div>
+            <div class="workspace active"><strong>合作方A workspace</strong><div class=muted>target tenant: subsidiary-a</div></div>
+            <div class=workspace><strong>合作方B workspace</strong><div class=muted>target tenant: subsidiary-b</div></div>
           </div>
           <div class=panel>
             <h1>Subsidiaries only see their own files.</h1>
             <table>
               <thead><tr><th>Object</th><th>Path</th><th>SHA-256</th><th></th></tr></thead>
               <tbody>
-                <tr><td>蜂鸟配送费明细-爱施德.csv</td><td>订单/feniao_bill</td><td class=hash>cafe...1024</td><td class=ok>download URL</td></tr>
+                <tr><td>配送费报表-合作方A.csv</td><td>订单/delivery_fee</td><td class=hash>cafe...1024</td><td class=ok>download URL</td></tr>
               </tbody>
             </table>
           </div>
@@ -176,7 +176,7 @@ for html in "$CAPTURE_DIR"/*.html; do
     "file://$html" >/dev/null 2>&1
 done
 
-ffmpeg -y -framerate 0.7 -pattern_type glob -i "$CAPTURE_DIR/*.png" \
+ffmpeg -y -framerate 0.4 -pattern_type glob -i "$CAPTURE_DIR/*.png" \
   -vf "fps=7,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
   -loop 0 "$OUT_GIF" >/dev/null 2>&1
 

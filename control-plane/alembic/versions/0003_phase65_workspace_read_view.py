@@ -42,13 +42,13 @@ def upgrade() -> None:
         [
             {
                 "id": "subsidiary-a",
-                "name": "爱施德",
+                "name": "合作方A",
                 "tenant_type": "subsidiary",
                 "parent_tenant_id": "hq",
             },
             {
                 "id": "subsidiary-b",
-                "name": "新燕海佳",
+                "name": "合作方B",
                 "tenant_type": "subsidiary",
                 "parent_tenant_id": "hq",
             },
@@ -111,14 +111,14 @@ def upgrade() -> None:
         [
             {
                 "id": "ws-aishide",
-                "name": "爱施德 Workspace",
+                "name": "合作方A Workspace",
                 "owner_tenant_id": "hq",
                 "target_tenant_id": "subsidiary-a",
                 "target_key": "aishide",
             },
             {
                 "id": "ws-xinyan",
-                "name": "新燕海佳 Workspace",
+                "name": "合作方B Workspace",
                 "owner_tenant_id": "hq",
                 "target_tenant_id": "subsidiary-b",
                 "target_key": "xinyanhaijia",

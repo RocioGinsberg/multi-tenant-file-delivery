@@ -16,6 +16,7 @@ def test_resolve_current_actor_uses_default_actor_when_headers_missing():
         role="hq_uploader",
     )
     assert actor.is_hq is True
+    assert actor.workspace_access_scope == "owner"
     assert actor.can_write_tasks is True
 
 
@@ -35,6 +36,18 @@ def test_resolve_current_actor_prefers_dev_headers():
         role="subsidiary_viewer",
     )
     assert actor.can_write_tasks is False
+    assert actor.workspace_access_scope == "target"
+
+
+def test_current_actor_hq_scope_comes_from_role_not_tenant_literal():
+    actor = CurrentActor(
+        tenant_id="headquarters",
+        user_id="hq-user",
+        role="hq_admin",
+    )
+
+    assert actor.is_hq is True
+    assert actor.workspace_access_scope == "owner"
 
 
 def test_resolve_current_actor_rejects_missing_actor_when_default_disabled():

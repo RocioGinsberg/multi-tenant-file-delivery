@@ -4,6 +4,7 @@
 > **目标**：在 Phase 6 tenant / actor / RBAC 基线上补齐 workspace 元数据、投递结果映射和子公司只读浏览/下载路径，让平台形成最小完整产品闭环。
 > **完成定义**：HQ 写路径上传成功后会生成 workspace_object 元数据；子公司 actor 只能列出 / 查看 / 下载自己租户可见的 workspace 文件；下载由控制面鉴权后签发短 TTL presigned URL；测试覆盖跨租户不可见、HQ 写入到 workspace、子公司读路径和默认 actor 兼容。
 > **前序计划**：[Phase 6 — 多租户 + 鉴权](./phase-6-multitenancy-auth.md)
+> **Tag 前审计**：[Phase 6.5 Audit — DDD Review Hardening](./audit-phase65-ddd-review-hardening.md) 作为 stacked audit phase 收敛通用语言、默认 go-worker 闭环、幂等约束和读路径 smoke。
 
 ## Summary
 
@@ -83,7 +84,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 - **推荐执行方**：主对话或 `gpt-5.5` medium worker，小步提交后主对话审计
 - **范围**：
   - `apply_delivery_result` 成功 item 写入 `physical_object` 和 `workspace_object`。
-  - 映射策略先使用 profile target / `task_item.target_name_matched` 找 workspace。
+  - 映射策略使用 canonical `task_item.target_name_matched` 找 workspace target key；result apply 不重新加载 profile。
   - 幂等处理重复 result apply，避免重复 workspace_object。
 - **验收**：
   - result apply integration test 证明 uploaded item 生成读模型。
@@ -120,7 +121,7 @@ Phase 6 已把 actor、tenant、role、task owner 和 repo tenant filter 落到�
 - **L 等级**：L1
 - **推荐执行方**：mini worker 可做文档草稿；主对话跑 smoke
 - **范围**：
-  - 增加 opt-in 或普通 integration smoke：HQ 写入 -> result apply -> subsidiary list/download-url。
+  - 增加普通 integration smoke：HQ 写入 -> result apply -> subsidiary list/download-url。
   - 更新 README、ARCHITECTURE、DATA_MODEL、ROADMAP、component README。
   - Phase 6.5 完成后再讨论最小完整平台 tag。
 - **验收**：
@@ -157,13 +158,13 @@ DATABASE_URL=sqlite+aiosqlite:////tmp/phase65_workspace_check.db .venv/bin/pytho
 
 ```bash
 cd control-plane
-RUN_DOCKER_TESTS=1 .venv/bin/python -m pytest tests/integration/test_workspace_read_view_docker.py
+.venv/bin/python -m pytest tests/integration/test_api_workspaces.py::test_workspace_read_view_smoke_result_apply_to_subsidiary_download
 ```
 
 ## 五、风险与降级
 
 - **workspace 映射错误**：先使用显式 seed / profile target 映射，找不到 workspace 时写 task_event warning，不伪造对象。
-- **重复 result apply**：必须以 `task_item_id` 或 `(workspace_id, task_item_id)` 做唯一约束。
+- **重复 result apply**：`workspace_object.task_id` / `workspace_object.task_item_id` 非空，并以 `task_item_id` 唯一约束保证幂等。
 - **下载越权**：presign helper 只能在权限检查后调用，测试要断言未授权不会调用 presigner。
 - **dedup 过早膨胀**：本阶段只记录 `sha256/size/key`，不实现 instant upload / refcount GC。
 - **sink 耦合**：presigned URL 先只支持 S3 / MinIO；其他 sink 在 Phase 7 按 capability 扩展。

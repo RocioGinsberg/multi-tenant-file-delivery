@@ -154,8 +154,8 @@ def upgrade() -> None:
         sa.Column("id", sa.String(16), primary_key=True),
         sa.Column("workspace_id", sa.String(32), nullable=False),
         sa.Column("physical_object_id", sa.String(16), nullable=False),
-        sa.Column("task_id", sa.String(16), nullable=True),
-        sa.Column("task_item_id", sa.String(16), nullable=True),
+        sa.Column("task_id", sa.String(16), nullable=False),
+        sa.Column("task_item_id", sa.String(16), nullable=False),
         sa.Column("display_name", sa.String(255), nullable=False),
         sa.Column("dst_path", sa.String(1024), nullable=False),
         sa.Column("uploaded_by_user_id", sa.String(64), nullable=True),
@@ -169,8 +169,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["physical_object_id"], ["physical_object.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(["task_id"], ["task.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["task_item_id"], ["task_item.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["task_id"], ["task.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["task_item_id"], ["task_item.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["uploaded_by_user_id"], ["app_user.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("task_item_id", name="uq_workspace_object_task_item"),
     )
@@ -179,7 +179,6 @@ def upgrade() -> None:
         "workspace_object",
         ["workspace_id", "uploaded_at"],
     )
-
 
 def downgrade() -> None:
     """Remove Phase 6.5 workspace read view."""

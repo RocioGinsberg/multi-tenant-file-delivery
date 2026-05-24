@@ -81,8 +81,8 @@ Phase 6 已把 `tenant` / `app_user` / `role` 基线、task owner tenant/user �
 
 ## Phase 6.5 落地情况
 
-- `workspace.target_key` 显式映射分类结果里的 `task_item.target_name_matched`，result apply 不重新加载 profile。
-- 成功且带 sink receipt key 的 result item 会写入 `physical_object` 和 `workspace_object`；`workspace_object.task_item_id` 唯一约束保证重复 result apply 不重复建读对象。
+- `workspace.target_key` 是 workspace target key，显式映射分类结果里的 canonical `task_item.target_name_matched`，result apply 不重新加载 profile。
+- 成功且带 sink receipt key 的 result item 会写入 `physical_object` 和 `workspace_object`；`workspace_object.task_id` / `workspace_object.task_item_id` 非空，`workspace_object.task_item_id` 唯一约束保证重复 result apply 不重复建读对象。
 - HQ 通过 owner tenant 读 workspace；子公司通过 target tenant 读 workspace / object，越权读和下载返回 404。
 - 下载由控制面鉴权后签发短 TTL S3 / MinIO presigned GET URL，并把 `workspace_object_download_url_issued` 写入来源 task event。
-- migration seed 提供本地 demo subsidiary actor 以及 `aishide` / `xinyanhaijia` workspace；平台层 dedup、refcount GC 和完整 audit_log 继续留 Phase 7。
+- migration seed 提供本地 demo subsidiary actor 以及 `aishide` / `xinyanhaijia` workspace；这是 demo bootstrap 数据，后续可拆到显式 seed 脚本。平台层 dedup、refcount GC 和完整 audit_log 继续留 Phase 7。

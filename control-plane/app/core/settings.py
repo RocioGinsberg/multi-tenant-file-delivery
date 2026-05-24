@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     task_dir_base: str = "/tmp/auto_upload_tasks"
 
     # ── Delivery backend (Phase 2 bridge) ──
-    # "python" keeps the Phase 1 in-process uploader.
     # "go-worker" writes a task message into a durable outbox for the Go worker.
-    delivery_backend: str = "python"
+    # "python" keeps the legacy Phase 1 in-process uploader for narrow tests.
+    delivery_backend: str = "go-worker"
     delivery_outbox_base: str = "/tmp/auto_upload_outbox"
     delivery_transport: str = "file"
     delivery_source_mode: str = "file"

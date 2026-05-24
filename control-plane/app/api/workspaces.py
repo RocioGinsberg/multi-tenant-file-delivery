@@ -68,7 +68,7 @@ async def list_workspaces(
     workspaces = await _workspace_repo.list_workspaces(
         session,
         tenant_id=actor.tenant_id,
-        is_hq=actor.is_hq,
+        access_scope=actor.workspace_access_scope,
     )
     return {"workspaces": [_workspace_to_dict(workspace) for workspace in workspaces]}
 
@@ -83,7 +83,7 @@ async def list_workspace_objects(
         session,
         workspace_id,
         tenant_id=actor.tenant_id,
-        is_hq=actor.is_hq,
+        access_scope=actor.workspace_access_scope,
     )
     if records is None:
         raise HTTPException(status_code=404, detail=f"Workspace {workspace_id!r} not found")
@@ -103,7 +103,7 @@ async def get_workspace_object(
         session,
         object_id,
         tenant_id=actor.tenant_id,
-        is_hq=actor.is_hq,
+        access_scope=actor.workspace_access_scope,
     )
     if record is None:
         raise HTTPException(status_code=404, detail=f"Workspace object {object_id!r} not found")
@@ -120,7 +120,7 @@ async def create_workspace_object_download_url(
         session,
         object_id,
         tenant_id=actor.tenant_id,
-        is_hq=actor.is_hq,
+        access_scope=actor.workspace_access_scope,
     )
     if record is None:
         raise HTTPException(status_code=404, detail=f"Workspace object {object_id!r} not found")
@@ -133,20 +133,20 @@ async def create_workspace_object_download_url(
         key=physical.object_key,
         expires_in_seconds=expires_in,
     )
-    if record.workspace_object.task_id is not None:
-        await _event_repo.append(
-            session,
-            record.workspace_object.task_id,
-            "workspace_object_download_url_issued",
-            {
-                **actor.to_event_payload(),
-                "workspace_id": record.workspace.id,
-                "workspace_object_id": record.workspace_object.id,
-                "physical_object_id": physical.id,
-                "expires_in_seconds": expires_in,
-            },
-        )
-        await session.commit()
+    event_payload = {
+        **actor.to_event_payload(),
+        "workspace_id": record.workspace.id,
+        "workspace_object_id": record.workspace_object.id,
+        "physical_object_id": physical.id,
+        "expires_in_seconds": expires_in,
+    }
+    await _event_repo.append(
+        session,
+        record.workspace_object.task_id,
+        "workspace_object_download_url_issued",
+        event_payload,
+    )
+    await session.commit()
     return {
         "object_id": object_id,
         "url": url,

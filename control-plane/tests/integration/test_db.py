@@ -31,6 +31,9 @@ def test_models_are_registered():
     assert "workspace" in table_names
     assert "physical_object" in table_names
     assert "workspace_object" in table_names
+    workspace_object = Base.metadata.tables["workspace_object"]
+    assert not workspace_object.c.task_id.nullable
+    assert not workspace_object.c.task_item_id.nullable
 
 
 def test_alembic_upgrade_creates_tables(tmp_path):

@@ -55,17 +55,21 @@ async def test_workspace_repo_filters_hq_owner_and_subsidiary_target(
     ])
     await session.flush()
 
-    hq_workspaces = await repo.list_workspaces(session, tenant_id="hq", is_hq=True)
+    hq_workspaces = await repo.list_workspaces(
+        session,
+        tenant_id="hq",
+        access_scope="owner",
+    )
     sub_workspaces = await repo.list_workspaces(
         session,
         tenant_id="subsidiary-a",
-        is_hq=False,
+        access_scope="target",
     )
     hidden = await repo.get_workspace(
         session,
         "ws-b",
         tenant_id="subsidiary-a",
-        is_hq=False,
+        access_scope="target",
     )
 
     assert [workspace.id for workspace in hq_workspaces] == ["ws-a", "ws-b"]
@@ -122,7 +126,12 @@ async def test_workspace_repo_records_uploaded_item_idempotently(
         bucket_name="auto-upload-dev",
         uploaded_at=datetime(2026, 5, 22, 9, 0, tzinfo=UTC),
     )
-    visible = await repo.list_objects(session, "ws-a", tenant_id="subsidiary-a", is_hq=False)
+    visible = await repo.list_objects(
+        session,
+        "ws-a",
+        tenant_id="subsidiary-a",
+        access_scope="target",
+    )
 
     assert first is not None
     assert second is not None

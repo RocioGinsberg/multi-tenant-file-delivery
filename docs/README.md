@@ -1,6 +1,6 @@
 # Docs
 
-项目文档按用途分层维护，避免把产品范围、架构决策和阶段进度都塞进一个 `BLUEPRINT.md`。
+项目文档按用途分层维护，避免把产品范围、架构决策和阶段进度都塞进一个文件。公开入口在根目录 [README.md](../README.md)，中文入口在 [README_ZH.md](../README_ZH.md)。
 
 ## 文档索引
 
@@ -17,6 +17,9 @@
 | [plans](./plans/) | 每个 Phase 的执行计划和验收记录 |
 | [SINK_PROTOCOL](./SINK_PROTOCOL.md) | Sink 接口和各存储协议适配说明 |
 | [BENCHMARKS](./BENCHMARKS.md) | 压测目标和结果 |
+| [CONTRIBUTING](./CONTRIBUTING.md) | 贡献、文档边界、PR、测试和公开化规则 |
+| [CHANGELOG](../CHANGELOG.md) | 用户视角变更日志和首次 tag 前 release note |
+| [media](./media/) | README / release demo 图片和 GIF |
 
 ## 使用规则
 
@@ -25,3 +28,4 @@
 - 阶段排期和完成状态：更新 `ROADMAP.md` 和对应 `docs/plans/phase-*.md`。
 - 当前实现说明：更新 `ARCHITECTURE.md` / 模块 README。
 - 数据模型变更：先更新 `DATA_MODEL.md`，落地后补 migration。
+- 公开展示变更：同步根 README、`README_ZH.md`、`CHANGELOG.md` 和必要的 `docs/media/` 资源。

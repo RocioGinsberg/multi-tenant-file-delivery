@@ -29,15 +29,15 @@ class WorkspaceObject(Base):
         ForeignKey("physical_object.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    task_id: Mapped[str | None] = mapped_column(
+    task_id: Mapped[str] = mapped_column(
         String(16),
-        ForeignKey("task.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("task.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    task_item_id: Mapped[str | None] = mapped_column(
+    task_item_id: Mapped[str] = mapped_column(
         String(16),
-        ForeignKey("task_item.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("task_item.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     dst_path: Mapped[str] = mapped_column(String(1024), nullable=False)

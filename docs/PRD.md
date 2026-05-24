@@ -27,7 +27,7 @@
 
 ### 写路径
 
-1. HQ 选择文件夹上传，多文件路径保持相对目录结构。
+1. HQ 选择文件夹上传，多文件路径保持相对目录结构；用户侧不要求也不保留 zip 上传通道。
 2. 控制面运行 classification profile。
 3. HQ 预览分类结果并确认。
 4. 控制面发布 `delivery.tasks.v1`。
@@ -101,6 +101,8 @@
 ## 7. 当前阶段草案：扩 sink + 压测
 
 Phase 6.5 Workspace + 子公司读视图已完成，平台具备最小完整闭环。下一阶段进入 Phase 7，目标是在当前 S3 / MinIO 基线之上扩展 sink 能力并补压测数据。
+
+最小完整闭环以 `DELIVERY_BACKEND=go-worker` 为默认路径：HQ 写路径发布 delivery task，Go data-plane 上传并返回 result receipt，control-plane result apply 生成 workspace read model。Phase 1 的 Python 直传路径保留为 legacy 兼容，不承担子公司读视图生成职责。
 
 当前阶段目标：
 

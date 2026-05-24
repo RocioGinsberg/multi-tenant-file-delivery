@@ -8,19 +8,23 @@
 
 ## 概览
 
-这是一个面向公开展示的多租户文件分发平台实现：HQ 用户选择文件夹上传，控制面按 profile 分类到各子公司 workspace，Go 数据面把文件投递到 S3 / MinIO 等对象存储，子公司只能浏览和下载属于自己的文件。
+总部到子公司的文件分发是很常见的经营动作，但现实里经常被拆散到一组“只能解决局部问题”的工具里：网盘、IM 附件、邮件、Excel 清单、对象存储控制台、MFT 任务或临时脚本。它们能把文件搬走，却不拥有文件夹接收、分类预览、投递确认、接收方可见性和运行证据这一整条业务流程。
 
-### 为什么需要它
+这里缺的是一个范围很窄但完整的产品形态：HQ 用户直接选择文件夹，平台保留相对路径，按业务 profile 分类每个文件，投递前展示分发计划，交给可恢复的 worker 路径执行，并且每个子公司只能看到自己 workspace 里的结果。文档系统、对象存储、MFT、ETL 都解决相邻问题；这个仓库关注的是它们之间缺失的端到端产品。
 
-总部到子公司的文件分发在真实场景里不只是“传几个文件”：
+这个仓库把这条产品链路做成一个 local-first、可公开参考的 **多租户文件分发平台**：HQ 用户选择文件夹上传，控制面按 profile 分类到各子公司 workspace，Go 数据面把文件投递到 S3 / MinIO 等对象存储，子公司只能浏览和下载属于自己的文件。
 
-- **用户选择的是文件夹**：平台需要保留相对路径，不要求用户先打包 zip。
-- **分类需要可解释**：正式投递前要看到接收方、文档类型、目标路径、警告和阻断错误。
-- **上传执行要可恢复**：大批量文件不能依赖浏览器或 API 进程持续搬运字节，需要 durable task/result bridge。
-- **租户隔离要由平台负责**：子公司可见性不能依赖某个 sink 自己的 ACL。
-- **进度和失败要可观测**：Redis、Kafka、OpenTelemetry、Prometheus、Grafana 分别承担短状态、durable 消息和观测闭环。
+### 产品缺口
 
-### 当前能力
+设计出发点不是技术组件清单，而是这条业务链路里的现实约束：
+
+- **输入是业务文件夹**：不能要求操作者先打包 zip，也不能要求他们先把批次抽象成集成系统里的 payload。
+- **路由规则需要复核**：接收方、文档类型、目标路径、警告和阻断错误必须在正式投递前可见。
+- **投递不能依赖浏览器**：大批量文件需要 durable task/result handoff、重试和 API 请求结束后的 result apply。
+- **接收方需要产品视图**：子公司应该打开自己的 workspace，而不是登录 bucket 并把存储后端 ACL 当成用户体验。
+- **运维需要证据**：进度、失败、trace、metrics、审计事件需要说明文件去了哪里、为什么失败、由谁触发。
+
+### 当前实现验证的能力
 
 - **HQ 上传台**：文件夹选择、multipart 上传、分类预览、确认、重试和 SSE 进度。
 - **Python 控制面**：FastAPI、SQLAlchemy、Alembic、任务状态、租户过滤、result apply、下载授权。
@@ -33,10 +37,10 @@
 
 ## 当前状态
 
-当前正在准备第一个公开 release candidate：**v0.1.0**。
+公开 `main` 分支已经具备第一个公开 tag **v0.1.0** 的基础。
 
-- Phase 0-6.5 已完成。
-- tag 应打在 audit hardening 分支合并到 `main`、公开文档完成、demo GIF 生成、tag 前 smoke 通过之后。
+- Phase 0-6.5 实现、audit hardening、公开文档、MIT license 和 demo media 已在 `main`。
+- 本地 release smoke 已通过；完成这轮 README 叙事审查后即可打 annotated tag。
 - 下一阶段 Phase 7：扩展 sink、异常 sink、压测数据，以及 dedup / credential hardening 的拆分设计。
 
 详见 [CHANGELOG.md](CHANGELOG.md) 和 [docs/ROADMAP.md](docs/ROADMAP.md)。

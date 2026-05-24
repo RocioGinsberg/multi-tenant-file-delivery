@@ -17,19 +17,23 @@ English / [中文](README_ZH.md)
 
 ## Overview
 
-This repository is a local-first, public-reference implementation of a **multi-tenant file delivery platform**. HQ users upload a folder, the control plane classifies files into subsidiary workspaces, the Go data plane delivers bytes to S3-compatible object storage, and subsidiaries can only browse and download files that belong to their own workspace.
+Headquarters-to-subsidiary file distribution is a common operational workflow, but it is usually handled by tools that only solve fragments of the problem: shared drives, chat attachments, spreadsheets, object-storage consoles, MFT jobs, or one-off scripts. They can move files, but they do not own the business workflow around folder intake, classification, delivery confirmation, recipient visibility, and operational evidence.
 
-### Why this exists
+The missing product shape is narrow but important: an HQ user selects a folder, the platform preserves relative paths, classifies each file against business profiles, previews the distribution plan before delivery, executes the transfer through a recoverable worker path, and exposes only the resulting workspace to each recipient tenant. Existing document-management, object-storage, MFT, and ETL products solve adjacent slices; this repository focuses on the end-to-end product that is absent between them.
 
-HQ-to-subsidiary distribution looks simple until it becomes operational:
+This repository builds that product slice as a local-first, public-reference implementation of a **multi-tenant file delivery platform**. HQ users upload a folder, the control plane classifies files into subsidiary workspaces, the Go data plane delivers bytes to S3-compatible object storage, and subsidiaries can only browse and download files that belong to their own workspace.
 
-- **Folder semantics matter.** Users select a folder, not a pre-built archive, and the platform must preserve relative paths.
-- **Classification must be explainable.** Operators need to preview target company, document type, destination path, warnings, and blocking errors before delivery.
-- **Upload execution must be recoverable.** Large batches should move through a durable task/result bridge instead of a browser or API process doing every byte transfer.
-- **Tenant isolation must be platform-owned.** Subsidiaries must not rely on the storage backend's ACL model to decide what they can see.
-- **Progress and failures need evidence.** Redis, Kafka, OpenTelemetry, Prometheus, and Grafana are used where they make the workflow observable and auditable.
+### Product Gap
 
-### What it gives you
+The design starts from practical constraints rather than from an infrastructure catalog:
+
+- **The input is a business folder.** Operators should not be asked to build a zip package or model the batch as an integration payload before upload.
+- **Routing rules need review.** Target company, document type, destination path, warnings, and blocking errors must be visible before delivery.
+- **Delivery cannot depend on the browser.** Large batches need durable task/result handoff, retries, and result application after the API request is gone.
+- **Recipients need a product view.** A subsidiary should open its workspace, not log into a bucket and rely on backend ACLs as the user experience.
+- **Operations need evidence.** Progress, failures, traces, metrics, and audit events must explain what moved, where it went, and why it failed.
+
+### What this implementation proves
 
 - **HQ upload desk**: browser folder selection, multipart upload, classification preview, confirmation, retry, and SSE progress.
 - **Python control plane**: FastAPI, SQLAlchemy, Alembic, task state, tenant-aware repositories, result application, and presigned download authorization.
@@ -42,10 +46,10 @@ HQ-to-subsidiary distribution looks simple until it becomes operational:
 
 ## Status
 
-The current branch is preparing the first public release candidate, **v0.1.0**, after Phase 6.5:
+The public `main` branch is ready for the first public tag, **v0.1.0**, after Phase 6.5:
 
-- Phase 0-6.5 implementation is complete.
-- A tag should be created only after the audit hardening branch is merged to `main`, public docs are complete, demo media is generated, and release smoke passes.
+- Phase 0-6.5 implementation, audit hardening, public docs, MIT license, and demo media are on `main`.
+- Release smoke has passed locally; cut the annotated tag after this final README review.
 - Phase 7 is next: more sink adapters, failure-injection sinks, benchmark data, and the first dedup / credential-hardening split.
 
 See [CHANGELOG.md](CHANGELOG.md) and [docs/ROADMAP.md](docs/ROADMAP.md).

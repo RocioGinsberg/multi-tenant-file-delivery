@@ -3,7 +3,6 @@
 All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Versioning starts when the first public tag is cut.
 
 ## [Unreleased]
 
@@ -15,16 +14,12 @@ Versioning starts when the first public tag is cut.
 
 ### Changed
 - Root documentation is now organized as a public project entry point instead of a phase log.
-- README narrative now starts from the real HQ-to-subsidiary distribution gap instead of mirroring the structure of adjacent projects.
 - `docs/ROADMAP.md` marks the next release target as `v0.1.0`.
 - Public-readiness dependency hardening upgrades the Go data-plane baseline to Go 1.25 and switches the control-plane MySQL async driver from `asyncmy` to `aiomysql`.
 
-### Release Notes
-- Before publishing, confirm the final README, run any final tag smoke, and create an annotated `v0.1.0` tag from `main`.
+## [0.1.0] - 2026-05-24
 
-## [0.1.0-rc] - Pending
-
-First public release candidate. The implementation covers Phase 0 through Phase 6.5.
+First public release. The implementation covers Phase 0 through Phase 6.5.
 
 ### Added
 - **Monorepo foundation**: Python control plane, Go data plane, static web UI, Docker Compose dependencies, profiles, and structured docs.
@@ -40,10 +35,18 @@ First public release candidate. The implementation covers Phase 0 through Phase 
 - **Workspace read view**: workspace list, object list/detail, short-TTL presigned download URL, audit event for URL issuance, and static subsidiary page.
 - **Design records**: PRD, architecture, data model, RFCs, ADRs, phase plans, benchmark notes, and sink protocol notes.
 
+### Changed
+- README narrative refocused from generic "HQ-to-subsidiary" distribution to the cross-boundary scenario: HQ distributing operational data (order KPIs, performance reports) to external partners who cannot access the internal network.
+- README restructured for three reader personas: HQ operators, external partners, and platform engineers.
+- "What this implementation proves" tech-stack checklist replaced with role-organized capability descriptions.
+- Status section shortened; Key Invariants moved to ARCHITECTURE.md reference.
+- All sample data de-identified: real company names replaced with generic placeholders.
+- Demo GIF regenerated with de-identified content and slower frame timing.
+
 ### Known Gaps
 - S3 multipart, resume, OSS/Webhook/SFTP sinks, platform-level dedup, refcount GC, sink credential encryption, and full audit log table are deferred.
 - Result consume/apply currently starts a separate trace; result messages do not yet continue the worker trace context back to the control plane.
 - The static UI is a local demo surface, not a production identity provider or frontend build pipeline.
 
 [Unreleased]: https://github.com/RocioGinsberg/multi-tenant-file-delivery/commits/main
-[0.1.0-rc]: https://github.com/RocioGinsberg/multi-tenant-file-delivery/releases
+[0.1.0]: https://github.com/RocioGinsberg/multi-tenant-file-delivery/releases/tag/v0.1.0
